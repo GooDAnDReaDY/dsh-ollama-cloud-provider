@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 
 import { resolveConfig } from '../src/config.ts'
 import { applyRoutes } from '../src/routes.ts'
@@ -67,8 +67,10 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
     }],
     accountHealth: () => undefined,
     routingTrace: () => [],
-    stream: async function* (options: GenerateOptions) {
+    stream: async function* (options: GenerateOptions): AsyncGenerator<StreamChunk> {
       seen = options
+      yield { type: 'reasoning-delta', index: 0, text: 'thinking-only' }
+      yield { type: 'finish', reason: { kind: 'stop' } }
     },
   }
   const pool = {
@@ -126,6 +128,8 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
   const testRes = fakeRes()
   await testRoute(postJson({ model: 'gpt-oss:120b' }), testRes)
   assert.equal(testRes.statusCode, 200)
+  const testBody = JSON.parse(testRes.body()) as { text: string }
+  assert.equal(testBody.text, 'thinking-only')
   assert.equal(String(seen?.reasoningEffort), 'off')
-  assert.equal(seen?.maxTokens, 32)
+  assert.equal(seen?.maxTokens, 64)
 })
