@@ -1,0 +1,24 @@
+name: Tech debt
+about: Dead code, duplication, missing coverage, maintenance risk
+labels: [type/tech-debt, priority/low]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Проблема
+      description: Что именно накопилось и чем это подтверждено.
+    validations:
+      required: true
+  - type: textarea
+    id: plan
+    attributes:
+      label: Что сделать
+      description: Удалить / заменить / покрыть тестом.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Критерии готовности
+    validations:
+      required: true

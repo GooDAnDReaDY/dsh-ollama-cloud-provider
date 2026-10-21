@@ -1,0 +1,15 @@
+dsh-ollama-cloud-provider
+Copyright (c) 2026 GooDAnDReaDY
+
+This product is MIT-licensed (see LICENSE).
+
+Third-party references and attribution:
+
+- The plugin structure, cordis lifecycle wiring, HTTP route guards, request log, analytics reader,
+  quota runway and generic client widgets were adapted from the author's own
+  `@goodandready/dsh-opencode-provider` (MIT).
+- The feature set was informed by `@goodandready/dsh-clinebot` (MIT) and
+  `@mars-sea/dsh-commandcode-provider` (MIT). No vendor code from those packages is bundled.
+- DeepSeek Harness packages (`@deepseek-ai/*`) are host-owned peer dependencies and are not bundled.
+- Ollama Cloud API facts were verified against the public documentation and live endpoints on
+  2026-10-21. Ollama is a trademark of its respective owner; this plugin is unofficial.
