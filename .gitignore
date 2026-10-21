@@ -1,0 +1,11 @@
+node_modules/
+lib/
+*.tgz
+.tmp/
+pack.json
+coverage/
+*.log
+.env
+.DS_Store
+.commandcode/
+.worktrees/

@@ -1,0 +1,135 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
+
+import { resolveConfig } from '../src/config.ts'
+import { applyRoutes } from '../src/routes.ts'
+
+function fakeRes(): {
+  statusCode: number
+  setHeader: (key: string, value: string) => void
+  end: (value: string) => void
+  body: () => string
+} {
+  let status = 0
+  let body = ''
+  const headers: Record<string, string> = {}
+  return {
+    get statusCode() { return status },
+    set statusCode(value: number) { status = value },
+    setHeader(key: string, value: string) { headers[key] = value },
+    end(value: string) { body = value },
+    body: () => body,
+  }
+}
+
+function postJson(value: unknown): unknown {
+  const payload = Buffer.from(JSON.stringify(value))
+  return {
+    method: 'POST',
+    headers: { host: '127.0.0.1:3080', 'content-type': 'application/json' },
+    socket: { remoteAddress: '127.0.0.1' },
+    async *[Symbol.asyncIterator]() {
+      yield payload
+    },
+  }
+}
+
+test('state route serves the catalog and write routes enforce JSON', async () => {
+  const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
+  const written: Array<{ ref: unknown; key: string }> = []
+  const cleared: unknown[] = []
+  const credentials = {
+    describe: async () => ({ configured: false, writable: true }),
+    set: async (ref: unknown, key: string) => { written.push({ ref, key }) },
+    unset: async (ref: unknown) => { cleared.push(ref) },
+  }
+  const ctx = {
+    get: (name: string) => name === 'credentials' ? credentials : undefined,
+    effect: (fn: () => () => void) => { fn(); return () => {} },
+  } as never
+  const web = {
+    register: ({ path, handler }: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }) => {
+      routes.set(path, handler)
+      return () => {}
+    },
+  } as never
+  const config = resolveConfig({ apiKey: 'k' })
+  let seen: GenerateOptions | undefined
+  const adapter = {
+    listModels: async () => [{
+      provider: 'ollama-cloud',
+      id: 'gpt-oss:120b',
+      name: 'gpt-oss:120b',
+      description: 'native',
+      inputModalities: ['text'],
+    }],
+    accountHealth: () => undefined,
+    routingTrace: () => [],
+    stream: async function* (options: GenerateOptions): AsyncGenerator<StreamChunk> {
+      seen = options
+      yield { type: 'reasoning-delta', index: 0, text: 'thinking-only' }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    },
+  }
+  const pool = {
+    resolveAll: async () => [],
+    resolve: async () => { throw new Error('missing') },
+  }
+  const usage = {
+    read: async () => undefined,
+    usage: async () => undefined,
+    clear: () => {},
+  }
+  applyRoutes(ctx, web, { config: () => config, adapter, pool, usage } as never)
+
+  const stateRoute = routes.get('/dsh-ollama/state')
+  assert.ok(stateRoute !== undefined)
+  const res = fakeRes()
+  await stateRoute({ method: 'GET', headers: { host: '127.0.0.1:3080' }, url: '/' }, res)
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body()) as { models: Array<{ id: string }>; key: { configured: boolean } }
+  assert.equal(body.models.length, 1)
+  assert.equal(body.models[0]?.id, 'gpt-oss:120b')
+  assert.equal(body.key.configured, false)
+
+  const configRoute = routes.get('/dsh-ollama/config')
+  assert.ok(configRoute !== undefined)
+  const denied = fakeRes()
+  await configRoute({
+    method: 'POST',
+    headers: { host: '127.0.0.1:3080' },
+    socket: { remoteAddress: '127.0.0.1' },
+  }, denied)
+  assert.equal(denied.statusCode, 415)
+
+  const keyRoute = routes.get('/dsh-ollama/key')
+  assert.ok(keyRoute !== undefined)
+  const foreign = fakeRes()
+  await keyRoute(postJson({ ref: 'OPENCODE_API_KEY', key: 'x' }), foreign)
+  assert.equal(foreign.statusCode, 400)
+  assert.equal(written.length, 0)
+
+  const own = fakeRes()
+  await keyRoute(postJson({ ref: 'OLLAMA_API_KEY_2', key: 'x' }), own)
+  assert.equal(own.statusCode, 200)
+  assert.equal(written.length, 1)
+
+  const clearRoute = routes.get('/dsh-ollama/key/clear')
+  assert.ok(clearRoute !== undefined)
+  const foreignClear = fakeRes()
+  await clearRoute(postJson({ ref: 'CLINEBOT_API_KEY' }), foreignClear)
+  assert.equal(foreignClear.statusCode, 400)
+  assert.equal(cleared.length, 0)
+
+  const testRoute = routes.get('/dsh-ollama/test')
+  assert.ok(testRoute !== undefined)
+  const testRes = fakeRes()
+  await testRoute(postJson({ model: 'gpt-oss:120b' }), testRes)
+  assert.equal(testRes.statusCode, 200)
+  const testBody = JSON.parse(testRes.body()) as { text: string }
+  assert.equal(testBody.text, 'thinking-only')
+  assert.equal(String(seen?.reasoningEffort), 'off')
+  assert.equal(seen?.maxTokens, 64)
+})

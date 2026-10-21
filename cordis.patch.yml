@@ -1,0 +1,11 @@
+# dsh-ollama-cloud-provider bundle layer.
+# Registers the `ollama-cloud` provider route. All fields are optional —
+# schema defaults apply.
+#
+# `name` must be the FULL package specifier as installed in the profile's
+# node_modules. Quote it: an unquoted YAML scalar starting with `@` fails.
+- insert:
+    - id: llm-ollama-cloud
+      name: "@goodandready/dsh-ollama-cloud-provider"
+      config:
+        apiKeyEnv: OLLAMA_API_KEY
