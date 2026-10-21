@@ -211,6 +211,13 @@ node scripts/probe.mjs
 
 `scripts/probe.mjs` is read-only against the public catalog; with `OLLAMA_API_KEY` set it also probes chat, balance and usage and prints the raw shapes.
 
+## Visual verification
+
+The Ollama Cloud settings page in DSH Desktop (dark theme): configured
+credential, balance and usage, and the connection probe.
+
+![Ollama Cloud settings](media/visual-verification.png)
+
 ## Limitations
 
 - **Cloud only.** Local `http://localhost:11434` is not registered as a route.
