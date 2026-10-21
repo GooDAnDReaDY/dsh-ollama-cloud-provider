@@ -26,7 +26,8 @@
     "README.ru.md",
     "CHANGELOG.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "media/visual-verification.png"
   ],
   "publishConfig": {
     "access": "public"
