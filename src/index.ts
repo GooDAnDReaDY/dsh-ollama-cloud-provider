@@ -5,12 +5,13 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-settings'
 
 import { OllamaCloudAdapter } from './adapter.ts'
+import { setBestEffortLogger } from './best-effort.ts'
 import { applyCommands } from './commands.ts'
 import { Config, NS, resolveConfig, unwrapVolatileConfig } from './config.ts'
 import { createKeyPool } from './credentials.ts'
 import { registerPluginUpdater } from './plugin-updater.ts'
 import { PROVIDER } from './provider-ids.ts'
-import { readRequestHeatmap } from './request-log.ts'
+import { flushRequestLog, readRequestHeatmap } from './request-log.ts'
 import { applyRoutes } from './routes.ts'
 import { applyOllamaTuiSettings } from './tui-settings.ts'
 import { createUsageReader } from './usage.ts'
@@ -40,6 +41,8 @@ export { clearCatalogCache, describeModel, effectiveModel } from './catalog.ts'
  * without a restart.
  */
 export function apply(ctx: Context, config: Config): void {
+  const logger = ctx.logger('llm-ollama-cloud')
+  setBestEffortLogger({ debug: (message) => logger.debug(message) })
   const current = () => resolveConfig(unwrapVolatileConfig(config))
   const keys = createKeyPool(ctx, current)
   const usage = createUsageReader(current, (provider) => keys.resolve(provider))
@@ -59,7 +62,8 @@ export function apply(ctx: Context, config: Config): void {
     defaultBaseURL: 'https://ollama.com',
   }])
   ctx.llm.registerAdapter([PROVIDER], adapter)
-  ctx.logger('llm-ollama-cloud').info(`registered provider: ${PROVIDER}`)
+  logger.info(`registered provider: ${PROVIDER}`)
+  ctx.effect(() => () => { void flushRequestLog() }, 'dsh-ollama-cloud-provider: flush request log')
 
   // The plugin ships its own UI; declaring that keeps SettingsForms from
   // publishing an auto-generated page for this entry.

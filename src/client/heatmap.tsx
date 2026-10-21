@@ -5,10 +5,10 @@ import type { RequestHeatmap } from './api.ts'
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 function cellColor(value: number, max: number): string {
-  if (value === 0 || max <= 0) return 'rgba(127,127,127,0.10)'
+  if (value === 0 || max <= 0) return 'color-mix(in srgb, var(--ocl-text-tertiary) 10%, transparent)'
   const ratio = Math.min(1, value / max)
-  const alpha = 0.16 + 0.74 * Math.sqrt(ratio)
-  return `rgba(79,191,134,${alpha.toFixed(3)})`
+  const percent = Math.round((0.16 + 0.74 * Math.sqrt(ratio)) * 100)
+  return `color-mix(in srgb, var(--ocl-success) ${percent}%, transparent)`
 }
 
 function hourLabel(hour: number): string {
@@ -165,7 +165,7 @@ export function RequestHeatmapView(props: {
           <span
             key={ratio}
             className="ocl-heat-swatch"
-            style={{ background: `rgba(79,191,134,${(0.16 + 0.74 * ratio).toFixed(3)})` }}
+            style={{ background: `color-mix(in srgb, var(--ocl-success) ${Math.round((0.16 + 0.74 * ratio) * 100)}%, transparent)` }}
           />
         ))}
         <span>{t('heatmapMore')}</span>

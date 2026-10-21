@@ -2,23 +2,23 @@ export const CSS_ID = 'dsh-ollama-cloud-provider'
 
 export const CSS = `
 :where(.ocl-page, .ocl-panel, .ocl-card, .ocl-foot, .ocl-railButton) {
-  --ocl-border: var(--dsw-alias-border-l3, rgba(127,127,127,0.25));
-  --ocl-border-strong: var(--dsw-alias-border-l3, rgba(127,127,127,0.35));
-  --ocl-border-soft: var(--dsw-alias-border-l3, rgba(127,127,127,0.18));
-  --ocl-fill: var(--dsw-alias-settings-card-fill, rgba(127,127,127,0.06));
-  --ocl-fill-soft: var(--dsw-alias-bg-layer-2, rgba(127,127,127,0.08));
-  --ocl-fill-hover: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,0.12));
-  --ocl-text: var(--dsw-alias-label-primary, #e6e6e6);
-  --ocl-text-secondary: var(--dsw-alias-label-secondary, #a0a0a0);
-  --ocl-text-tertiary: var(--dsw-alias-label-tertiary, #7a7a7a);
-  --ocl-accent: var(--dsw-alias-state-business-primary, #508cff);
+  --ocl-border: var(--dsw-alias-border-l3);
+  --ocl-border-strong: var(--dsw-alias-border-l3);
+  --ocl-border-soft: var(--dsw-alias-border-l3);
+  --ocl-fill: var(--dsw-alias-settings-card-fill);
+  --ocl-fill-soft: var(--dsw-alias-bg-layer-2);
+  --ocl-fill-hover: var(--dsw-alias-interactive-bg-hover);
+  --ocl-text: var(--dsw-alias-label-primary);
+  --ocl-text-secondary: var(--dsw-alias-label-secondary);
+  --ocl-text-tertiary: var(--dsw-alias-label-tertiary);
+  --ocl-accent: var(--dsw-alias-state-business-primary);
   --ocl-accent-soft: color-mix(in srgb, var(--ocl-accent) 16%, transparent);
   --ocl-accent-border: color-mix(in srgb, var(--ocl-accent) 55%, transparent);
-  --ocl-success: var(--dsw-alias-state-success-primary, #4fbf86);
+  --ocl-success: var(--dsw-alias-state-success-primary);
   --ocl-success-border: color-mix(in srgb, var(--ocl-success) 50%, transparent);
-  --ocl-warning: var(--dsw-alias-state-warning-primary, #d9a24a);
+  --ocl-warning: var(--dsw-alias-state-warning-primary);
   --ocl-warning-border: color-mix(in srgb, var(--ocl-warning) 50%, transparent);
-  --ocl-danger: var(--dsw-alias-state-error-primary, #e07a7a);
+  --ocl-danger: var(--dsw-alias-state-error-primary);
   --ocl-danger-soft: color-mix(in srgb, var(--ocl-danger) 12%, transparent);
   --ocl-danger-border: color-mix(in srgb, var(--ocl-danger) 35%, transparent);
   --ocl-focus: var(--dsw-focus-ring-color, var(--ocl-accent));

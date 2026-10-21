@@ -12,6 +12,7 @@ import {
   type UsageState,
 } from './api.ts'
 import { RequestHeatmapView } from './heatmap.tsx'
+import { CONFIG_CHANGED_EVENT } from './events.ts'
 import { accountMark } from './settings-widgets.tsx'
 import { UsageAnalyticsView } from './usage-analytics.tsx'
 import { UsageBars } from './usage-bars.tsx'
@@ -81,7 +82,38 @@ function resetLabel(iso: string | undefined): string {
   return `${Math.max(1, Math.round(delta / 60_000))}m`
 }
 
-export function QuotaCard(props: { t: (key: string) => string; open?: () => void }): ReactNode {
+export function QuotaCard(props: {
+  t: (key: string) => string
+  open?: (() => void) | undefined
+}): ReactNode {
+  const { t, open } = props
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = (): void => {
+      void fetchState()
+        .then((state) => { if (!cancelled) setEnabled(state.config.showSidebarQuota) })
+        .catch(() => { if (!cancelled) setEnabled(false) })
+    }
+    load()
+    window.addEventListener(CONFIG_CHANGED_EVENT, load)
+    return () => {
+      cancelled = true
+      window.removeEventListener(CONFIG_CHANGED_EVENT, load)
+    }
+  }, [])
+
+  // The card stays unmounted (and does not poll /state) until the user enables
+  // it in settings; saving the setting broadcasts CONFIG_CHANGED_EVENT.
+  if (enabled !== true) return null
+  return <QuotaCardBody t={t} open={open} />
+}
+
+function QuotaCardBody(props: {
+  t: (key: string) => string
+  open?: (() => void) | undefined
+}): ReactNode {
   const { t, open } = props
   const { state, error } = useHostState()
   const report = state?.usage?.report

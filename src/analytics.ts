@@ -2,7 +2,9 @@ import { readdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import { priceFor } from './pricing.ts'
+import type { ModelPriceOverride } from './config.ts'
+import { bestEffortFailed } from './best-effort.ts'
+import { estimateCost } from './pricing.ts'
 import { PLUGIN_AND_LEGACY_PROVIDERS } from './provider-ids.ts'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -200,6 +202,7 @@ export function aggregateSessions(
   sessions: readonly SessionMetadata[],
   days: number,
   now = Date.now(),
+  priceOverrides: Readonly<Record<string, ModelPriceOverride>> = {},
 ): AnalyticsReport {
   const since = now - days * DAY_MS
   const models = new Map<string, ModelUsageRow>()
@@ -250,13 +253,18 @@ export function aggregateSessions(
     if (at < since) continue
     matched += 1
 
-    const price = priceFor(model)
-    const priced = price.priced
-    const free = price.free
+    const estimate = estimateCost({
+      model,
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: cacheRead,
+      priceOverrides,
+      at,
+    })
+    const priced = estimate.priced
+    const free = estimate.free
     const partial = cacheWrite > 0 || !priced
-    const cost = priced && !free
-      ? (input * price.input + output * price.output + cacheRead * price.cacheRead) / 1_000_000
-      : 0
+    const cost = estimate.usd
 
     const key = `${provider}/${model}`
     let row = models.get(key)
@@ -403,7 +411,7 @@ export function aggregateSessions(
   }
 }
 
-const cache = new Map<number, { at: number; report: AnalyticsReport }>()
+const cache = new Map<string, { at: number; report: AnalyticsReport }>()
 
 function projectionDirectory(): string {
   const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
@@ -411,9 +419,13 @@ function projectionDirectory(): string {
 }
 
 /** Read and aggregate the local projection cache; never waits on the network. */
-export async function readModelAnalytics(days = 30): Promise<AnalyticsReport> {
+export async function readModelAnalytics(
+  days = 30,
+  priceOverrides: Readonly<Record<string, ModelPriceOverride>> = {},
+): Promise<AnalyticsReport> {
   const clamped = Math.max(1, Math.min(365, Math.trunc(days)))
-  const cached = cache.get(clamped)
+  const cacheKey = `${clamped}:${JSON.stringify(priceOverrides)}`
+  const cached = cache.get(cacheKey)
   if (cached !== undefined && Date.now() - cached.at < CACHE_TTL_MS) return cached.report
 
   const dir = projectionDirectory()
@@ -435,21 +447,19 @@ export async function readModelAnalytics(days = 30): Promise<AnalyticsReport> {
             meta.id = entry.name.replace(/\.json$/i, '')
             sessions.push(meta)
           }
-        } catch {
+        } catch (error) {
           // A half-written or foreign projection file is simply skipped.
+          bestEffortFailed('projection file skipped', error)
         }
       }
     })
     await Promise.all(workers)
-  } catch {
+  } catch (error) {
     // No projection cache yet: an empty report is the honest answer.
+    bestEffortFailed('projection cache is unavailable', error)
   }
 
-  const report = aggregateSessions(sessions, clamped)
-  cache.set(clamped, { at: Date.now(), report })
+  const report = aggregateSessions(sessions, clamped, Date.now(), priceOverrides)
+  cache.set(cacheKey, { at: Date.now(), report })
   return report
-}
-
-export function clearAnalyticsCache(): void {
-  cache.clear()
 }

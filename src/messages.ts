@@ -1,5 +1,4 @@
 import {
-  LlmError,
   type ContentBlock,
   type GenerateOptions,
   type ToolSchema,
@@ -291,14 +290,4 @@ export function buildChatBody(
     ...(reasoning === undefined ? {} : { reasoning_effort: reasoning }),
     ...(options.stop === undefined || options.stop.length === 0 ? {} : { stop: options.stop }),
   }
-}
-
-/** Reject image input early when the harness cannot supply decoded bytes. */
-export function requireImages(options: GenerateOptions, images: ImageMap | undefined): void {
-  if (!hasImageBlocks(options.messages.flatMap((message) => message.content as ContentBlock[]))) return
-  if (images !== undefined) return
-  throw new LlmError(
-    'llm-ollama-cloud: image input requires the harness attachment service',
-    'UNSUPPORTED_CONTENT',
-  )
 }
