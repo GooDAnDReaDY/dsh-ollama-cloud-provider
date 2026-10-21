@@ -202,6 +202,7 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
   if ('stickySession' in patch) set('stickySession', patch.stickySession === true)
   if ('activeAccount' in patch) set('activeAccount', patch.activeAccount)
   if ('showSidebarQuota' in patch) set('showSidebarQuota', patch.showSidebarQuota === true)
+  if ('planLabel' in patch) set('planLabel', patch.planLabel)
   if ('priceOverrides' in patch) set('priceOverrides', cleanPrices(patch.priceOverrides))
   if ('userAgent' in patch) set('userAgent', patch.userAgent)
   return ops

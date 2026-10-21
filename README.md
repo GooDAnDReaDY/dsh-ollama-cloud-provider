@@ -84,7 +84,7 @@ graph LR
 - **Price estimates** from the published Ollama pricing table, including off-peak rates, with per-model overrides.
 - **Browser UI**:
   - **Settings → Ollama Cloud**: key, balance, accounts, rules, model allowlist, per-model transport, connection settings.
-  - **Sidebar quota card** (off by default, and it does not poll `/state` while disabled): a ring with the highest used window and rows with remaining credits or legacy windows.
+  - **Sidebar quota card** (off by default, and it does not poll `/state` while disabled): a ring with the highest used window and rows with remaining credits or legacy windows; an optional `planLabel` is shown next to the provider name.
   - **Center quota panel**: spend windows, spend by model, accounts, routing trace, usage analytics and a request heatmap.
 - **`/ollama` command** for status, usage, balance, accounts, models, rules and `test [model]`.
 - **TUI settings section** for terminal profiles.
@@ -103,17 +103,17 @@ npm pack
 Install the published package:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.3
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.4
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.3
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.4
 ```
 
 Or install the packed tarball into a profile:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.3.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.4.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.3.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.4.tgz
 ```
 
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
@@ -142,6 +142,7 @@ Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
     activeAccount: ''              # label or credential name to pin
     stickySession: true
     showSidebarQuota: false
+    planLabel: ''                  # optional, e.g. PRO
 ```
 
 Every field except `apiKey` is volatile and appears in dsh settings.
@@ -190,7 +191,7 @@ Open **Settings → Ollama Cloud**:
 - **Routing** — sticky session per conversation.
 - **Models** — search, refresh the live catalog, hide models, override the wire transport per model, see price, context and capabilities.
 - **Connection** — native and OpenAI bases, usage and balance endpoints, transport, timeouts, output cap and context override.
-- **Sidebar** — show or hide the quota card.
+- **Sidebar** — show or hide the quota card, and an optional plan label (for example `PRO`) shown next to the provider name.
 - **Plugin update** — current/latest version and **Update now**.
 
 The Host serves `/dsh-ollama/state`, `/health`, `/analytics`, `/usage`, `/balance`, `/config`, `/key`, `/key/clear`, `/refresh`, `/models/refresh`, `/test` and `/update`. Writes require JSON, are refused for cross-origin requests, and are restricted to loopback (`127.0.0.1` / `::1`).

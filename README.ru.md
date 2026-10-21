@@ -84,7 +84,7 @@ graph LR
 - **Оценка стоимости**: тарификация по официальному прайс-листу Ollama Cloud, включая ночные скидки (off-peak rates) и возможность ручного переопределения цен на модель.
 - **Интерфейс в браузере (Web UI)**:
   - **Настройки → Ollama Cloud**: управление ключами, отображение баланса, пул аккаунтов, правила маршрутизации, allowlist моделей, выбор транспорта.
-  - **Карточка квоты в сайдбаре**: кольцевой индикатор с наиболее загруженным окном и детализацией остатка кредитов (по умолчанию выключена и не нагружает сеть фоновыми опросами).
+  - **Карточка квоты в сайдбаре**: кольцевой индикатор с наиболее загруженным окном и детализацией остатка кредитов (по умолчанию выключена и не нагружает сеть фоновыми опросами; рядом с названием можно показать `planLabel`, например `PRO`).
   - **Центральная панель квот**: окна расходов, разбивка по моделям, трейс маршрутизации, аналитика токенов и интерактивный heatmap запросов.
 - **Команда `/ollama`**: статус провайдера, квоты, баланс, список аккаунтов, моделей, правил и запуск тестового запроса `test [model]`.
 - **Интеграция с терминалом (TUI)**: специальная секция настроек в терминальном режиме.
@@ -103,17 +103,17 @@ npm pack
 Установка опубликованного пакета из npm:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.3
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.4
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.3
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.4
 ```
 
 Либо установка из упакованного tarball:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.3.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.4.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.3.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.4.tgz
 ```
 
 После установки перезапустите dsh (или DSH Desktop) и выберите **Ollama Cloud** в списке моделей.
@@ -137,6 +137,7 @@ dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud
     activeAccount: ''              # метка для принудительного закрепления
     stickySession: true
     showSidebarQuota: false
+    planLabel: ''                  # необязательно, например PRO
 ```
 
 Все поля, кроме `apiKey`, доступны для изменения в интерфейсе настроек DSH.

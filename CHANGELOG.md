@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4 — 2026-10-21
+
+- Model list rows now use the reference three-column grid: badges live inside
+  the name cell, so rows no longer stretch, wrap into empty gaps or truncate the
+  model id to a single character (#20).
+- The sidebar quota card uses the reference 16px ring and no longer appends the
+  internal `default` account label. An optional `planLabel` (for example `PRO`)
+  can be shown next to the provider name instead (#21).
+
 ## 0.1.3 — 2026-10-21
 
 - Aligned README documentation trio with dsh-documentation-standard: added standardized Hero headers, goodandready.app hub badges, support tables, and Mermaid architecture diagrams across English, Russian, and Chinese documentations.

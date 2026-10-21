@@ -21,6 +21,7 @@ export interface PublicConfig {
   stickySession: boolean
   activeAccount: string
   showSidebarQuota: boolean
+  planLabel: string
   priceOverrides: Readonly<Record<string, ModelPriceOverride>>
   userAgent: string
 }
@@ -53,6 +54,7 @@ export function publicConfig(config: ResolvedConfig): PublicConfig {
     stickySession: config.stickySession,
     activeAccount: config.activeAccount,
     showSidebarQuota: config.showSidebarQuota,
+    planLabel: config.planLabel,
     priceOverrides: config.priceOverrides,
     userAgent: config.userAgent,
   }

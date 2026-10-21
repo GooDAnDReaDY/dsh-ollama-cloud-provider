@@ -84,7 +84,7 @@ graph LR
 - **成本透明估算**：依据官方发布的价目表（包含闲时优惠折扣）进行费用估算，支持按模型覆盖价格。
 - **Web UI 与交互卡片**：
   - **设置 → Ollama Cloud**：密钥配置、余额显示、账号池管理、模型白名单与协议切换。
-  - **侧边栏配额指示卡片**：环形展示最高额度窗口（默认关闭且不产生后台轮询）。
+  - **侧边栏配额指示卡片**：环形展示最高额度窗口（默认关闭且不产生后台轮询；可在名称旁显示 `planLabel`，例如 `PRO`）。
   - **中央用量分析面板**：支出窗口、请求热力图与用量走势。
 - **`/ollama` 快捷指令**：快速查询状态、额度、余额、账号列表与执行联通性测试。
 - **一键热更新**：在 DSH 设置页直接检测 npm 最新版本并快速安装更新。
@@ -102,17 +102,17 @@ npm pack
 从 npm 安装已发布版本：
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.3
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.4
 # DSH 桌面端：
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.3
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.4
 ```
 
 或通过打包文件安装：
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.3.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.4.tgz
 # DSH 桌面端：
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.3.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.4.tgz
 ```
 
 安装完成后重启 dsh 或 DSH 桌面端，在模型列表中选择 **Ollama Cloud** 即可。
@@ -136,6 +136,7 @@ dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud
     activeAccount: ''              # 固定指定活跃账号
     stickySession: true
     showSidebarQuota: false
+    planLabel: ''                  # 可选，例如 PRO
 ```
 
 除 `apiKey` 外的所有配置项均可在 DSH 设置页直接修改。

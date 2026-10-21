@@ -21,6 +21,7 @@ export interface PublicConfig {
   stickySession: boolean
   activeAccount: string
   showSidebarQuota: boolean
+  planLabel: string
   priceOverrides: Readonly<Record<string, { input?: number; output?: number; cacheRead?: number }>>
   userAgent: string
 }

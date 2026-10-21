@@ -50,6 +50,7 @@ export interface OllamaTuiSettingsDeps {
   readonly activeAccount: () => string
   readonly stickySession: () => boolean
   readonly showSidebarQuota: () => boolean
+  readonly planLabel: () => string
   readonly refreshMs?: number
 }
 
@@ -155,6 +156,15 @@ export function buildOllamaTuiSection(deps: OllamaTuiSettingsDeps): TuiSettingsS
         parse: (text) => ({ kind: 'set', value: text.trim() === 'true' }),
       },
       {
+        path: ['planLabel'],
+        group: 'sidebar',
+        kind: 'text',
+        label: 'Plan label',
+        hint: 'Optional label shown on the sidebar card, for example PRO.',
+        format: (value) => String(value === undefined ? deps.planLabel() : value),
+        parse: (text) => text.trim() === '' ? { kind: 'clear' } : { kind: 'set', value: text.trim() },
+      },
+      {
         path: ['activeAccount'],
         group: 'advanced',
         kind: 'text',
@@ -224,6 +234,7 @@ export function applyOllamaTuiSettings(
     activeAccount: deps.activeAccount(),
     stickySession: deps.stickySession(),
     showSidebarQuota: deps.showSidebarQuota(),
+    planLabel: deps.planLabel(),
   })
   let lastSignature = signature()
 

@@ -6,7 +6,7 @@ export const DEFAULT_API_BASE = 'https://ollama.com'
 export const DEFAULT_OPENAI_BASE = 'https://ollama.com/v1'
 export const DEFAULT_USAGE_URL = 'https://ollama.com/api/usage'
 export const DEFAULT_BALANCE_URL = 'https://ollama.com/api/balance'
-export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.2'
+export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.4'
 export const DEFAULT_CONTEXT_WINDOW = 131_072
 export const DEFAULT_MAX_TOKENS = 32_768
 export const DEFAULT_GENERATE_MAX_TOKENS = 131_072
@@ -77,6 +77,8 @@ export interface Config {
   activeAccount?: string
   /** Show the quota card in the sidebar. */
   showSidebarQuota?: boolean
+  /** Optional plan label shown on the sidebar card, for example PRO. */
+  planLabel?: string
   /** Per-model price overrides in USD per 1M tokens. */
   priceOverrides?: Record<string, ModelPriceOverride>
   /** Product user agent sent to Ollama Cloud. */
@@ -117,6 +119,7 @@ export const Config: z<Config> = z.object({
   stickySession: markVolatile(z.boolean().default(true)),
   activeAccount: markVolatile(z.string().default('')),
   showSidebarQuota: markVolatile(z.boolean().default(false)),
+  planLabel: markVolatile(z.string().default('')),
   priceOverrides: markVolatile(z.dict(z.object({
     input: z.number().min(0),
     output: z.number().min(0),
@@ -147,6 +150,7 @@ export interface ResolvedConfig {
   stickySession: boolean
   activeAccount: string
   showSidebarQuota: boolean
+  planLabel: string
   priceOverrides: Readonly<Record<string, ModelPriceOverride>>
   userAgent: string
 }
@@ -272,6 +276,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     stickySession: config.stickySession !== false,
     activeAccount: typeof config.activeAccount === 'string' ? config.activeAccount : '',
     showSidebarQuota: config.showSidebarQuota === true,
+    planLabel: typeof config.planLabel === 'string' ? config.planLabel.trim() : '',
     priceOverrides: priceRecord(config.priceOverrides),
     userAgent: typeof config.userAgent === 'string' && config.userAgent !== ''
       ? config.userAgent

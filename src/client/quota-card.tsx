@@ -47,25 +47,25 @@ function useHostState(intervalMs = 60_000): {
 }
 
 function MiniRing(props: { percent: number; size?: number }): ReactNode {
-  const size = props.size ?? 34
-  const radius = 14
+  const size = props.size ?? 16
+  const radius = 7
   const circumference = 2 * Math.PI * radius
   const filled = Math.max(0, Math.min(100, props.percent)) / 100
   const stroke = props.percent >= 90
     ? 'var(--ocl-danger)'
     : props.percent >= 75 ? 'var(--ocl-warning)' : 'var(--ocl-accent)'
   return (
-    <svg className="ocl-ring" width={size} height={size} viewBox="0 0 34 34" fill="none" aria-hidden="true">
-      <circle cx="17" cy="17" r={radius} stroke="var(--ocl-border-strong)" strokeWidth="3" />
+    <svg className="ocl-ring" width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="10" cy="10" r={radius} stroke="var(--ocl-border-strong)" strokeWidth="2.5" />
       <circle
-        cx="17"
-        cy="17"
+        cx="10"
+        cy="10"
         r={radius}
         stroke={stroke}
-        strokeWidth="3"
+        strokeWidth="2.5"
         strokeLinecap="round"
         strokeDasharray={`${circumference * filled} ${circumference}`}
-        transform="rotate(-90 17 17)"
+        transform="rotate(-90 10 10)"
       />
     </svg>
   )
@@ -119,8 +119,8 @@ function QuotaCardBody(props: {
   const report = state?.usage?.report
   const bars = quotaBars(report)
   const worst = worstUsedPercent(report)
-  const active = state?.accounts.find((account) => account.active)
-  const name = active === undefined ? t('quotaCardName') : `${t('quotaCardName')} · ${active.label}`
+  const plan = state?.config.planLabel?.trim() ?? ''
+  const name = plan === '' ? t('quotaCardName') : `${t('quotaCardName')} · ${plan}`
   const detail = bars
     .map((entry) => `${entry.label}: ${entry.remainingPercent.toFixed(0)}% ${t('remaining')}`)
     .join(' · ')
