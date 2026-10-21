@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 — 2026-10-21
+
+- Aligned README documentation trio with dsh-documentation-standard: added standardized Hero headers, goodandready.app hub badges, support tables, and Mermaid architecture diagrams across English, Russian, and Chinese documentations.
+- Updated installation instructions and package version parity.
+
 ## 0.1.2 — 2026-10-21
 
 - Test connection falls back to the reasoning text when a thinking model returns

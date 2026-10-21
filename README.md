@@ -5,10 +5,22 @@
 <h3>Ollama Cloud LLM Provider for DeepSeek Harness</h3>
 
 <p>
+  <a href="https://goodandready.app/"><img src="https://img.shields.io/badge/🌐_DSH_Hub-goodandready.app-ff4500.svg?style=for-the-badge&labelColor=1a1a2e" alt="GoodAndReady Showcase"></a>
   <a href="https://www.npmjs.com/package/@goodandready/dsh-ollama-cloud-provider"><img src="https://img.shields.io/npm/v/@goodandready/dsh-ollama-cloud-provider?style=for-the-badge&color=crimson&logo=npm" alt="npm version"></a>
+  <a href="https://github.com/GooDAnDReaDY/dsh-ollama-cloud-provider/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License"></a>
 </p>
 
 </div>
+
+<table align="center">
+  <tr>
+    <td align="center">
+      ⭐ <strong>If you like this plugin, please star it on GitHub</strong> — it shows me that the plugin is useful to you and motivates me to keep developing it.
+      <br><br>
+      🐛 <strong>If you find a bug or would like to request a feature</strong>, open a GitHub issue in any language — I will review your proposal and implement useful suggestions in a future plugin version.
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -88,12 +100,20 @@ npm run build
 npm pack
 ```
 
-Install the packed tarball into a profile:
+Install the published package:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.0.tgz
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.3
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.0.tgz
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.3
+```
+
+Or install the packed tarball into a profile:
+
+```bash
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.3.tgz
+# DSH Desktop:
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.3.tgz
 ```
 
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
@@ -114,7 +134,7 @@ Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
     streamIdleTimeoutMs: 300000
     visibleModels: []
     modelTransports: {}
-    # contextWindowOverrides: { "gpt-oss:120b": 131072 }
+    # contextWindowOverrides: { "model-id": 131072 }
     # maxOutputTokens: 32768
     accounts:
       - label: Work
@@ -184,7 +204,7 @@ The Host serves `/dsh-ollama/state`, `/health`, `/analytics`, `/usage`, `/balanc
 /ollama accounts          # labels, source, active/cooling, 7-day spend
 /ollama models            # ids, price, context, capabilities
 /ollama rules             # model → account rules
-/ollama test [model]      # minimal real request, default gpt-oss:120b
+/ollama test [model]      # minimal real request
 ```
 
 ## Verified API facts
@@ -213,8 +233,7 @@ node scripts/probe.mjs
 
 ## Visual verification
 
-The Ollama Cloud settings page in DSH Desktop (dark theme): configured
-credential, balance and usage, and the connection probe.
+The Ollama Cloud settings page in DSH Desktop (dark theme): configured credential, balance and usage, and the connection probe.
 
 ![Ollama Cloud settings](media/visual-verification.png)
 
