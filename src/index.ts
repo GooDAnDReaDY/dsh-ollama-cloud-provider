@@ -96,6 +96,7 @@ export function apply(ctx: Context, config: Config): void {
       activeAccount: () => current().activeAccount,
       stickySession: () => current().stickySession,
       showSidebarQuota: () => current().showSidebarQuota,
+      planLabel: () => current().planLabel,
     })
   })
 

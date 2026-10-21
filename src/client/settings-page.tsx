@@ -32,28 +32,28 @@ function ModelEntry(props: {
   const { model, visible, transport, onVisible, onTransport, t } = props
   return (
     <div className="ocl-model">
-      <label className="ocl-row">
-        <input type="checkbox" checked={visible} onChange={(event) => onVisible(event.target.checked)} />
-        <span className="ocl-model-name" title={`${model.name} · ${model.description}`}>{model.id}</span>
-      </label>
-      {model.free ? <span className="ocl-badge" title={t('legendFree')}>{t('free')}</span> : null}
-      {!model.free && model.cost.priced
-        ? <span className="ocl-badge" title={t('legendPrice')}>${model.cost.input}/${model.cost.output}</span>
-        : null}
-      {!model.free && !model.cost.priced
-        ? <span className="ocl-badge" title={t('legendUnknownPrice')}>{t('priceUnknown')}</span>
-        : null}
-      <span className="ocl-badge" title={t('legendContext')}>
-        {Math.round(model.contextWindow / 1024)}K
+      <input type="checkbox" checked={visible} onChange={(event) => onVisible(event.target.checked)} />
+      <span className="ocl-model-name" title={`${model.name} · ${model.description}`}>
+        {model.id}
+        {model.free ? <span className="ocl-badge" title={t('legendFree')}> {t('free')}</span> : null}
+        {!model.free && model.cost.priced
+          ? <span className="ocl-badge" title={t('legendPrice')}> ${model.cost.input}/${model.cost.output}</span>
+          : null}
+        {!model.free && !model.cost.priced
+          ? <span className="ocl-badge" title={t('legendUnknownPrice')}> {t('priceUnknown')}</span>
+          : null}
+        <span className="ocl-badge" title={t('legendContext')}>
+          {' '}{Math.round(model.contextWindow / 1024)}K
+        </span>
+        {model.tools ? <span className="ocl-badge" title={t('legendTools')}> {t('tools')}</span> : null}
+        {model.input.includes('image') ? <span className="ocl-badge"> {t('vision')}</span> : null}
+        {model.reasoning.length > 0
+          ? <span className="ocl-badge" title={model.reasoning.join(', ')}> {t('reasoning')}</span>
+          : null}
+        {model.available ? null : <span className="ocl-badge ocl-badge-warn"> {t('unavailable')}</span>}
       </span>
-      {model.tools ? <span className="ocl-badge" title={t('legendTools')}>{t('tools')}</span> : null}
-      {model.input.includes('image') ? <span className="ocl-badge">{t('vision')}</span> : null}
-      {model.reasoning.length > 0
-        ? <span className="ocl-badge" title={model.reasoning.join(', ')}>{t('reasoning')}</span>
-        : null}
-      {model.available ? null : <span className="ocl-badge ocl-badge-warn">{t('unavailable')}</span>}
       <select
-        className="ocl-select ocl-model-transport"
+        className="ocl-select"
         value={transport === '' ? model.transport : transport}
         aria-label={t('transport')}
         onChange={(event) => onTransport(event.target.value as TransportId | '')}
@@ -564,6 +564,7 @@ export function OllamaCloudSettingsPage(props: {
           <Field label={t('streamIdleTimeoutMs')} type="number" value={draft.streamIdleTimeoutMs} onChange={(value) => update({ streamIdleTimeoutMs: value })} />
           <Field label={t('maxOutputTokens')} type="number" value={draft.maxOutputTokens} onChange={(value) => update({ maxOutputTokens: value })} />
           <Field label={t('contextWindow')} type="number" value={draft.contextWindow} onChange={(value) => update({ contextWindow: value })} />
+          <Field label={t('planLabel')} hint={t('planLabelHint')} value={draft.planLabel} onChange={(value) => update({ planLabel: value })} />
         </div>
       </section>
 
