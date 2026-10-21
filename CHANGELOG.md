@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 — 2026-10-21
+
+- Test connection falls back to the reasoning text when a thinking model returns
+  no content, and uses a 64-token budget (#17).
+- Production acceptance of 0.1.1 confirmed chat, catalog and balance; the probe
+  is the only follow-up defect.
+
 ## 0.1.1 — 2026-10-21
 
 Audit fixes (Gitea #1–#15):

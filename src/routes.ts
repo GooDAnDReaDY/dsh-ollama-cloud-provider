@@ -535,19 +535,22 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
         model,
         messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply with exactly: OK' }] }],
         reasoningEffort: ReasoningEffortId('off'),
-        maxTokens: 32,
+        maxTokens: 64,
         signal: controller.signal,
       }
+      let reasoning = ''
       for await (const chunk of deps.adapter.stream(options)) {
         if (chunk.type === 'text-delta') text += chunk.text
+        else if (chunk.type === 'reasoning-delta') reasoning += chunk.text
         else if (chunk.type === 'finish') finish = chunk.reason
       }
+      const reply = text === '' ? reasoning : text
       json(res, 200, {
         ok: true,
         model,
         provider: PROVIDER,
         latencyMs: Date.now() - started,
-        text: text.slice(0, 200),
+        text: reply.slice(0, 200),
         finish,
       })
     } catch (error) {
