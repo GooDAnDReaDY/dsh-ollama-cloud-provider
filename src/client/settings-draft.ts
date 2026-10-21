@@ -12,6 +12,7 @@ export interface Draft {
   maxOutputTokens: string
   contextWindow: string
   showSidebarQuota: boolean
+  planLabel: string
   activeAccount: string
   accounts: Array<{ label: string; apiKeyEnv: string }>
   modelAccountRules: Array<{ pattern: string; account: string }>
@@ -36,6 +37,7 @@ export function draftOf(state: HostState): Draft {
     maxOutputTokens: state.config.maxOutputTokens === null ? '' : String(state.config.maxOutputTokens),
     contextWindow: state.config.contextWindow === null ? '' : String(state.config.contextWindow),
     showSidebarQuota: state.config.showSidebarQuota,
+    planLabel: state.config.planLabel,
     activeAccount: state.config.activeAccount,
     accounts: state.config.accounts.map((account) => ({ ...account })),
     modelAccountRules: state.config.modelAccountRules.map((rule) => ({ ...rule })),
@@ -68,6 +70,7 @@ export function patchOf(draft: Draft): Record<string, unknown> {
     maxOutputTokens: numberOrNull(draft.maxOutputTokens),
     contextWindow: numberOrNull(draft.contextWindow),
     showSidebarQuota: draft.showSidebarQuota,
+    planLabel: draft.planLabel.trim(),
     activeAccount: draft.activeAccount.trim(),
     accounts: draft.accounts
       .map((account) => ({ label: account.label.trim(), apiKeyEnv: account.apiKeyEnv.trim() }))

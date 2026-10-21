@@ -12,6 +12,7 @@ test('TUI section exposes the Ollama fields', () => {
     activeAccount: () => '',
     stickySession: () => true,
     showSidebarQuota: () => false,
+    planLabel: () => '',
   })
   assert.equal(section.ns, 'llm-ollama-cloud')
   assert.equal(section.title, 'Ollama Cloud')
