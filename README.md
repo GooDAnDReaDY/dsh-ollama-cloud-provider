@@ -72,7 +72,7 @@ graph LR
 - **Price estimates** from the published Ollama pricing table, including off-peak rates, with per-model overrides.
 - **Browser UI**:
   - **Settings → Ollama Cloud**: key, balance, accounts, rules, model allowlist, per-model transport, connection settings.
-  - **Sidebar quota card** (off by default): a ring with the highest used window and rows with remaining credits or legacy windows.
+  - **Sidebar quota card** (off by default, and it does not poll `/state` while disabled): a ring with the highest used window and rows with remaining credits or legacy windows.
   - **Center quota panel**: spend windows, spend by model, accounts, routing trace, usage analytics and a request heatmap.
 - **`/ollama` command** for status, usage, balance, accounts, models, rules and `test [model]`.
 - **TUI settings section** for terminal profiles.
@@ -163,7 +163,7 @@ The plugin uses the documented cloud endpoints:
 
 Open **Settings → Ollama Cloud**:
 
-- **Key** — status, paste a key, clear it, run **Test connection** against a chosen model.
+- **Key** — status, paste a key, clear it, run **Test connection** against a chosen model. The probe disables thinking so the reply is visible.
 - **Balance and usage** — credit bar or legacy windows, spend windows, warning at 80 % and exhausted at 95 %.
 - **Accounts** — extra keys, per-account spend, pin, remove, set a key.
 - **Model → account rules** — glob rules.

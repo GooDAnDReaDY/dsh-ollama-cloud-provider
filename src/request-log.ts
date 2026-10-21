@@ -2,6 +2,8 @@ import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
+import { bestEffortFailed } from './best-effort.ts'
+
 const DAY_MS = 24 * 60 * 60 * 1000
 const MAX_LOG_BYTES = 2 * 1024 * 1024
 const KEEP_LINES = 5_000
@@ -106,8 +108,9 @@ export function recordRequest(
       await appendFile(path, line, 'utf8')
       appends += 1
       if (appends % COMPACT_EVERY === 0) await compactRequestLog()
-    } catch {
+    } catch (error) {
       // Analytics must never break inference.
+      bestEffortFailed('request log append failed', error)
     }
   })
 }
@@ -130,8 +133,9 @@ export async function compactRequestLog(
     const lines = text.split('\n').filter((line) => line !== '')
     if (lines.length <= keepLines) return
     await writeFile(path, `${lines.slice(-keepLines).join('\n')}\n`, 'utf8')
-  } catch {
+  } catch (error) {
     // Best-effort: a failed compaction leaves the append-only log intact.
+    bestEffortFailed('request log compaction failed', error)
   }
 }
 

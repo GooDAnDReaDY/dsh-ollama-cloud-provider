@@ -20,6 +20,7 @@ import {
 } from '@deepseek-ai/dsh-llm'
 
 import { matchModelAccount, orderKeysForModel } from './account-rules.ts'
+import { bestEffortFailed } from './best-effort.ts'
 import {
   describeModel,
   effectiveMaxTokens,
@@ -180,8 +181,6 @@ export class OllamaCloudAdapter extends LlmAdapter {
                 : {}),
             },
           }),
-      ...(meta.tools ? {} : {}),
-      toolUpdate: 'addition-only',
     }
   }
 
@@ -283,8 +282,15 @@ export class OllamaCloudAdapter extends LlmAdapter {
             || error.code === 'RATE_LIMIT'
             || error.code === 'QUOTA'
             || error.code === 'SERVER'
+          const credentialOrQuota = error.code === 'INVALID_CREDENTIAL'
+            || error.code === 'RATE_LIMIT'
+            || error.code === 'QUOTA'
           if (retryable) {
-            this.markCooldown(entry.key, response.status, response.headers, error.code)
+            // A single account must stay usable for the harness retry policy:
+            // cooling it down on a generic 5xx makes the retry fail immediately.
+            if (canRotate || credentialOrQuota) {
+              this.markCooldown(entry.key, response.status, response.headers, error.code)
+            }
             responseFailure = true
             if (canRotate) continue
           }
@@ -323,8 +329,15 @@ export class OllamaCloudAdapter extends LlmAdapter {
         if (started || options.signal?.aborted === true) throw error
         lastError = classified
         const transient = this.isTransient(classified)
-        if (transient && !responseFailure) this.markCooldown(entry.key, 0)
         const canRotate = index < keys.length - 1 && transient
+        const credentialOrQuota = classified.code === 'INVALID_CREDENTIAL'
+          || classified.code === 'RATE_LIMIT'
+          || classified.code === 'QUOTA'
+        // With one account, a transport/timeout/server failure must reach the
+        // harness retry policy instead of cooling the only usable key.
+        if (!responseFailure && (canRotate || credentialOrQuota)) {
+          this.markCooldown(entry.key, 0)
+        }
         if (!canRotate) throw classified
       }
     }
@@ -398,8 +411,9 @@ export class OllamaCloudAdapter extends LlmAdapter {
         this.sticky.set(sessionId, { fingerprint, label, provider, model, at })
       }
       this.pruneSticky()
-    } catch {
+    } catch (error) {
       // Missing or corrupt state is ignored; sticky routing is an optimization.
+      bestEffortFailed('sticky state is unavailable', error)
     }
   }
 
@@ -525,8 +539,9 @@ export class OllamaCloudAdapter extends LlmAdapter {
         this.cooldowns.set(id, { until, reason })
       }
       this.pruneCooldowns()
-    } catch {
+    } catch (error) {
       // Missing or corrupt state is ignored; cooldowns are an optimization.
+      bestEffortFailed('cooldown state is unavailable', error)
     }
   }
 

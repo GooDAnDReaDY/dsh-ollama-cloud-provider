@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import type { AccountRow, UsageWindow } from './api.ts'
+import type { AccountRow } from './api.ts'
 
 export function Field(props: {
   label: string
@@ -32,13 +32,6 @@ export function untilText(epoch: number): string {
   if (delta >= 86_400_000) return `${Math.round(delta / 86_400_000)}d`
   if (delta >= 3_600_000) return `${Math.round(delta / 3_600_000)}h`
   return `${Math.max(1, Math.round(delta / 60_000))}m`
-}
-
-export function usageChip(label: string, window: UsageWindow | undefined): ReactNode {
-  if (window === undefined) return null
-  const value = Math.round(window.percentUsed)
-  const className = value >= 90 ? 'ocl-badge-bad' : value >= 75 ? 'ocl-badge-warn' : 'ocl-badge-ok'
-  return <span className={`ocl-badge ${className}`}>{label} {value}%</span>
 }
 
 export function accountMark(

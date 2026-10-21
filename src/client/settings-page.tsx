@@ -16,7 +16,8 @@ import {
   type TransportId,
 } from './api.ts'
 import { draftOf, patchOf, safeSame, type Draft } from './settings-draft.ts'
-import { accountMark, Field, usageChip } from './settings-widgets.tsx'
+import { CONFIG_CHANGED_EVENT } from './events.ts'
+import { accountMark, Field } from './settings-widgets.tsx'
 import { PluginUpdateCard } from './update-card.tsx'
 import { UsageBars } from './usage-bars.tsx'
 
@@ -115,6 +116,7 @@ export function OllamaCloudSettingsPage(props: {
     setSaving(true)
     try {
       await saveConfig(patchOf(draft))
+      window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT))
       setNotice(t('saved'))
       setError(null)
       await load()
@@ -339,13 +341,10 @@ export function OllamaCloudSettingsPage(props: {
                 </span>
                 {mark === undefined ? null : <span className="ocl-badge ocl-badge-bad">{mark}</span>}
               </div>
-              {known?.usage?.report === undefined ? null : (
+              {known?.usage?.report?.windows.d7 === undefined ? null : (
                 <div className="ocl-row">
-                  {usageChip(t('spend7d'), known.usage.report.windows.d7 === undefined
-                    ? undefined
-                    : { percentUsed: 0 })}
                   <span className="ocl-badge">
-                    ${known.usage.report.windows.d7?.usd.toFixed(3) ?? '0.000'}
+                    {t('spend7d')}: ${known.usage.report.windows.d7.usd.toFixed(3)}
                   </span>
                 </div>
               )}

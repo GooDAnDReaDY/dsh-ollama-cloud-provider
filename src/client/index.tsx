@@ -25,7 +25,7 @@ function injectCss(): () => void {
   if (typeof document === 'undefined') return () => {}
   if (document.querySelector(`style[data-plugin-css="${CSS_ID}"]`) !== null) return () => {}
   const tag = document.createElement('style')
-  tag.dataset.plugin = 'dsh-ollama-cloud-provider'
+  tag.dataset.dshPlugin = 'dsh-ollama-cloud-provider'
   tag.dataset.pluginCss = CSS_ID
   tag.textContent = CSS
   document.head.appendChild(tag)

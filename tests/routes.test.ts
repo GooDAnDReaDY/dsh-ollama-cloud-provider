@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
+
 import { resolveConfig } from '../src/config.ts'
 import { applyRoutes } from '../src/routes.ts'
 
@@ -22,10 +24,29 @@ function fakeRes(): {
   }
 }
 
+function postJson(value: unknown): unknown {
+  const payload = Buffer.from(JSON.stringify(value))
+  return {
+    method: 'POST',
+    headers: { host: '127.0.0.1:3080', 'content-type': 'application/json' },
+    socket: { remoteAddress: '127.0.0.1' },
+    async *[Symbol.asyncIterator]() {
+      yield payload
+    },
+  }
+}
+
 test('state route serves the catalog and write routes enforce JSON', async () => {
   const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
+  const written: Array<{ ref: unknown; key: string }> = []
+  const cleared: unknown[] = []
+  const credentials = {
+    describe: async () => ({ configured: false, writable: true }),
+    set: async (ref: unknown, key: string) => { written.push({ ref, key }) },
+    unset: async (ref: unknown) => { cleared.push(ref) },
+  }
   const ctx = {
-    get: () => undefined,
+    get: (name: string) => name === 'credentials' ? credentials : undefined,
     effect: (fn: () => () => void) => { fn(); return () => {} },
   } as never
   const web = {
@@ -35,6 +56,7 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
     },
   } as never
   const config = resolveConfig({ apiKey: 'k' })
+  let seen: GenerateOptions | undefined
   const adapter = {
     listModels: async () => [{
       provider: 'ollama-cloud',
@@ -45,7 +67,9 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
     }],
     accountHealth: () => undefined,
     routingTrace: () => [],
-    stream: async function* () {},
+    stream: async function* (options: GenerateOptions) {
+      seen = options
+    },
   }
   const pool = {
     resolveAll: async () => [],
@@ -77,4 +101,31 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
     socket: { remoteAddress: '127.0.0.1' },
   }, denied)
   assert.equal(denied.statusCode, 415)
+
+  const keyRoute = routes.get('/dsh-ollama/key')
+  assert.ok(keyRoute !== undefined)
+  const foreign = fakeRes()
+  await keyRoute(postJson({ ref: 'OPENCODE_API_KEY', key: 'x' }), foreign)
+  assert.equal(foreign.statusCode, 400)
+  assert.equal(written.length, 0)
+
+  const own = fakeRes()
+  await keyRoute(postJson({ ref: 'OLLAMA_API_KEY_2', key: 'x' }), own)
+  assert.equal(own.statusCode, 200)
+  assert.equal(written.length, 1)
+
+  const clearRoute = routes.get('/dsh-ollama/key/clear')
+  assert.ok(clearRoute !== undefined)
+  const foreignClear = fakeRes()
+  await clearRoute(postJson({ ref: 'CLINEBOT_API_KEY' }), foreignClear)
+  assert.equal(foreignClear.statusCode, 400)
+  assert.equal(cleared.length, 0)
+
+  const testRoute = routes.get('/dsh-ollama/test')
+  assert.ok(testRoute !== undefined)
+  const testRes = fakeRes()
+  await testRoute(postJson({ model: 'gpt-oss:120b' }), testRes)
+  assert.equal(testRes.statusCode, 200)
+  assert.equal(String(seen?.reasoningEffort), 'off')
+  assert.equal(seen?.maxTokens, 32)
 })

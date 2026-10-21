@@ -4,10 +4,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef, type CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver'
-import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, type GenerateOptions } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-settings'
 
 import type { OllamaCloudAdapter } from './adapter.ts'
+import { bestEffortFailed } from './best-effort.ts'
 import { readModelAnalytics, type AnalyticsReport } from './analytics.ts'
 import {
   clearCatalogCache,
@@ -160,6 +161,19 @@ function settingsRevision(ctx: Context): number | undefined {
   }
 }
 
+/**
+ * Writes are limited to this plugin's credential namespace. Without this
+ * allowlist any same-origin caller could overwrite or unset another plugin's
+ * key in the shared credential store.
+ */
+function canWriteCredentialRef(config: ResolvedConfig, ref: string): boolean {
+  if (ref === config.apiKeyEnv) return true
+  for (const account of config.accounts) {
+    if (typeof account.apiKeyEnv === 'string' && account.apiKeyEnv.trim() === ref) return true
+  }
+  return /^OLLAMA_[A-Z0-9_]+$/.test(ref)
+}
+
 function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset'; path: string[]; value?: unknown }> {
   const ops: Array<{ op: 'set' | 'unset'; path: string[]; value?: unknown }> = []
   const set = (field: keyof Config, value: unknown): void => {
@@ -208,8 +222,9 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
         writable: info.writable,
         ...(info.source === undefined ? {} : { source: info.source }),
       }
-    } catch {
+    } catch (error) {
       // An invalid reference is reported as unconfigured.
+      bestEffortFailed('primary credential describe failed', error)
     }
   }
 
@@ -250,8 +265,9 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
         const info = await credentials.describe(credentialRef(slot.ref))
         configured = info.configured
         source = info.source ?? ''
-      } catch {
+      } catch (error) {
         // An invalid reference is reported as unconfigured.
+        bestEffortFailed('account credential describe failed', error)
       }
     }
     const hit = keyByLabel.get(slot.label)
@@ -366,7 +382,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
     const days = Number.isFinite(requested) ? Math.max(1, Math.min(365, Math.trunc(requested))) : 30
     try {
       const report = deps.analytics === undefined
-        ? await readModelAnalytics(days)
+        ? await readModelAnalytics(days, deps.config().priceOverrides)
         : await deps.analytics(days)
       const heatmap = deps.heatmap === undefined ? undefined : await deps.heatmap(days)
       json(res, 200, heatmap === undefined ? report : { ...report, heatmap })
@@ -440,6 +456,10 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
       const refName = typeof body.ref === 'string' && body.ref.trim() !== ''
         ? body.ref.trim()
         : deps.config().apiKeyEnv
+      if (!canWriteCredentialRef(deps.config(), refName)) {
+        json(res, 400, { error: 'unknown credential reference' })
+        return
+      }
       const key = typeof body.key === 'string' ? body.key.trim() : ''
       if (key === '') {
         json(res, 400, { error: 'key is required' })
@@ -464,6 +484,10 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
       const refName = typeof body.ref === 'string' && body.ref.trim() !== ''
         ? body.ref.trim()
         : deps.config().apiKeyEnv
+      if (!canWriteCredentialRef(deps.config(), refName)) {
+        json(res, 400, { error: 'unknown credential reference' })
+        return
+      }
       await credentials.unset(credentialRef(refName))
       json(res, 200, { ok: true, ref: refName })
     } catch (error) {
@@ -483,8 +507,9 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
     deps.usage.clear()
     try {
       await refreshCatalog(deps.config(), fetch, true)
-    } catch {
+    } catch (error) {
       // The state call below reports the fallback catalog.
+      bestEffortFailed('catalog refresh failed', error)
     }
     await refreshAndState(ctx, deps, res)
   })
@@ -509,7 +534,8 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
         provider: PROVIDER,
         model,
         messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply with exactly: OK' }] }],
-        maxTokens: 16,
+        reasoningEffort: ReasoningEffortId('off'),
+        maxTokens: 32,
         signal: controller.signal,
       }
       for await (const chunk of deps.adapter.stream(options)) {

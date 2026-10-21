@@ -7,7 +7,7 @@
 
 ## User Surfaces
 - Web/UI: settings-страница, карточка квоты в сайдбаре, центральная панель с расходом, аналитикой и heatmap.
-- DSH UI / settings / slots: `settings.section` (id `ollama`), `main` (key `ollama-panel`), `sidebar.footer.action` (id `ollama-quota`).
+- DSH UI / settings / slots: `settings.section` (id `ollama`, order 20) — так же, как в референсных плагинах opencode и commandcode; `main` (key `ollama-panel`), `sidebar.footer.action` (id `ollama-quota`).
 - API: host-маршруты `/dsh-ollama/state|health|analytics|usage|balance|config|key|key/clear|refresh|models/refresh|test|update`.
 - CLI: команда `/ollama`; TUI-секция настроек.
 - Документация: README.md, README.ru.md, README.zh.md, DESIGN.md, CHANGELOG.md.
@@ -40,5 +40,7 @@
 ## Locked Design Decisions
 - 2026-10-21 — провайдер только Ollama Cloud, без локального маршрута; причина: рамки задачи; пересмотр — отдельная задача.
 - 2026-10-21 — нативный `/api/chat` по умолчанию, OpenAI `/v1/chat/completions` как опция; причина: thinking и счётчики.
-- 2026-10-21 — настройки размещены в `settings.section`; причина: паритет с `dsh-opencode-provider`. Открытый вопрос аудита M4: канонический слот `settings.plugin.item`; пересмотр — после решения владельца.
-- 2026-10-21 — sidebar-карточка по умолчанию выключена флагом `showSidebarQuota`; фактическая реализация подлежит исправлению (аудит M2).
+- 2026-10-21 — настройки размещены в `settings.section` (id `ollama`, order 20). Это сознательный паритет с референсами: `dsh-opencode-provider` использует `settings.section` (id `opencode`, order 20), `dsh-commandcode-provider` — `settings.section` (id `commandcode`, order 12). Вопрос аудита #6 закрыт как не дефект; пересмотр — только по отдельной просьбе владельца.
+- 2026-10-21 — sidebar-карточка показывается только при `showSidebarQuota === true`; включение применяется без перезагрузки через `CONFIG_CHANGED_EVENT`. Причина: настройка должна управлять и видимостью, и опросом `/state`.
+- 2026-10-21 — динамический `<style>` помечается `data-dsh-plugin="dsh-ollama-cloud-provider"`; причина: очистка соседних плагинов не должна удалять наши стили.
+- 2026-10-21 — «Test connection» отключает thinking (`reasoningEffort: 'off'`) и использует 32 токена; причина: thinking-модели возвращали пустой ответ.

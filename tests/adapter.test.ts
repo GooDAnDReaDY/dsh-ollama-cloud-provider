@@ -136,3 +136,48 @@ test('OpenAI-compatible stream parses reasoning and usage', async () => {
   assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'Hi'))
   assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
 })
+
+test('a single-account transport error does not create a cooldown', async () => {
+  const fetchImpl = (async () => { throw new TypeError('fetch failed') }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'only', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {
+      // Consume the stream so the adapter runs to its error path.
+    }
+  }, /fetch failed/)
+  assert.equal(adapter.accountHealth('only'), undefined)
+})
+
+test('a single-account credential rejection still cools the key', async () => {
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'invalid credentials' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'only', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {
+      // Consume the stream so the adapter runs to its error path.
+    }
+  })
+  assert.equal(adapter.accountHealth('only')?.reason, 'invalid-credential')
+})
+
+test('resolveModel does not advertise an unimplemented tool projection', async () => {
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    ...paths(),
+  })
+  const resolved = await adapter.resolveModel('ollama-cloud', 'gpt-oss:120b')
+  assert.equal('toolUpdate' in resolved, false)
+})

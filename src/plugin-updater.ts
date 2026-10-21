@@ -6,6 +6,8 @@ import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { bestEffortFailed } from './best-effort.ts'
+
 /**
  * Host-side one-click updater for a DSH Web plugin.
  *
@@ -151,8 +153,9 @@ function findDshCliEntry(): string | undefined {
             const cli = resolve(dirname(manifestPath), bin)
             if (existsSync(cli)) return cli
           }
-        } catch {
+        } catch (error) {
           // Continue searching parent package directories.
+          bestEffortFailed('package manifest scan failed', error)
         }
       }
       const parent = dirname(directory)
