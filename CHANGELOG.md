@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 — 2026-10-22
+
+- Accept the DSH Desktop renderer origin `dsh-app://app` on write routes after
+  the loopback Host and socket checks. Without this explicit exception the
+  same-origin guard in 0.1.5 rejected every Desktop settings write (#28).
+
 ## 0.1.5 — 2026-10-22
 
 - Write routes now require an `Origin` or `Referer` whose host matches `Host`;
