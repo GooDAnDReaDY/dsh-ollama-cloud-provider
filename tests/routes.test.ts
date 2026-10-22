@@ -216,6 +216,19 @@ test('write routes require a same-origin source and a loopback socket', async ()
       status: 415,
     },
     {
+      name: 'Desktop shell Origin passes the guard',
+      req: { headers: { host: '127.0.0.1:3080', origin: 'dsh-app://app', 'content-type': 'text/plain' } },
+      status: 415,
+    },
+    {
+      name: 'Desktop shell Origin does not bypass a non-loopback socket',
+      req: {
+        headers: { host: '127.0.0.1:3080', origin: 'dsh-app://app', 'content-type': 'text/plain' },
+        socket: { remoteAddress: '192.168.1.50' },
+      },
+      status: 403,
+    },
+    {
       name: 'same-origin Referer passes the guard',
       req: { headers: { host: '127.0.0.1:3080', referer: 'http://127.0.0.1:3080/settings', 'content-type': 'text/plain' } },
       status: 415,
