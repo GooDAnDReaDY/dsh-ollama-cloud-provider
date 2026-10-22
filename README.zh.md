@@ -102,17 +102,17 @@ npm pack
 从 npm 安装已发布版本：
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.4
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.5
 # DSH 桌面端：
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.4
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.5
 ```
 
 或通过打包文件安装：
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.4.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.5.tgz
 # DSH 桌面端：
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.4.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.5.tgz
 ```
 
 安装完成后重启 dsh 或 DSH 桌面端，在模型列表中选择 **Ollama Cloud** 即可。

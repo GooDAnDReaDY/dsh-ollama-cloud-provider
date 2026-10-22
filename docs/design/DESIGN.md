@@ -43,4 +43,5 @@
 - 2026-10-21 — настройки размещены в `settings.section` (id `ollama`, order 20). Это сознательный паритет с референсами: `dsh-opencode-provider` использует `settings.section` (id `opencode`, order 20), `dsh-commandcode-provider` — `settings.section` (id `commandcode`, order 12). Вопрос аудита #6 закрыт как не дефект; пересмотр — только по отдельной просьбе владельца.
 - 2026-10-21 — sidebar-карточка показывается только при `showSidebarQuota === true`; включение применяется без перезагрузки через `CONFIG_CHANGED_EVENT`. Причина: настройка должна управлять и видимостью, и опросом `/state`.
 - 2026-10-21 — динамический `<style>` помечается `data-dsh-plugin="dsh-ollama-cloud-provider"`; причина: очистка соседних плагинов не должна удалять наши стили.
-- 2026-10-21 — «Test connection» отключает thinking (`reasoningEffort: 'off'`) и использует 32 токена; причина: thinking-модели возвращали пустой ответ.
+- 2026-10-21 — «Test connection» отключает thinking (`reasoningEffort: 'off'`) и использует 64 токена; причина: thinking-модели при 32 возвращали пустой ответ, значение поднято в #17.
+- 2026-10-22 — все write-маршруты требуют `Origin` или `Referer` с хостом, совпадающим с `Host`; без обоих — 403. Причина: LAN-мост `dsh-lanmode` переписывает `Host` и сокет в loopback, поэтому одной loopback-проверки недостаточно (#28).

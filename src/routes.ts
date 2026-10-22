@@ -55,6 +55,33 @@ function json(res: ServerResponse, status: number, value: unknown): void {
   res.end(JSON.stringify(value))
 }
 
+function sourceHost(value: string | undefined): string | undefined {
+  if (value === undefined || value === '') return undefined
+  try {
+    return new URL(value).host
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Write routes must prove a same-origin browser context. A LAN bridge that
+ * rewrites Host and socket to loopback would otherwise let any non-browser
+ * client write keys and settings without an Origin. Fail closed when neither
+ * Origin nor Referer is present.
+ */
+function writeSourceError(req: IncomingMessage): string | undefined {
+  const host = req.headers.host
+  if (host === undefined || host === '') return 'request host required'
+  const origin = req.headers.origin
+  if (origin !== undefined && origin !== '') {
+    return sourceHost(origin) === host ? undefined : 'cross-origin request refused'
+  }
+  const referer = req.headers.referer
+  if (referer === undefined || referer === '') return 'request origin required'
+  return sourceHost(referer) === host ? undefined : 'cross-origin request refused'
+}
+
 function allowedOrigin(req: IncomingMessage): boolean {
   const origin = req.headers.origin
   if (origin === undefined || origin === '') return true
@@ -116,8 +143,9 @@ function requirePost(req: IncomingMessage, res: ServerResponse): boolean {
     json(res, 403, { error: 'non-loopback Host refused' })
     return false
   }
-  if (!allowedOrigin(req)) {
-    json(res, 403, { error: 'cross-origin request refused' })
+  const sourceError = writeSourceError(req)
+  if (sourceError !== undefined) {
+    json(res, 403, { error: sourceError })
     return false
   }
   const remote = req.socket.remoteAddress ?? ''
