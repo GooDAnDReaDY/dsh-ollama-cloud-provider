@@ -103,17 +103,17 @@ npm pack
 Install the published package:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.5
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.6
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.5
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.6
 ```
 
 Or install the packed tarball into a profile:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.5.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.6.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.5.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.6.tgz
 ```
 
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
@@ -194,7 +194,7 @@ Open **Settings → Ollama Cloud**:
 - **Sidebar** — show or hide the quota card, and an optional plan label (for example `PRO`) shown next to the provider name.
 - **Plugin update** — current/latest version and **Update now**.
 
-The Host serves `/dsh-ollama/state`, `/health`, `/analytics`, `/usage`, `/balance`, `/config`, `/key`, `/key/clear`, `/refresh`, `/models/refresh`, `/test` and `/update`. Writes require JSON, an `Origin` or `Referer` matching `Host`, and are restricted to loopback (`127.0.0.1` / `::1`); a write without either source header is rejected with 403.
+The Host serves `/dsh-ollama/state`, `/health`, `/analytics`, `/usage`, `/balance`, `/config`, `/key`, `/key/clear`, `/refresh`, `/models/refresh`, `/test` and `/update`. Writes require JSON, an `Origin` or `Referer` matching `Host` (the Desktop renderer's `dsh-app://app` origin is accepted after loopback checks), and are restricted to loopback (`127.0.0.1` / `::1`); a write without either source header is rejected with 403.
 
 ## Command
 

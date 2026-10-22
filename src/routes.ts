@@ -65,6 +65,13 @@ function sourceHost(value: string | undefined): string | undefined {
 }
 
 /**
+ * The Desktop renderer runs on `dsh-app://app`; its relative fetch reaches the
+ * loopback host with that Origin. The request must still pass the loopback
+ * Host check below and the loopback socket check in `requirePost`.
+ */
+const DESKTOP_ORIGIN = 'dsh-app://app'
+
+/**
  * Write routes must prove a same-origin browser context. A LAN bridge that
  * rewrites Host and socket to loopback would otherwise let any non-browser
  * client write keys and settings without an Origin. Fail closed when neither
@@ -75,6 +82,7 @@ function writeSourceError(req: IncomingMessage): string | undefined {
   if (host === undefined || host === '') return 'request host required'
   const origin = req.headers.origin
   if (origin !== undefined && origin !== '') {
+    if (origin === DESKTOP_ORIGIN) return undefined
     return sourceHost(origin) === host ? undefined : 'cross-origin request refused'
   }
   const referer = req.headers.referer
