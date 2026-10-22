@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7 — 2026-10-22
+
+- Identify the Desktop renderer by the signed host auth cookie plus the desktop
+  user agent when Origin and Referer are absent (the dsh-app protocol strips
+  both). Plain LAN clients without either still receive 403 (#28).
+
 ## 0.1.6 — 2026-10-22
 
 - Accept the DSH Desktop renderer origin `dsh-app://app` on write routes after

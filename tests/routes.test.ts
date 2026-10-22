@@ -216,14 +216,48 @@ test('write routes require a same-origin source and a loopback socket', async ()
       status: 415,
     },
     {
-      name: 'Desktop shell Origin passes the guard',
-      req: { headers: { host: '127.0.0.1:3080', origin: 'dsh-app://app', 'content-type': 'text/plain' } },
+      name: 'Desktop shell cookie and UA pass the guard',
+      req: {
+        headers: {
+          host: '127.0.0.1:3080',
+          'user-agent': 'Mozilla/5.0 @deepseek-ai/dsh-desktop/0.2.1-rc.2 Electron/44.7.0',
+          cookie: 'dsh-auth-abc=v1.token',
+          'content-type': 'text/plain',
+        },
+      },
       status: 415,
     },
     {
-      name: 'Desktop shell Origin does not bypass a non-loopback socket',
+      name: 'Desktop UA without the auth cookie is rejected',
       req: {
-        headers: { host: '127.0.0.1:3080', origin: 'dsh-app://app', 'content-type': 'text/plain' },
+        headers: {
+          host: '127.0.0.1:3080',
+          'user-agent': 'Mozilla/5.0 @deepseek-ai/dsh-desktop/0.2.1-rc.2 Electron/44.7.0',
+          'content-type': 'text/plain',
+        },
+      },
+      status: 403,
+    },
+    {
+      name: 'Desktop cookie without the UA is rejected',
+      req: {
+        headers: {
+          host: '127.0.0.1:3080',
+          cookie: 'dsh-auth-abc=v1.token',
+          'content-type': 'text/plain',
+        },
+      },
+      status: 403,
+    },
+    {
+      name: 'Desktop shell identity does not bypass a non-loopback socket',
+      req: {
+        headers: {
+          host: '127.0.0.1:3080',
+          'user-agent': 'Mozilla/5.0 @deepseek-ai/dsh-desktop/0.2.1-rc.2 Electron/44.7.0',
+          cookie: 'dsh-auth-abc=v1.token',
+          'content-type': 'text/plain',
+        },
         socket: { remoteAddress: '192.168.1.50' },
       },
       status: 403,
