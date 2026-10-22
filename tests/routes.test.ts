@@ -28,7 +28,11 @@ function postJson(value: unknown): unknown {
   const payload = Buffer.from(JSON.stringify(value))
   return {
     method: 'POST',
-    headers: { host: '127.0.0.1:3080', 'content-type': 'application/json' },
+    headers: {
+      host: '127.0.0.1:3080',
+      origin: 'http://127.0.0.1:3080',
+      'content-type': 'application/json',
+    },
     socket: { remoteAddress: '127.0.0.1' },
     async *[Symbol.asyncIterator]() {
       yield payload
@@ -102,7 +106,19 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
     headers: { host: '127.0.0.1:3080' },
     socket: { remoteAddress: '127.0.0.1' },
   }, denied)
-  assert.equal(denied.statusCode, 415)
+  assert.equal(denied.statusCode, 403)
+
+  const sameOrigin = fakeRes()
+  await configRoute({
+    method: 'POST',
+    headers: {
+      host: '127.0.0.1:3080',
+      origin: 'http://127.0.0.1:3080',
+      'content-type': 'text/plain',
+    },
+    socket: { remoteAddress: '127.0.0.1' },
+  }, sameOrigin)
+  assert.equal(sameOrigin.statusCode, 415)
 
   const keyRoute = routes.get('/dsh-ollama/key')
   assert.ok(keyRoute !== undefined)
@@ -132,4 +148,95 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
   assert.equal(testBody.text, 'thinking-only')
   assert.equal(String(seen?.reasoningEffort), 'off')
   assert.equal(seen?.maxTokens, 64)
+})
+
+test('write routes require a same-origin source and a loopback socket', async () => {
+  const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
+  const ctx = {
+    get: () => undefined,
+    effect: (fn: () => () => void) => { fn(); return () => {} },
+  } as never
+  const web = {
+    register: ({ path, handler }: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }) => {
+      routes.set(path, handler)
+      return () => {}
+    },
+  } as never
+  const config = resolveConfig({ apiKey: 'k' })
+  const adapter = {
+    listModels: async () => [],
+    accountHealth: () => undefined,
+    routingTrace: () => [],
+    stream: async function* () { yield { type: 'finish', reason: { kind: 'stop' } } },
+  }
+  const pool = {
+    resolveAll: async () => [],
+    resolve: async () => { throw new Error('missing') },
+  }
+  const usage = { read: async () => undefined, usage: async () => undefined, clear: () => {} }
+  applyRoutes(ctx, web, { config: () => config, adapter, pool, usage } as never)
+
+  const write = routes.get('/dsh-ollama/config')
+  const read = routes.get('/dsh-ollama/state')
+  assert.ok(write !== undefined && read !== undefined)
+
+  const cases: Array<{ name: string; req: Record<string, unknown>; status: number }> = [
+    { name: 'non-POST', req: { method: 'GET' }, status: 405 },
+    {
+      name: 'non-loopback Host',
+      req: { headers: { host: '192.168.1.50:3080', origin: 'http://192.168.1.50:3080', 'content-type': 'text/plain' } },
+      status: 403,
+    },
+    {
+      name: 'cross-origin Origin',
+      req: { headers: { host: '127.0.0.1:3080', origin: 'http://evil.example', 'content-type': 'text/plain' } },
+      status: 403,
+    },
+    {
+      name: 'non-loopback socket',
+      req: {
+        headers: { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080', 'content-type': 'text/plain' },
+        socket: { remoteAddress: '192.168.1.50' },
+      },
+      status: 403,
+    },
+    {
+      name: 'missing Origin and Referer',
+      req: { headers: { host: '127.0.0.1:3080', 'content-type': 'application/json' } },
+      status: 403,
+    },
+    {
+      name: 'cross-origin Referer',
+      req: { headers: { host: '127.0.0.1:3080', referer: 'http://evil.example/', 'content-type': 'text/plain' } },
+      status: 403,
+    },
+    {
+      name: 'same-origin Origin passes the guard',
+      req: { headers: { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080', 'content-type': 'text/plain' } },
+      status: 415,
+    },
+    {
+      name: 'same-origin Referer passes the guard',
+      req: { headers: { host: '127.0.0.1:3080', referer: 'http://127.0.0.1:3080/settings', 'content-type': 'text/plain' } },
+      status: 415,
+    },
+  ]
+
+  for (const item of cases) {
+    const res = fakeRes()
+    await write({
+      method: 'POST',
+      socket: { remoteAddress: '127.0.0.1' },
+      ...item.req,
+    }, res)
+    assert.equal(res.statusCode, item.status, item.name)
+  }
+
+  const crossOriginRead = fakeRes()
+  await read({ method: 'GET', headers: { host: '127.0.0.1:3080', origin: 'http://evil.example' } }, crossOriginRead)
+  assert.equal(crossOriginRead.statusCode, 403)
+
+  const badReadMethod = fakeRes()
+  await read({ method: 'PUT', headers: { host: '127.0.0.1:3080' } }, badReadMethod)
+  assert.equal(badReadMethod.statusCode, 405)
 })
