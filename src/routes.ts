@@ -65,11 +65,15 @@ function sourceHost(value: string | undefined): string | undefined {
 }
 
 /**
- * The Desktop renderer runs on `dsh-app://app`; its relative fetch reaches the
- * loopback host with that Origin. The request must still pass the loopback
- * Host check below and the loopback socket check in `requirePost`.
+ * The Desktop renderer runs on `dsh-app://app`. Its host fetch has no Origin
+ * or Referer, but it carries the signed host auth cookie and the desktop user
+ * agent. Require both so a plain LAN client without either stays fail-closed.
  */
-const DESKTOP_ORIGIN = 'dsh-app://app'
+function desktopShellRequest(req: IncomingMessage): boolean {
+  const agent = req.headers['user-agent'] ?? ''
+  const cookie = req.headers.cookie ?? ''
+  return agent.includes('@deepseek-ai/dsh-desktop/') && cookie.includes('dsh-auth-')
+}
 
 /**
  * Write routes must prove a same-origin browser context. A LAN bridge that
@@ -82,9 +86,9 @@ function writeSourceError(req: IncomingMessage): string | undefined {
   if (host === undefined || host === '') return 'request host required'
   const origin = req.headers.origin
   if (origin !== undefined && origin !== '') {
-    if (origin === DESKTOP_ORIGIN) return undefined
     return sourceHost(origin) === host ? undefined : 'cross-origin request refused'
   }
+  if (desktopShellRequest(req)) return undefined
   const referer = req.headers.referer
   if (referer === undefined || referer === '') return 'request origin required'
   return sourceHost(referer) === host ? undefined : 'cross-origin request refused'
