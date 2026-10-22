@@ -29,6 +29,54 @@ async function collect(
   return chunks
 }
 
+/**
+ * Await a rejection while keeping the test event loop referenced.
+ *
+ * `readWithIdleTimeout` in `src/transports/ndjson.ts` deliberately calls
+ * `timer.unref()` for the idle timeout: an abandoned Ollama stream must never
+ * keep a real DSH process alive. Inside `node --test` that same unref'd timer
+ * leaves the test process without a referenced handle while a `reader.read()`
+ * promise is pending, so the runner can finish the file before the timer fires
+ * and report `cancelledByParent` ("Promise resolution is still pending but the
+ * event loop has already resolved").
+ *
+ * The interval below is intentionally referenced: it holds the loop open until
+ * the rejection lands. The guard timer turns a rejection that never arrives
+ * into a readable failure instead of a hung or cancelled test. Both handles are
+ * cleared in `finally`, so the production `unref` stays untouched and the test
+ * never leaks handles into the shared runner.
+ */
+async function rejectsWithin(
+  action: () => Promise<unknown>,
+  pattern: RegExp,
+  timeoutMs = 2000,
+): Promise<void> {
+  const keepAlive = setInterval(() => {}, 5)
+  let guard: ReturnType<typeof setTimeout> | undefined
+  try {
+    await assert.rejects(async () => {
+      const timeout = new Promise<never>((_resolve, reject) => {
+        guard = setTimeout(() => {
+          reject(new Error(`the awaited rejection did not settle within ${timeoutMs}ms`))
+        }, timeoutMs)
+      })
+      await Promise.race([Promise.resolve().then(action), timeout])
+    }, pattern)
+  } finally {
+    clearTimeout(guard)
+    clearInterval(keepAlive)
+  }
+}
+
+/** Poll a flag so an assertion never races a stream's cancel callback. */
+async function waitUntil(predicate: () => boolean, timeoutMs = 1000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (!predicate() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  return predicate()
+}
+
 test('parses text, counters and finish from a native stream', async () => {
   const chunks = await collect([
     '{"message":{"content":"Hel"}}',
@@ -81,8 +129,8 @@ test('parses tool calls with object arguments', async () => {
 })
 
 test('rejects an in-band quota error', async () => {
-  await assert.rejects(
-    collect(['{"error":"quota exceeded"}']),
+  await rejectsWithin(
+    () => collect(['{"error":"quota exceeded"}']),
     /quota is exhausted/i,
   )
 })
@@ -90,8 +138,8 @@ test('rejects an in-band quota error', async () => {
 test('rejects an already-aborted stream', async () => {
   const controller = new AbortController()
   controller.abort(new Error('stop now'))
-  await assert.rejects(
-    collect(['{"message":{"content":"x"}}'], 1000, controller.signal),
+  await rejectsWithin(
+    () => collect(['{"message":{"content":"x"}}'], 1000, controller.signal),
     /stop now/,
   )
 })
@@ -106,12 +154,12 @@ test('rejects an idle stream and cancels the reader', async () => {
       cancelled = true
     },
   })
-  await assert.rejects(async () => {
+  await rejectsWithin(async () => {
     for await (const _ of parseNativeStream(new Response(body), 20, undefined)) {
       // Drain until the idle timer fires.
     }
   }, /went idle for 20ms/)
-  assert.equal(cancelled, true)
+  assert.equal(await waitUntil(() => cancelled), true, 'the idle timeout must cancel the reader')
 })
 
 test('propagates an abrupt stream error', async () => {
@@ -120,7 +168,7 @@ test('propagates an abrupt stream error', async () => {
       stream.error(new Error('socket closed'))
     },
   })
-  await assert.rejects(async () => {
+  await rejectsWithin(async () => {
     for await (const _ of parseNativeStream(new Response(body), 1000, undefined)) {
       // Drain until the reader rejects.
     }
@@ -128,5 +176,5 @@ test('propagates an abrupt stream error', async () => {
 })
 
 test('rejects an empty stream', async () => {
-  await assert.rejects(collect([]), /empty stream/i)
+  await rejectsWithin(() => collect([]), /empty stream/i)
 })
