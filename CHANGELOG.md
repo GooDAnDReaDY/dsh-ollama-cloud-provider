@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.5 — 2026-10-22
+
+- Write routes now require an `Origin` or `Referer` whose host matches `Host`;
+  a request with neither is rejected with 403. This closes the LAN-bridge path
+  that rewrites both Host and socket to loopback (#28).
+- Added route-guard tests for 405, non-loopback Host/socket, cross-origin and
+  missing sources, plus native stream parser tests for text, thinking, tool
+  calls, in-band quota errors, aborts, idle timeouts, abrupt closes and empty
+  streams (#26).
+- `prepare` now sends tsdown output to stderr, so `npm pack --json` stays
+  parseable and preflight can inspect the package (#25).
+- DESIGN.md now records the 64-token Test connection budget and its reason (#27).
+
 ## 0.1.4 — 2026-10-21
 
 - Model list rows now use the reference three-column grid: badges live inside
