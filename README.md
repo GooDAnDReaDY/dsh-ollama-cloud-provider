@@ -103,22 +103,22 @@ npm pack
 Install the published package:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.7
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.8
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.7
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.8
 ```
 
 Or install the packed tarball into a profile:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.7.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.8.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.7.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.8.tgz
 ```
 
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
 
-> **Use the tarball, not the directory.** On dsh 0.2.1-rc.2 the Desktop CLI aliases a local
+> **Use the tarball, not the directory.** On dsh 0.2.1-rc.2/rc.3 the Desktop CLI aliases a local
 > directory passed to `dsh plugin add` and overwrites the target's `package.json`.
 
 ## Configure
