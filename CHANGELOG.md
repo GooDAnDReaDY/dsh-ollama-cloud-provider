@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.8 — 2026-10-26
+
+- Support DSH core `0.2.1-rc.3`: `compatibility.dshReleases`, `engines.dsh` and
+  every `@deepseek-ai/dsh-*` peer range now include it; devDependencies and the
+  lockfile are pinned to rc.3. Verified with `npm run check` (59/59) and three
+  concurrent test runs.
+
 ## 0.1.7 — 2026-10-22
 
 - Identify the Desktop renderer by the signed host auth cookie plus the desktop
