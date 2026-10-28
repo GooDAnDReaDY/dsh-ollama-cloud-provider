@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9 — 2026-10-28
+
+- Support DSH core `0.2.1-rc.4`: `compatibility.dshReleases`, `engines.dsh` and
+  every `@deepseek-ai/dsh-*` peer range now include it; devDependencies and the
+  lockfile are pinned to rc.4. Verified with `npm run check` (59/59) and an
+  isolated rc.4 web profile (activation, settings, catalog and a real request).
+
 ## 0.1.8 — 2026-10-26
 
 - Support DSH core `0.2.1-rc.3`: `compatibility.dshReleases`, `engines.dsh` and
