@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { normalizeToolParameters } from '../src/tool-schema.ts'
+import { buildTools } from '../src/messages.ts'
 
 test('keeps an object root untouched', () => {
   const schema = { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] }
@@ -68,4 +69,18 @@ test('normalizes a type union containing object', () => {
   })
   assert.equal(normalized.type, 'object')
   assert.deepEqual(normalized.properties, { a: { type: 'string' } })
+})
+
+test('reuses normalized parameters for the same schema object', () => {
+  const parameters = {
+    properties: { q: { type: 'string' } },
+    required: ['q'],
+    additionalProperties: false,
+  }
+  const first = buildTools([{ name: 'search', description: 'search', parameters }])
+  const second = buildTools([{ name: 'search', description: 'search', parameters }])
+  assert.ok(first !== undefined && second !== undefined)
+  const firstParameters = (first[0] as { function: { parameters: unknown } }).function.parameters
+  const secondParameters = (second[0] as { function: { parameters: unknown } }).function.parameters
+  assert.equal(firstParameters, secondParameters)
 })

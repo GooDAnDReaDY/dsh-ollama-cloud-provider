@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.11 — 2026-10-29
+
+- Compatibility declarations now use the same-channel range
+  `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0` in `engines.dsh`,
+  `compatibility.dsh` and all DSH peer dependencies. Future `0.2.1-rc.*`
+  releases are admitted without a new plugin release; `dshReleases` remains the
+  tested engine matrix. A compatibility test guards the range, release list and
+  devDependency versions.
+- The model catalog is stale-while-revalidate: a cached catalog is returned
+  immediately after its TTL and refreshed in the background; only the first
+  load waits for the network. A failed background refresh keeps the cached rows.
+- Tool schema normalization is memoized per `parameters` object with a
+  `WeakMap`, so large MCP tool lists are not re-normalized on every request.
+
 ## 0.1.10 — 2026-10-28
 
 - Stabilized the native stream parser tests: a referenced keep-alive holds the
