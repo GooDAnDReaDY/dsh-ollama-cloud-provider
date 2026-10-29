@@ -181,3 +181,143 @@ test('resolveModel does not advertise an unimplemented tool projection', async (
   const resolved = await adapter.resolveModel('ollama-cloud', 'gpt-oss:120b')
   assert.equal('toolUpdate' in resolved, false)
 })
+
+test('a model-scoped quota rotates without cooling the key', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: 'insufficient credits for this model' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'OK'))
+  assert.equal(calls, 2)
+  assert.equal(adapter.accountHealth('first'), undefined)
+  assert.equal(adapter.accountHealth('second'), undefined)
+})
+
+test('a model-scoped mark skips the key for that model only', async () => {
+  const auths: string[] = []
+  let failFirst = true
+  const fetchImpl = (async (_input: string | URL | Request, init?: RequestInit) => {
+    const auth = (init?.headers as Record<string, string> | undefined)?.authorization ?? ''
+    auths.push(auth)
+    if (failFirst && auth.includes('first')) {
+      return new Response(JSON.stringify({ error: 'insufficient credits for this model' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+
+  await collect(adapter.stream(options))
+  assert.deepEqual(auths, ['Bearer first', 'Bearer second'])
+
+  auths.length = 0
+  await collect(adapter.stream(options))
+  assert.deepEqual(auths, ['Bearer second'])
+
+  auths.length = 0
+  failFirst = false
+  await collect(adapter.stream({ ...options, model: 'other:1b' }))
+  assert.deepEqual(auths, ['Bearer first'])
+})
+
+test('an unsupported model rotates without cooling the key', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: 'model not found' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+  await collect(adapter.stream(options))
+  assert.equal(calls, 2)
+  assert.equal(adapter.accountHealth('first'), undefined)
+})
+
+test('a single-account model-scoped quota leaves the key usable', async () => {
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'insufficient credits for this model' }), {
+    status: 403,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'only' }),
+    resolveKey: async () => ({ key: 'only', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {
+      // Consume the stream so the adapter runs to its error path.
+    }
+  }, (error: unknown) => error instanceof Error && (error as { code?: string }).code === 'QUOTA')
+  assert.equal(adapter.accountHealth('only'), undefined)
+})
+
+test('an account-wide quota still cools the key', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: 'usage limit reached' }), {
+        status: 402,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+  await collect(adapter.stream(options))
+  assert.equal(calls, 2)
+  assert.equal(adapter.accountHealth('first')?.reason, 'quota')
+})
