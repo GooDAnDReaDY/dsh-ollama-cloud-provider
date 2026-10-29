@@ -1,6 +1,6 @@
 {
   "name": "@goodandready/dsh-ollama-cloud-provider",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Ollama Cloud LLM provider plugin for DeepSeek Harness (dsh).",
   "license": "MIT",
   "type": "module",
@@ -59,18 +59,18 @@
         "0.2.1-rc.3": "compatible",
         "0.2.1-rc.4": "compatible"
       },
-      "dsh": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4"
+      "dsh": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0"
     }
   },
   "engines": {
     "node": ">=22",
-    "dsh": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4"
+    "dsh": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0"
   },
   "scripts": {
     "build": "tsdown",
     "prepare": "tsdown 1>&2",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/core.test.ts tests/usage.test.ts tests/adapter.test.ts tests/routes.test.ts tests/native.test.ts tests/commands.test.ts tests/tui-settings.test.ts tests/analytics.test.ts tests/apply.test.ts tests/account-rules.test.ts tests/request-log.test.ts tests/image-budget.test.ts tests/tool-schema.test.ts tests/tools.test.ts tests/plugin-updater.test.ts",
+    "test": "node --import tsx --test tests/core.test.ts tests/usage.test.ts tests/adapter.test.ts tests/routes.test.ts tests/native.test.ts tests/commands.test.ts tests/tui-settings.test.ts tests/analytics.test.ts tests/apply.test.ts tests/account-rules.test.ts tests/request-log.test.ts tests/image-budget.test.ts tests/tool-schema.test.ts tests/tools.test.ts tests/plugin-updater.test.ts tests/compat.test.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "release": "npm run check && npm pack",
     "sync:models": "node scripts/sync-models.mjs"
@@ -85,17 +85,17 @@
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4 || ~4.0.5",
-    "@deepseek-ai/dsh-attachment": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-client-ui-settings": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-commands": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-credentials": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-llm": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
-    "@deepseek-ai/dsh-settings": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4",
+    "@deepseek-ai/dsh-attachment": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-commands": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-credentials": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-settings": "0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0",
     "@deepseek-ai/schemastery": "~3.18.4 || ~3.18.5",
     "react": "^18.2.0"
   },
