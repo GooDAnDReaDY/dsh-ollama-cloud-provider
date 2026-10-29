@@ -110,6 +110,10 @@ export const CSS = `
 .ocl-railButton:hover { color: var(--ocl-text); background: var(--ocl-fill-hover); }
 .ocl-railButton:focus-visible { outline: var(--dsw-focus-ring-width, 2px) solid var(--ocl-focus); outline-offset: -2px; }
 .ocl-ring { flex: none; display: inline-flex; }
+.ocl-statusRow { align-items: center; gap: 8px; flex-wrap: wrap; }
+.ocl-statusDot { width: 8px; height: 8px; border-radius: 999px; background: var(--ocl-text-secondary); flex: none; }
+.ocl-statusDotOk { background: var(--ocl-accent); }
+.ocl-statusDotBad { background: var(--ocl-danger); }
 .ocl-panel { display: flex; flex-direction: column; gap: 14px; padding: 18px; max-width: 760px; margin: 0 auto; height: 100%; max-height: calc(100vh - 56px); min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .ocl-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ocl-limits { margin-top: 8px; }

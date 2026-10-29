@@ -40,8 +40,17 @@ function useHostState(intervalMs = 60_000): {
   }, [])
   useEffect(() => {
     void load()
-    const timer = setInterval(() => { void load() }, intervalMs)
-    return () => clearInterval(timer)
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'hidden') void load()
+    }, intervalMs)
+    const onVisibility = (): void => {
+      if (document.visibilityState !== 'hidden') void load()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [load, intervalMs])
   return { state, error, load }
 }

@@ -23,6 +23,7 @@ import { priceFor } from './pricing.ts'
 import { PROVIDER } from './provider-ids.ts'
 import type { RequestHeatmap } from './request-log.ts'
 import { publicConfig } from './routes-public.ts'
+import { probeService } from './status.ts'
 import {
   cleanAccounts,
   cleanBooleanRecord,
@@ -413,6 +414,21 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
       })
     } catch (error) {
       json(res, 500, { error: error instanceof Error ? error.message : 'health failed' })
+    }
+  })
+
+  route('/dsh-ollama/status', async (req, res) => {
+    if (!readOnly(req, res)) return
+    try {
+      json(res, 200, await probeService(deps.config(), fetch))
+    } catch (error) {
+      json(res, 200, {
+        ok: false,
+        status: null,
+        latencyMs: 0,
+        checkedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'status failed',
+      })
     }
   })
 
