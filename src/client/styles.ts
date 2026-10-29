@@ -86,6 +86,7 @@ export const CSS = `
 .ocl-model-section .ocl-hint { margin: 0 0 4px; }
 .ocl-account { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 8px; align-items: center; }
 .ocl-account-block { display: flex; flex-direction: column; gap: 6px; padding: 9px; border: 1px solid var(--ocl-border-soft); border-radius: 8px; background: var(--ocl-fill); }
+.ocl-accountUsage { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .ocl-notice { font-size: 12px; padding: 7px 10px; border-radius: 7px; background: var(--ocl-accent-soft); border: 1px solid var(--ocl-accent-border); }
 .ocl-error { font-size: 12px; padding: 7px 10px; border-radius: 7px; background: var(--ocl-danger-soft); border: 1px solid var(--ocl-danger-border); color: var(--ocl-danger); }
 [class*="_footerActions"]:has(.ocl-foot), [class*="_footerActions"]:has(.ocl-railButton) { flex-direction: column; }
