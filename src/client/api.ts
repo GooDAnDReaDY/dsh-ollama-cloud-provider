@@ -113,6 +113,14 @@ export interface HostState {
   revision?: number
 }
 
+export interface ServiceStatus {
+  ok: boolean
+  status: number | null
+  latencyMs: number
+  checkedAt: string
+  error?: string
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: 'same-origin',
@@ -130,6 +138,10 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function fetchState(): Promise<HostState> {
   return call<HostState>('/dsh-ollama/state')
+}
+
+export function fetchServiceStatus(): Promise<ServiceStatus> {
+  return call<ServiceStatus>('/dsh-ollama/status')
 }
 
 export function refreshState(): Promise<HostState> {
