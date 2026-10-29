@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.14 — 2026-10-29
+
+- Model-scoped rejections (unsupported model or per-model quota) mark only that
+  account+model for five minutes; the key remains usable for other and free
+  models. Account-wide quota, credential and rate-limit rejections still cool
+  the key.
+
 ## 0.1.13 — 2026-10-29
 
 - Account cards now show per-account balance/remaining credits, purchased
