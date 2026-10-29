@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.13 — 2026-10-29
+
+- Account cards now show per-account balance/remaining credits, purchased
+  amount, reset date and the time of the last usage read (or the 5-hour/weekly
+  bars for legacy accounts).
+- Added `npm run test:engine`: an isolated boot matrix that installs every
+  declared `dshReleases` core, composes the plugin, checks `--dump-config` and
+  waits for `/dsh-ollama/health` in a real web host. Supports
+  `--versions 0.2.1-rc.4` for a single release.
+
 ## 0.1.12 — 2026-10-29
 
 - The sidebar quota card and panel now pause polling while the document is
