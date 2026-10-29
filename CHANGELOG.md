@@ -1,10 +1,20 @@
 # Changelog
 
+## 0.1.14 — 2026-10-29
+
+- Model-scoped rejections (unsupported model or per-model quota) mark only that
+  account+model for five minutes; the key remains usable for other and free
+  models. Account-wide quota, credential and rate-limit rejections still cool
+  the key.
+
 ## 0.1.13 — 2026-10-29
 
 - Account cards now show per-account balance/remaining credits, purchased
   amount, reset date and the time of the last usage read (or the 5-hour/weekly
   bars for legacy accounts).
+- Model-scoped rejections (unsupported model or per-model quota) now mark only
+  that account+model for five minutes; the key stays usable for other and free
+  models. Account-wide quota still cools the key.
 - Added `npm run test:engine`: an isolated boot matrix that installs every
   declared `dshReleases` core, composes the plugin, checks `--dump-config` and
   waits for `/dsh-ollama/health` in a real web host. Supports

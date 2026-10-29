@@ -95,6 +95,8 @@ export class OllamaCloudAdapter extends LlmAdapter {
   private stickyWrites: Promise<void> = Promise.resolve()
   /** key fingerprint → cooldown deadline and the rejection that caused it. */
   private readonly cooldowns = new Map<string, { until: number; reason: string }>()
+  /** key fingerprint + model → short preference mark for model-scoped rejections. */
+  private readonly modelCooldowns = new Map<string, { until: number; reason: string }>()
   private readonly sticky = new Map<string, {
     fingerprint: string
     label: string
@@ -218,6 +220,10 @@ export class OllamaCloudAdapter extends LlmAdapter {
       }
     }
 
+    const availableKeys = keys.filter((entry) => !this.coolingDown(entry.key))
+    const preferredKeys = availableKeys.filter((entry) => !this.modelCoolingDown(entry.key, options.model))
+    keys = preferredKeys.length > 0 ? preferredKeys : availableKeys
+
     const url = endpointFor(model.transport, config)
     let images: ImageMap | undefined
     if (hasImages(options)) {
@@ -278,6 +284,16 @@ export class OllamaCloudAdapter extends LlmAdapter {
           lastError = error
           logAttempt(false, error.code)
           const canRotate = index < keys.length - 1
+          if (this.modelScoped(error)) {
+            this.markModelCooldown(
+              entry.key,
+              options.model,
+              error.code === 'UNSUPPORTED_MODEL' ? 'model-unsupported' : 'model-quota',
+            )
+            responseFailure = true
+            if (canRotate) continue
+            throw error
+          }
           const retryable = error.code === 'INVALID_CREDENTIAL'
             || error.code === 'RATE_LIMIT'
             || error.code === 'QUOTA'
@@ -329,10 +345,19 @@ export class OllamaCloudAdapter extends LlmAdapter {
         if (started || options.signal?.aborted === true) throw error
         lastError = classified
         const transient = this.isTransient(classified)
-        const canRotate = index < keys.length - 1 && transient
+        const canRotate = index < keys.length - 1 && (transient || this.modelScoped(classified))
         const credentialOrQuota = classified.code === 'INVALID_CREDENTIAL'
           || classified.code === 'RATE_LIMIT'
           || classified.code === 'QUOTA'
+        if (this.modelScoped(classified)) {
+          this.markModelCooldown(
+            entry.key,
+            options.model,
+            classified.code === 'UNSUPPORTED_MODEL' ? 'model-unsupported' : 'model-quota',
+          )
+          if (!canRotate) throw classified
+          continue
+        }
         // With one account, a transport/timeout/server failure must reach the
         // harness retry policy instead of cooling the only usable key.
         if (!responseFailure && (canRotate || credentialOrQuota)) {
@@ -506,6 +531,49 @@ export class OllamaCloudAdapter extends LlmAdapter {
       return false
     }
     return true
+  }
+
+  private modelKey(key: string, model: string): string {
+    return `${this.keyId(key)}:${model}`
+  }
+
+  private modelCoolingDown(key: string, model: string): boolean {
+    const id = this.modelKey(key, model)
+    const entry = this.modelCooldowns.get(id)
+    if (entry === undefined) return false
+    if (entry.until <= Date.now()) {
+      this.modelCooldowns.delete(id)
+      return false
+    }
+    return true
+  }
+
+  private markModelCooldown(key: string, model: string, reason: string): void {
+    const now = Date.now()
+    for (const [id, entry] of this.modelCooldowns) {
+      if (entry.until <= now) this.modelCooldowns.delete(id)
+    }
+    this.modelCooldowns.set(this.modelKey(key, model), { until: now + 5 * 60_000, reason })
+    const overflow = this.modelCooldowns.size - 200
+    if (overflow <= 0) return
+    const oldest = [...this.modelCooldowns.entries()].sort((a, b) => a[1].until - b[1].until).slice(0, overflow)
+    for (const [id] of oldest) this.modelCooldowns.delete(id)
+  }
+
+  /**
+   * A model-scoped rejection says nothing about the key's other models:
+   * `:free` models and other paid models may still work on the same account.
+   * Only account-wide quota, credential and rate-limit responses cool the key.
+   */
+  private modelScoped(error: LlmError): boolean {
+    if (error.code === 'UNSUPPORTED_MODEL') return true
+    if (error.code !== 'QUOTA') return false
+    const detail = error.message.toLowerCase()
+    return detail.includes('model')
+      && (detail.includes('credit')
+        || detail.includes('quota')
+        || detail.includes('allowance')
+        || detail.includes('limit'))
   }
 
   /** Current cooldown for one resolved key, if any. */
