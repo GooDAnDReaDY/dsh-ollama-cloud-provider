@@ -1,4 +1,4 @@
-import { LlmError } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, isContextWindowExceededError } from '@deepseek-ai/dsh-llm'
 
 interface ProviderErrorBody {
   message?: string
@@ -85,6 +85,27 @@ export function classifyResponseError(status: number, text: string, headers: Hea
   }
   if (status === 429) {
     return new LlmError(`Ollama Cloud rate-limited the request: ${message}`, 'RATE_LIMIT', options)
+  }
+  if (isContextWindowExceededError(detail)) {
+    return new LlmError(
+      `Ollama Cloud rejected the request: context window exceeded: ${message}`,
+      CONTEXT_WINDOW_EXCEEDED_CODE,
+      options,
+    )
+  }
+  if (/does not support (?:images?|vision|tools?)|unsupported (?:image|tool)|image (?:input|modality) is not supported|tools? (?:are|is) not supported/i.test(detail)) {
+    return new LlmError(
+      `Ollama Cloud model does not accept this request: ${message}`,
+      'UNSUPPORTED_MODEL',
+      options,
+    )
+  }
+  if (/request (?:body|entity) too large|payload too large|node count cannot exceed|maximum (?:request|body) size/i.test(detail)) {
+    return new LlmError(
+      `Ollama Cloud rejected the request body as too large: ${message}`,
+      'PROVIDER_HTTP_ERROR',
+      options,
+    )
   }
   if (status === 408 || status === 504) {
     return new LlmError(`Ollama Cloud timed out (HTTP ${status}): ${message}`, 'TIMEOUT', options)

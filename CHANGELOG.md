@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.12 — 2026-10-29
+
+- The sidebar quota card and panel now pause polling while the document is
+  hidden and refresh immediately when it becomes visible again.
+- Settings gained a **Service status** row: a local, keyless probe of the
+  public tag endpoint with latency, checked time and an error state. Ollama
+  Cloud has no public status page, so this row reports host-to-gateway
+  reachability only.
+- Error mapping now recognizes context-window overflow (using the harness
+  `CONTEXT_WINDOW_EXCEEDED_CODE`), model capability rejections for images/tools
+  and oversized request bodies, instead of returning a generic 400 message.
+
 ## 0.1.11 — 2026-10-29
 
 - Compatibility declarations now use the same-channel range

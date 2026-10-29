@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { quotaBars, windowRows, worstUsedPercent } from '../quota-model.ts'
 import {
   clearKey,
+  fetchServiceStatus,
   fetchState,
   refreshModels,
   refreshState,
@@ -12,6 +13,7 @@ import {
   testConnection,
   type HostState,
   type ModelRow,
+  type ServiceStatus,
   type TestResult,
   type TransportId,
 } from './api.ts'
@@ -83,6 +85,9 @@ export function OllamaCloudSettingsPage(props: {
   const [testModel, setTestModel] = useState('gpt-oss:120b')
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
+  const [service, setService] = useState<ServiceStatus | null>(null)
+  const [serviceBusy, setServiceBusy] = useState(false)
+  const [serviceError, setServiceError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -145,6 +150,20 @@ export function OllamaCloudSettingsPage(props: {
       setError(caught instanceof Error ? caught.message : t('failed'))
     }
   }, [t])
+
+  const loadService = useCallback(async () => {
+    setServiceBusy(true)
+    try {
+      setService(await fetchServiceStatus())
+      setServiceError(null)
+    } catch (caught) {
+      setServiceError(caught instanceof Error ? caught.message : t('failed'))
+    } finally {
+      setServiceBusy(false)
+    }
+  }, [t])
+
+  useEffect(() => { void loadService() }, [loadService])
 
   if (loading && state === null) return <p className="ocl-hint">{t('loading')}</p>
   if (state === null || draft === null) {
@@ -266,6 +285,28 @@ export function OllamaCloudSettingsPage(props: {
             ? <span className="ocl-notice">{t('testOk').replace('{ms}', String(testResult.latencyMs))}</span>
             : <span className="ocl-error">{t('testFailed')}: {testResult.error}</span>}
         </div>
+      </section>
+
+      <section className="ocl-card">
+        <h3 className="ocl-card-title">{t('serviceStatus')}</h3>
+        <div className="ocl-row ocl-statusRow">
+          <span className={`ocl-statusDot${service?.ok === true ? ' ocl-statusDotOk' : service === null ? '' : ' ocl-statusDotBad'}`} />
+          <span>
+            {service === null
+              ? (serviceBusy ? t('checkingService') : t('serviceUnknown'))
+              : service.ok ? t('serviceOnline') : t('serviceOffline')}
+          </span>
+          {service === null
+            ? null
+            : <span className="ocl-hint">{service.latencyMs} ms · {new Date(service.checkedAt).toLocaleTimeString()}</span>}
+          <button type="button" className="ocl-button" disabled={serviceBusy} onClick={() => { void loadService() }}>
+            {serviceBusy ? t('checkingService') : t('refreshStatus')}
+          </button>
+        </div>
+        {serviceError === null && service?.error === undefined
+          ? null
+          : <p className="ocl-hint">{serviceError ?? service?.error}</p>}
+        <p className="ocl-hint">{t('serviceStatusHint')}</p>
       </section>
 
       <section className="ocl-card">

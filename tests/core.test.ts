@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, type GenerateOptions } from '@deepseek-ai/dsh-llm'
 
 import { clearCatalogCache, effectiveModel, refreshCatalog, sortForPicker } from '../src/catalog.ts'
 import { DEFAULT_API_BASE, DEFAULT_OPENAI_BASE, resolveConfig } from '../src/config.ts'
@@ -137,6 +137,17 @@ test('HTTP failures map to the harness taxonomy', () => {
   const limited = classifyResponseError(429, '{"error":"slow down"}', new Headers({ 'retry-after': '12' }))
   assert.equal(limited.code, 'RATE_LIMIT')
   assert.equal((limited.failure as { providerRetryAfterMs?: number }).providerRetryAfterMs, 12_000)
+  assert.equal(
+    classifyResponseError(400, '{"error":"context length exceeded"}', headers).code,
+    CONTEXT_WINDOW_EXCEEDED_CODE,
+  )
+  assert.equal(
+    classifyResponseError(400, '{"error":"this model does not support images"}', headers).code,
+    'UNSUPPORTED_MODEL',
+  )
+  const tooLarge = classifyResponseError(413, '{"error":"request body too large"}', headers)
+  assert.equal(tooLarge.code, 'PROVIDER_HTTP_ERROR')
+  assert.match(tooLarge.message, /too large/i)
 })
 
 test('native body maps tools, thinking and output cap', () => {
