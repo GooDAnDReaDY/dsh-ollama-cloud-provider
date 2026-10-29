@@ -382,6 +382,21 @@ export function OllamaCloudSettingsPage(props: {
                 </span>
                 {mark === undefined ? null : <span className="ocl-badge ocl-badge-bad">{mark}</span>}
               </div>
+              {known?.usage?.report === undefined
+                ? <p className="ocl-hint">{t('noUsage')}</p>
+                : (
+                  <div className="ocl-accountUsage">
+                    {quotaBars(known.usage.report).map((bar) => (
+                      <span className="ocl-badge" key={bar.key} title={bar.detail}>
+                        {bar.detail ?? `${bar.label}: ${bar.remainingPercent.toFixed(0)}% ${t('remaining')}`}
+                        {bar.resetsAt === undefined
+                          ? ''
+                          : ` · ${t('until')} ${new Date(bar.resetsAt).toLocaleDateString()}`}
+                      </span>
+                    ))}
+                    <span className="ocl-hint">{new Date(known.usage.checkedAt).toLocaleTimeString()}</span>
+                  </div>
+                )}
               {known?.usage?.report?.windows.d7 === undefined ? null : (
                 <div className="ocl-row">
                   <span className="ocl-badge">
