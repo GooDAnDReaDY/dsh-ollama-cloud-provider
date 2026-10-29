@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.10 — 2026-10-28
+
+- Stabilized the native stream parser tests: a referenced keep-alive holds the
+  test event loop until idle/abort rejections settle, a guard timeout turns a
+  missed rejection into a readable failure, and the idle-cancel assertion polls
+  instead of racing the cancel callback. Production behavior is unchanged; the
+  idle timer stays unref'd. Verified with three concurrent `npm test` runs and
+  preflight's configured test run.
+
 ## 0.1.9 — 2026-10-28
 
 - Support DSH core `0.2.1-rc.4`: `compatibility.dshReleases`, `engines.dsh` and
