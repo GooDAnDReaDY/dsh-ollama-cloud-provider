@@ -35,6 +35,7 @@ interface TagsPayload {
 
 const liveMeta = new Map<string, OllamaCloudModelMeta>()
 const cache = new Map<string, { at: number; ids: readonly string[] }>()
+const inflight = new Map<string, Promise<readonly string[]>>()
 
 const FALLBACK_META: OllamaCloudModelMeta = {
   id: '',
@@ -153,6 +154,10 @@ async function fetchJson(
  * Refresh the live catalog (public, no key required) and return its ids.
  * Network failures keep the previous live metadata and fall back to the
  * generated snapshot, so the picker always has something to show.
+ *
+ * A cached catalog is served immediately, even after its TTL: the network
+ * refresh runs in the background so the picker never blocks on a stale entry.
+ * Only the first load (no cache) waits for the network.
  */
 export async function refreshCatalog(
   config: ResolvedConfig,
@@ -161,10 +166,19 @@ export async function refreshCatalog(
 ): Promise<readonly string[]> {
   const key = config.apiBase
   const cached = cache.get(key)
-  if (!force && cached !== undefined && Date.now() - cached.at < CATALOG_TTL_MS) {
+  if (!force && cached !== undefined) {
+    if (Date.now() - cached.at >= CATALOG_TTL_MS) refreshInBackground(config, fetchImpl, key)
     return cached.ids
   }
+  return refreshNow(config, fetchImpl, key, cached !== undefined)
+}
 
+async function refreshNow(
+  config: ResolvedConfig,
+  fetchImpl: typeof fetch,
+  key: string,
+  keepOnFailure: boolean,
+): Promise<readonly string[]> {
   const signal = AbortSignal.timeout(CATALOG_TIMEOUT_MS)
   const [modelsResult, tagsResult] = await Promise.allSettled([
     fetchJson(modelsUrlFor(config), config, fetchImpl, signal),
@@ -189,13 +203,31 @@ export async function refreshCatalog(
       return fromData
     }
   }
+  if (keepOnFailure) {
+    const stale = cache.get(key)
+    if (stale !== undefined) return stale.ids
+  }
   const fallback = Object.keys(GENERATED_MODELS)
   cache.set(key, { at: Date.now(), ids: fallback })
   return fallback
 }
 
+function refreshInBackground(
+  config: ResolvedConfig,
+  fetchImpl: typeof fetch,
+  key: string,
+): void {
+  if (inflight.has(key)) return
+  const task = refreshNow(config, fetchImpl, key, true)
+    .catch(() => cache.get(key)?.ids ?? Object.keys(GENERATED_MODELS))
+    .finally(() => { inflight.delete(key) })
+  inflight.set(key, task)
+  void task
+}
+
 export function clearCatalogCache(): void {
   cache.clear()
+  inflight.clear()
 }
 
 export function baseMeta(id: string): OllamaCloudModelMeta {

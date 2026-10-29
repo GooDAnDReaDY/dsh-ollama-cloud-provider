@@ -70,14 +70,25 @@ function toolArguments(raw: string): Record<string, unknown> {
   }
 }
 
-function buildTools(tools: readonly ToolSchema[] | undefined): unknown[] | undefined {
+const normalizedParameterCache = new WeakMap<object, { value: unknown }>()
+
+function normalizedParameters(parameters: unknown): unknown {
+  if (typeof parameters !== 'object' || parameters === null) return normalizeToolParameters(parameters)
+  const cached = normalizedParameterCache.get(parameters)
+  if (cached !== undefined) return cached.value
+  const value = normalizeToolParameters(parameters)
+  normalizedParameterCache.set(parameters, { value })
+  return value
+}
+
+export function buildTools(tools: readonly ToolSchema[] | undefined): unknown[] | undefined {
   if (tools === undefined || tools.length === 0) return undefined
   return tools.map((tool) => ({
     type: 'function',
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: normalizeToolParameters(tool.parameters),
+      parameters: normalizedParameters(tool.parameters),
     },
   }))
 }

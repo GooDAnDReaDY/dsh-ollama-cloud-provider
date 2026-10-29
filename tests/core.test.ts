@@ -74,6 +74,56 @@ test('catalog merges live metadata, capabilities and visibility', async () => {
   assert.deepEqual(sortForPicker(ids, config, true).length, 2)
 })
 
+test('serves a stale catalog immediately and refreshes it in the background', async () => {
+  const staleConfig = resolveConfig({ apiKey: 'test-key', apiBase: 'https://catalog-stale.example' })
+  clearCatalogCache()
+  let modelCalls = 0
+  const fakeFetch = (async (input: string | URL | Request) => {
+    const href = String(input)
+    if (href.includes('/api/tags')) {
+      return new Response(JSON.stringify({ models: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    modelCalls += 1
+    const id = modelCalls === 1 ? 'first:1b' : 'second:1b'
+    return new Response(JSON.stringify({
+      models: [{ slug: id, display_name: id, context_window: 1024, visibility: 'list', supported_in_api: true }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }) as typeof fetch
+
+  const first = await refreshCatalog(staleConfig, fakeFetch, true)
+  assert.deepEqual(first, ['first:1b'])
+
+  const date = Date as unknown as { now: () => number }
+  const realNow = date.now
+  const base = realNow()
+  date.now = () => base + 11 * 60 * 1000
+  try {
+    const stale = await refreshCatalog(staleConfig, fakeFetch)
+    assert.deepEqual(stale, ['first:1b'])
+    for (let i = 0; i < 100 && modelCalls < 2; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    assert.equal(modelCalls, 2)
+
+    let fresh: readonly string[] = []
+    for (let i = 0; i < 50; i += 1) {
+      fresh = await refreshCatalog(staleConfig, fakeFetch)
+      if (fresh[0] === 'second:1b') break
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    assert.deepEqual(fresh, ['second:1b'])
+  } finally {
+    date.now = realNow
+    clearCatalogCache()
+  }
+})
+
 test('HTTP failures map to the harness taxonomy', () => {
   const headers = new Headers()
   assert.equal(classifyResponseError(401, '{"error":"invalid credentials"}', headers).code, 'INVALID_CREDENTIAL')
