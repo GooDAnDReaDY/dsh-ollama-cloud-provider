@@ -7,9 +7,8 @@ key pool, quota/usage cards, analytics, settings page, and service status.
 
 ## Status
 
-Active. 0.1.14 is verified on the production Web host and Desktop; 0.1.15 is
-the current candidate and has passed typecheck, the unit suite, and a production
-build.
+Active. 0.1.15 is verified on the production Web host and Desktop; 0.1.14 is
+the previous release.
 
 ## Entry Points
 
