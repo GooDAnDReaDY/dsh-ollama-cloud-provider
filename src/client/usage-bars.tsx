@@ -30,7 +30,7 @@ export function UsageBars(props: { bars: readonly QuotaBar[]; t: (key: string) =
     <div className="ocl-bars">
       {bars.map((entry) => (
         <div className="ocl-bar-row" key={entry.key}>
-          <span title={entry.label}>{entry.label}</span>
+          <span title={entry.labelKey === undefined ? entry.label : t(entry.labelKey)}>{entry.labelKey === undefined ? entry.label : t(entry.labelKey)}</span>
           <div className="ocl-bar">
             <div
               className={percentClass(entry.usedPercent)}
@@ -41,7 +41,16 @@ export function UsageBars(props: { bars: readonly QuotaBar[]; t: (key: string) =
             {entry.remainingPercent.toFixed(0)}% {t('remaining')}
             {entry.resetsAt === undefined ? '' : ` · ${reset(entry.resetsAt)}`}
           </span>
-          {entry.detail === undefined ? null : <span className="ocl-hint">{entry.detail}</span>}
+          {entry.detailValues === undefined
+            ? (entry.detail === undefined ? null : <span className="ocl-hint">{entry.detail}</span>)
+            : (
+                <span className="ocl-hint">
+                  ${entry.detailValues.remaining.toFixed(2)} / ${entry.detailValues.allowance.toFixed(2)} {t('remaining')}
+                  {entry.detailValues.purchased > 0
+                    ? ` · ${t('purchased')} $${entry.detailValues.purchased.toFixed(2)}`
+                    : ''}
+                </span>
+              )}
         </div>
       ))}
     </div>

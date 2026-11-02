@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import test from 'node:test'
 
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -86,7 +88,7 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
     usage: async () => undefined,
     clear: () => {},
   }
-  applyRoutes(ctx, web, { config: () => config, adapter, pool, usage } as never)
+  applyRoutes(ctx, web, { config: () => config, adapter, pool, usage, verifyHost: async () => true } as never)
 
   const stateRoute = routes.get('/dsh-ollama/state')
   assert.ok(stateRoute !== undefined)
@@ -150,6 +152,71 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
   assert.equal(seen?.maxTokens, 64)
 })
 
+test('credential writes stay inside the plugin namespace', async () => {
+  const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
+  const mutations: Array<Array<{ path: string[]; value?: unknown }>> = []
+  const written: Array<{ ref: unknown; key: string }> = []
+  const settings = {
+    writable: true,
+    describe: () => [],
+    mutate: async (_ns: string, ops: Array<{ path: string[]; value?: unknown }>) => { mutations.push(ops) },
+  }
+  const credentials = {
+    describe: async () => ({ configured: false, writable: true }),
+    set: async (ref: unknown, key: string) => { written.push({ ref, key }) },
+    unset: async () => {},
+  }
+  const ctx = {
+    get: (name: string) => name === 'settings' ? settings : name === 'credentials' ? credentials : undefined,
+    effect: (fn: () => () => void) => { fn(); return () => {} },
+  } as never
+  const web = {
+    register: ({ path, handler }: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }) => {
+      routes.set(path, handler)
+      return () => {}
+    },
+  } as never
+  const config = resolveConfig({ apiKey: 'k' })
+  const adapter = {
+    listModels: async () => [],
+    accountHealth: () => undefined,
+    routingTrace: () => [],
+    stream: async function* () { yield { type: 'finish', reason: { kind: 'stop' } } },
+  }
+  const pool = { resolveAll: async () => [], resolve: async () => { throw new Error('missing') } }
+  const usage = { read: async () => undefined, usage: async () => undefined, clear: () => {} }
+  applyRoutes(ctx, web, { config: () => config, adapter, pool, usage } as never)
+
+  const configRoute = routes.get('/dsh-ollama/config')
+  const keyRoute = routes.get('/dsh-ollama/key')
+  assert.ok(configRoute !== undefined && keyRoute !== undefined)
+
+  const foreignConfig = fakeRes()
+  await configRoute(postJson({ apiKeyEnv: 'OTHER_PLUGIN_API_KEY' }), foreignConfig)
+  assert.equal(foreignConfig.statusCode, 400)
+  assert.equal(mutations.length, 0)
+
+  const foreignAccount = fakeRes()
+  await configRoute(postJson({ accounts: [{ label: 'x', apiKeyEnv: 'OTHER_PLUGIN_API_KEY' }] }), foreignAccount)
+  assert.equal(foreignAccount.statusCode, 400)
+  assert.equal(mutations.length, 0)
+
+  const foreignKey = fakeRes()
+  await keyRoute(postJson({ ref: 'OTHER_PLUGIN_API_KEY', key: 'x' }), foreignKey)
+  assert.equal(foreignKey.statusCode, 400)
+  assert.equal(written.length, 0)
+
+  const ownConfig = fakeRes()
+  await configRoute(postJson({ apiKeyEnv: 'OLLAMA_CUSTOM' }), ownConfig)
+  assert.equal(ownConfig.statusCode, 200)
+  assert.equal(mutations.length, 1)
+
+  const ownKey = fakeRes()
+  await keyRoute(postJson({ ref: 'OLLAMA_CUSTOM', key: 'x' }), ownKey)
+  assert.equal(ownKey.statusCode, 200)
+  assert.equal(written.length, 1)
+})
+
 test('write routes require a same-origin source and a loopback socket', async () => {
   const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
   const ctx = {
@@ -174,7 +241,14 @@ test('write routes require a same-origin source and a loopback socket', async ()
     resolve: async () => { throw new Error('missing') },
   }
   const usage = { read: async () => undefined, usage: async () => undefined, clear: () => {} }
-  applyRoutes(ctx, web, { config: () => config, adapter, pool, usage } as never)
+  applyRoutes(ctx, web, {
+    config: () => config,
+    adapter,
+    pool,
+    usage,
+    verifyDesktop: async (req: { headers?: { cookie?: string } }) =>
+      req.headers?.cookie === 'dsh-auth-abc=v1.token',
+  } as never)
 
   const write = routes.get('/dsh-ollama/config')
   const read = routes.get('/dsh-ollama/state')
@@ -226,6 +300,18 @@ test('write routes require a same-origin source and a loopback socket', async ()
         },
       },
       status: 415,
+    },
+    {
+      name: 'Desktop forged cookie is rejected',
+      req: {
+        headers: {
+          host: '127.0.0.1:3080',
+          'user-agent': 'Mozilla/5.0 @deepseek-ai/dsh-desktop/0.2.1-rc.2 Electron/44.7.0',
+          cookie: 'dsh-auth-forged=v1.fake.fake',
+          'content-type': 'text/plain',
+        },
+      },
+      status: 403,
     },
     {
       name: 'Desktop UA without the auth cookie is rejected',
@@ -286,4 +372,111 @@ test('write routes require a same-origin source and a loopback socket', async ()
   const badReadMethod = fakeRes()
   await read({ method: 'PUT', headers: { host: '127.0.0.1:3080' } }, badReadMethod)
   assert.equal(badReadMethod.statusCode, 405)
+})
+
+test('sensitive reads require an authenticated host session', async () => {
+  const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
+  const ctx = {
+    get: () => undefined,
+    effect: (fn: () => () => void) => { fn(); return () => {} },
+  } as never
+  const web = {
+    register: ({ path, handler }: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }) => {
+      routes.set(path, handler)
+      return () => {}
+    },
+  } as never
+  const config = resolveConfig({ apiKey: 'k' })
+  const adapter = {
+    listModels: async () => [],
+    accountHealth: () => undefined,
+    routingTrace: () => [],
+    stream: async function* () { yield { type: 'finish', reason: { kind: 'stop' } } },
+  }
+  const pool = { resolveAll: async () => [], resolve: async () => { throw new Error('missing') } }
+  const usage = { read: async () => undefined, usage: async () => undefined, clear: () => {} }
+  applyRoutes(ctx, web, {
+    config: () => config,
+    adapter,
+    pool,
+    usage,
+    verifyHost: async (req: { headers: { cookie?: string } }) => req.headers.cookie === 'dsh-auth-abc=valid',
+  } as never)
+  const state = routes.get('/dsh-ollama/state')
+  const health = routes.get('/dsh-ollama/health')
+  assert.ok(state !== undefined && health !== undefined)
+
+  const anonymous = fakeRes()
+  await state({ method: 'GET', headers: { host: '127.0.0.1:3080' } }, anonymous)
+  assert.equal(anonymous.statusCode, 403)
+
+  const forged = fakeRes()
+  await state({ method: 'GET', headers: { host: '127.0.0.1:3080', cookie: 'dsh-auth-abc=fake' } }, forged)
+  assert.equal(forged.statusCode, 403)
+
+  const authenticated = fakeRes()
+  await state({ method: 'GET', headers: { host: '127.0.0.1:3080', cookie: 'dsh-auth-abc=valid' } }, authenticated)
+  assert.equal(authenticated.statusCode, 200)
+
+  const publicHealth = fakeRes()
+  await health({ method: 'GET', headers: { host: '127.0.0.1:3080' } }, publicHealth)
+  assert.equal(publicHealth.statusCode, 200)
+})
+
+test('default Desktop verifier accepts only a host-verified cookie', async () => {
+  const api = createServer((req, res) => {
+    res.statusCode = req.headers.cookie?.includes('valid') === true ? 404 : 401
+    res.end()
+  })
+  await new Promise<void>((resolve) => api.listen(0, '127.0.0.1', resolve))
+  const { port } = api.address() as AddressInfo
+  try {
+    const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
+    const ctx = {
+      get: () => undefined,
+      effect: (fn: () => () => void) => { fn(); return () => {} },
+    } as never
+    const web = {
+      register: ({ path, handler }: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }) => {
+        routes.set(path, handler)
+        return () => {}
+      },
+    } as never
+    const config = resolveConfig({ apiKey: 'k' })
+    const adapter = {
+      listModels: async () => [],
+      accountHealth: () => undefined,
+      routingTrace: () => [],
+      stream: async function* () { yield { type: 'finish', reason: { kind: 'stop' } } },
+    }
+    const pool = {
+      resolveAll: async () => [],
+      resolve: async () => { throw new Error('missing') },
+    }
+    const usage = { read: async () => undefined, usage: async () => undefined, clear: () => {} }
+    applyRoutes(ctx, web, { config: () => config, adapter, pool, usage } as never)
+    const write = routes.get('/dsh-ollama/config')
+    assert.ok(write !== undefined)
+
+    const request = (cookie: string) => ({
+      method: 'POST',
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: {
+        host: `127.0.0.1:${port}`,
+        'user-agent': 'Mozilla/5.0 @deepseek-ai/dsh-desktop/0.2.1-rc.2 Electron/44.7.0',
+        cookie,
+        'content-type': 'text/plain',
+      },
+    })
+
+    const valid = fakeRes()
+    await write(request('dsh-auth-abc=valid'), valid)
+    assert.equal(valid.statusCode, 415)
+
+    const forged = fakeRes()
+    await write(request('dsh-auth-forged=fake'), forged)
+    assert.equal(forged.statusCode, 403)
+  } finally {
+    await new Promise<void>((resolve) => api.close(() => resolve()))
+  }
 })

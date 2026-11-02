@@ -3,28 +3,40 @@ import type { UsageReport, UsageTotals, UsageWindow } from './usage.ts'
 export interface QuotaBar {
   readonly key: string
   readonly label: string
+  readonly labelKey?: string
   readonly usedPercent: number
   readonly remainingPercent: number
   readonly resetsAt?: string
   readonly status?: string
   readonly detail?: string
+  readonly detailValues?: { remaining: number; allowance: number; purchased: number }
 }
 
 function bar(
   key: string,
   label: string,
   usedPercent: number,
-  extra: { resetsAt?: string; status?: string; detail?: string } = {},
+  extra: {
+    resetsAt?: string
+    status?: string
+    detail?: string
+    detailValues?: { remaining: number; allowance: number; purchased: number }
+  } = {},
 ): QuotaBar {
+  const labelKey = key === 'included'
+    ? 'quotaIncludedCredits'
+    : key === 'fiveHour' ? 'quotaFiveHour' : key === 'weekly' ? 'quotaWeekly' : undefined
   const used = Math.max(0, Math.min(100, usedPercent))
   return {
     key,
     label,
+    ...(labelKey === undefined ? {} : { labelKey }),
     usedPercent: used,
     remainingPercent: 100 - used,
     ...(extra.resetsAt === undefined ? {} : { resetsAt: extra.resetsAt }),
     ...(extra.status === undefined ? {} : { status: extra.status }),
     ...(extra.detail === undefined ? {} : { detail: extra.detail }),
+    ...(extra.detailValues === undefined ? {} : { detailValues: extra.detailValues }),
   }
 }
 
@@ -48,6 +60,11 @@ export function quotaBars(report: UsageReport | undefined): readonly QuotaBar[] 
       bar('included', 'Included credits', used, {
         detail: `$${credits.includedRemaining.toFixed(2)} of $${credits.includedAllowance.toFixed(2)} left`
           + (credits.purchased > 0 ? ` · $${credits.purchased.toFixed(2)} purchased` : ''),
+        detailValues: {
+          remaining: credits.includedRemaining,
+          allowance: credits.includedAllowance,
+          purchased: credits.purchased,
+        },
         ...(credits.periodUntil === undefined ? {} : { resetsAt: credits.periodUntil }),
       }),
     ]
@@ -65,14 +82,21 @@ export function worstUsedPercent(report: UsageReport | undefined): number {
 export interface WindowRow {
   readonly key: '24h' | '7d' | '30d'
   readonly label: string
+  readonly labelKey: string
   readonly totals: UsageTotals
 }
 
 export function windowRows(report: UsageReport | undefined): readonly WindowRow[] {
   if (report === undefined) return []
   return [
-    report.windows.d24 === undefined ? undefined : { key: '24h' as const, label: '24 hours', totals: report.windows.d24 },
-    report.windows.d7 === undefined ? undefined : { key: '7d' as const, label: '7 days', totals: report.windows.d7 },
-    report.windows.d30 === undefined ? undefined : { key: '30d' as const, label: '30 days', totals: report.windows.d30 },
+    report.windows.d24 === undefined
+      ? undefined
+      : { key: '24h' as const, label: '24 hours', labelKey: 'last24h', totals: report.windows.d24 },
+    report.windows.d7 === undefined
+      ? undefined
+      : { key: '7d' as const, label: '7 days', labelKey: 'last7d', totals: report.windows.d7 },
+    report.windows.d30 === undefined
+      ? undefined
+      : { key: '30d' as const, label: '30 days', labelKey: 'last30d', totals: report.windows.d30 },
   ].filter((entry): entry is WindowRow => entry !== undefined)
 }

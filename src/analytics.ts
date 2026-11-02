@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -112,6 +112,9 @@ export interface AnalyticsReport {
   summary: AnalyticsSummary
   days: DayUsageRow[]
   sessions: SessionUsageRow[]
+  /** The projection directory held more files than the bounded scan. */
+  truncated?: boolean
+  totalFiles?: number
 }
 
 interface ProjectionRow<T> {
@@ -430,9 +433,27 @@ export async function readModelAnalytics(
 
   const dir = projectionDirectory()
   const sessions: SessionMetadata[] = []
+  let truncated = false
+  let totalFiles = 0
   try {
     const entries = await readdir(dir, { withFileTypes: true })
-    const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith('.json')).slice(0, MAX_FILES)
+    const candidates = entries.filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+    totalFiles = candidates.length
+    truncated = candidates.length > MAX_FILES
+    let files = candidates
+    if (truncated) {
+      const ranked = await Promise.all(candidates.map(async (entry) => {
+        try {
+          return { entry, at: (await stat(join(dir, entry.name))).mtimeMs }
+        } catch {
+          return { entry, at: 0 }
+        }
+      }))
+      files = ranked
+        .sort((left, right) => right.at - left.at)
+        .slice(0, MAX_FILES)
+        .map((item) => item.entry)
+    }
     let cursor = 0
     const workers = Array.from({ length: Math.min(16, files.length) }, async () => {
       while (true) {
@@ -459,7 +480,11 @@ export async function readModelAnalytics(
     bestEffortFailed('projection cache is unavailable', error)
   }
 
-  const report = aggregateSessions(sessions, clamped, Date.now(), priceOverrides)
+  const report: AnalyticsReport = {
+    ...aggregateSessions(sessions, clamped, Date.now(), priceOverrides),
+    truncated,
+    totalFiles,
+  }
   cache.set(cacheKey, { at: Date.now(), report })
   return report
 }

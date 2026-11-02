@@ -6,7 +6,7 @@ export const DEFAULT_API_BASE = 'https://ollama.com'
 export const DEFAULT_OPENAI_BASE = 'https://ollama.com/v1'
 export const DEFAULT_USAGE_URL = 'https://ollama.com/api/usage'
 export const DEFAULT_BALANCE_URL = 'https://ollama.com/api/balance'
-export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.14'
+export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.15'
 export const DEFAULT_CONTEXT_WINDOW = 131_072
 export const DEFAULT_MAX_TOKENS = 32_768
 export const DEFAULT_GENERATE_MAX_TOKENS = 131_072
@@ -55,8 +55,10 @@ export interface Config {
   requestTimeoutMs?: number
   /** Milliseconds a stream may stall; defaults to 300s. */
   streamIdleTimeoutMs?: number
-  /** Visible-model allowlist; empty means "show everything". */
+  /** Visible-model allowlist; empty with `showAllModels:false` means none. */
   visibleModels?: string[]
+  /** Explicit all-models switch; absent means derive from `visibleModels`. */
+  showAllModels?: boolean
   /** Per-model visibility overrides; wins over `visibleModels`. */
   modelVisibility?: Record<string, boolean>
   /** Hide models the cloud marks unsupported in the API; defaults to true. */
@@ -102,6 +104,7 @@ export const Config: z<Config> = z.object({
   requestTimeoutMs: markVolatile(z.number().min(1).max(2_147_483_647).default(300_000)),
   streamIdleTimeoutMs: markVolatile(z.number().min(1).max(2_147_483_647).default(300_000)),
   visibleModels: markVolatile(z.array(z.string()).default([])),
+  showAllModels: markVolatile(z.boolean()),
   modelVisibility: markVolatile(z.dict(z.boolean()).default({})),
   filterModelsByPlan: markVolatile(z.boolean().default(true)),
   contextWindow: markVolatile(z.number().min(1).max(10_000_000).step(1)),
@@ -140,6 +143,7 @@ export interface ResolvedConfig {
   requestTimeoutMs: number
   streamIdleTimeoutMs: number
   visibleModels: readonly string[]
+  showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
   filterModelsByPlan: boolean
   contextWindow?: number
@@ -238,6 +242,9 @@ export function resolveConfig(config: Config): ResolvedConfig {
   const apiKey = typeof config.apiKey === 'string' && config.apiKey.trim() !== ''
     ? config.apiKey.trim()
     : undefined
+  const visibleModels = Array.isArray(config.visibleModels)
+    ? config.visibleModels.filter((id): id is string => typeof id === 'string' && id !== '')
+    : []
   return {
     apiKeyEnv: typeof config.apiKeyEnv === 'string' && config.apiKeyEnv.trim() !== ''
       ? config.apiKeyEnv.trim()
@@ -255,9 +262,10 @@ export function resolveConfig(config: Config): ResolvedConfig {
     modelTransports: transportRecord(config.modelTransports),
     requestTimeoutMs: positiveInt(config.requestTimeoutMs, 300_000),
     streamIdleTimeoutMs: positiveInt(config.streamIdleTimeoutMs, 300_000),
-    visibleModels: Array.isArray(config.visibleModels)
-      ? config.visibleModels.filter((id): id is string => typeof id === 'string' && id !== '')
-      : [],
+    visibleModels,
+    showAllModels: config.showAllModels === true
+      ? true
+      : config.showAllModels === false ? false : visibleModels.length === 0,
     modelVisibility: booleanRecord(config.modelVisibility),
     filterModelsByPlan: config.filterModelsByPlan !== false,
     ...(typeof config.contextWindow === 'number'

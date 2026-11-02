@@ -2,6 +2,19 @@ import type { ModelPriceOverride, TransportId } from './config.ts'
 
 const TRANSPORTS = new Set<TransportId>(['native', 'openai-chat'])
 
+const CREDENTIAL_REF_PATTERN = /^OLLAMA_[A-Z0-9_]+$/
+
+/** The plugin may read and write only its own credential namespace. */
+export function normalizeCredentialRef(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const ref = value.trim()
+  return CREDENTIAL_REF_PATTERN.test(ref) ? ref : undefined
+}
+
+export function isCredentialRef(value: unknown): value is string {
+  return normalizeCredentialRef(value) !== undefined
+}
+
 export function cleanAccounts(value: unknown): Array<{ label: string; apiKeyEnv: string }> {
   if (!Array.isArray(value)) return []
   const out: Array<{ label: string; apiKeyEnv: string }> = []

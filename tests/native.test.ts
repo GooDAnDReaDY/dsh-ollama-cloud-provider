@@ -176,5 +176,21 @@ test('propagates an abrupt stream error', async () => {
 })
 
 test('rejects an empty stream', async () => {
-  await rejectsWithin(() => collect([]), /empty stream/i)
+  await assert.rejects(collect([]), /empty stream/i)
+})
+
+test('rejects EOF before done:true after text', async () => {
+  await assert.rejects(
+    collect(['{"message":{"content":"partial"}}']),
+    /ended before done:true/i,
+  )
+})
+
+test('rejects EOF before done:true after a tool call', async () => {
+  await assert.rejects(
+    collect([
+      '{"message":{"tool_calls":[{"function":{"name":"read","arguments":{"path":"a"}}}]}}',
+    ]),
+    /ended before done:true/i,
+  )
 })

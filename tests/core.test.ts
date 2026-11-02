@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { CONTEXT_WINDOW_EXCEEDED_CODE, type GenerateOptions } from '@deepseek-ai/dsh-llm'
 
-import { clearCatalogCache, effectiveModel, refreshCatalog, sortForPicker } from '../src/catalog.ts'
+import { clearCatalogCache, effectiveModel, modelVisible, refreshCatalog, sortForPicker } from '../src/catalog.ts'
 import { DEFAULT_API_BASE, DEFAULT_OPENAI_BASE, resolveConfig } from '../src/config.ts'
 import { classifyResponseError } from '../src/errors.ts'
 import { buildChatBody, buildNativeBody, buildNativeMessages } from '../src/messages.ts'
@@ -72,6 +72,76 @@ test('catalog merges live metadata, capabilities and visibility', async () => {
   assert.deepEqual(sortForPicker(ids, config), ['gpt-oss:120b'])
   assert.deepEqual(effectiveModel('hidden:1b', config).input, ['text', 'image'])
   assert.deepEqual(sortForPicker(ids, config, true).length, 2)
+})
+
+test('live catalog metadata is scoped to its API base and cleared', async () => {
+  const baseA = resolveConfig({ apiKey: 'k', apiBase: 'https://catalog-a.example' })
+  const baseB = resolveConfig({ apiKey: 'k', apiBase: 'https://catalog-b.example' })
+  const fakeFetch = (async (input: string | URL | Request) => {
+    const href = String(input)
+    const isA = href.includes('catalog-a.example')
+    const models = href.includes('/api/tags')
+      ? { models: [] }
+      : {
+          models: [{
+            slug: 'shared:1b',
+            display_name: 'Shared',
+            context_window: isA ? 2048 : 8192,
+            visibility: 'list',
+            supported_in_api: true,
+          }],
+        }
+    return new Response(JSON.stringify(models), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }) as typeof fetch
+
+  clearCatalogCache()
+  await refreshCatalog(baseA, fakeFetch, true)
+  await refreshCatalog(baseB, fakeFetch, true)
+  assert.equal(effectiveModel('shared:1b', baseA).contextWindow, 2048)
+  assert.equal(effectiveModel('shared:1b', baseB).contextWindow, 8192)
+
+  clearCatalogCache()
+  assert.notEqual(effectiveModel('shared:1b', baseA).contextWindow, 2048)
+})
+
+test('a later catalog response removes disappeared live models', async () => {
+  const scope = resolveConfig({ apiKey: 'k', apiBase: 'https://catalog-prune.example' })
+  let call = 0
+  const fakeFetch = (async (input: string | URL | Request) => {
+    const href = String(input)
+    if (href.includes('/api/tags')) {
+      return new Response(JSON.stringify({ models: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    call += 1
+    const slug = call === 1 ? 'first:1b' : 'second:1b'
+    return new Response(JSON.stringify({
+      models: [{ slug, display_name: slug, context_window: 4096, visibility: 'list', supported_in_api: true }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }) as typeof fetch
+
+  clearCatalogCache()
+  await refreshCatalog(scope, fakeFetch, true)
+  assert.equal(effectiveModel('first:1b', scope).contextWindow, 4096)
+  await refreshCatalog(scope, fakeFetch, true)
+  assert.notEqual(effectiveModel('first:1b', scope).contextWindow, 4096)
+  assert.equal(effectiveModel('second:1b', scope).contextWindow, 4096)
+})
+
+test('explicit empty visibility means none while legacy empty means all', () => {
+  assert.equal(modelVisible('x', resolveConfig({ visibleModels: [] })), true)
+  assert.equal(modelVisible('x', resolveConfig({ visibleModels: [], showAllModels: false })), false)
+  assert.equal(modelVisible('x', resolveConfig({ visibleModels: ['y'], showAllModels: false })), false)
+  assert.equal(modelVisible('y', resolveConfig({ visibleModels: ['y'], showAllModels: false })), true)
+  assert.equal(modelVisible('x', resolveConfig({ visibleModels: [], showAllModels: true })), true)
 })
 
 test('serves a stale catalog immediately and refreshes it in the background', async () => {
@@ -240,4 +310,26 @@ test('pricing resolves exact ids, base tags and off-peak rates', () => {
   })
   assert.equal(peak.offPeak, false)
   assert.ok(Math.abs(peak.usd - 0.30) < 1e-9)
+})
+
+test('per-field price overrides win in peak and off-peak estimates', () => {
+  const weekend = Date.UTC(2026, 9, 17, 10, 0, 0)
+  const overriddenInput = estimateCost({
+    model: 'deepseek-v4.1-flash',
+    inputTokens: 1_000_000,
+    outputTokens: 0,
+    at: weekend,
+    priceOverrides: { 'deepseek-v4.1-flash': { input: 999 } },
+  })
+  assert.equal(overriddenInput.offPeak, true)
+  assert.equal(overriddenInput.usd, 999)
+
+  const overriddenOutput = estimateCost({
+    model: 'deepseek-v4.1-flash',
+    inputTokens: 0,
+    outputTokens: 1_000_000,
+    at: weekend,
+    priceOverrides: { 'deepseek-v4.1-flash': { output: 999 } },
+  })
+  assert.equal(overriddenOutput.usd, 999)
 })

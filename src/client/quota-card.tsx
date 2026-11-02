@@ -131,7 +131,7 @@ function QuotaCardBody(props: {
   const plan = state?.config.planLabel?.trim() ?? ''
   const name = plan === '' ? t('quotaCardName') : `${t('quotaCardName')} · ${plan}`
   const detail = bars
-    .map((entry) => `${entry.label}: ${entry.remainingPercent.toFixed(0)}% ${t('remaining')}`)
+    .map((entry) => `${entry.labelKey === undefined ? entry.label : t(entry.labelKey)}: ${entry.remainingPercent.toFixed(0)}% ${t('remaining')}`)
     .join(' · ')
 
   return (
@@ -156,7 +156,7 @@ function QuotaCardBody(props: {
         : bars.map((entry) => (
             <span className="ocl-footRow" key={entry.key}>
               <span className="ocl-footHead">
-                <span className="ocl-footLabel">{entry.label}</span>
+                <span className="ocl-footLabel">{entry.labelKey === undefined ? entry.label : t(entry.labelKey)}</span>
                 <span className="ocl-footAmount">
                   {entry.remainingPercent.toFixed(0)}% {t('remaining')}
                   {entry.resetsAt === undefined ? '' : ` · ${resetLabel(entry.resetsAt)}`}
@@ -273,7 +273,7 @@ export function QuotaPanel(props: { t: (key: string) => string; close?: () => vo
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.key}>
-                    <td>{row.label}</td>
+                    <td>{t(row.labelKey)}</td>
                     <td>{row.totals.requests}</td>
                     <td>${row.totals.usd.toFixed(3)}</td>
                     <td>{row.totals.inputTokens + row.totals.outputTokens}</td>

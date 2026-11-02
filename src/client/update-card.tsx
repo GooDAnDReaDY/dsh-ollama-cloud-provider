@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { fetchUpdate, installUpdate, type UpdateStatus } from './api.ts'
+import { canInstallUpdate, updateBadge } from './update-state.ts'
 
 export function PluginUpdateCard(props: { t: (key: string) => string }): ReactNode {
   const { t } = props
@@ -41,9 +42,11 @@ export function PluginUpdateCard(props: { t: (key: string) => string }): ReactNo
         {t('pluginUpdate')}
         {status === null
           ? null
-          : status.updateAvailable
-            ? <span className="ocl-badge ocl-badge-warn">{t('updateAvailable')}</span>
-            : <span className="ocl-badge ocl-badge-ok">{t('upToDate')}</span>}
+          : updateBadge(status) === 'failed'
+            ? <span className="ocl-badge ocl-badge-warn">{t('updateCheckFailed')}</span>
+            : updateBadge(status) === 'available'
+              ? <span className="ocl-badge ocl-badge-warn">{t('updateAvailable')}</span>
+              : <span className="ocl-badge ocl-badge-ok">{t('upToDate')}</span>}
       </h3>
       {status === null ? <p className="ocl-hint">{error ?? t('checking')}</p> : (
         <>
@@ -51,11 +54,19 @@ export function PluginUpdateCard(props: { t: (key: string) => string }): ReactNo
             <span className="ocl-badge">{t('currentVersion')}: {status.currentVersion}</span>
             <span className="ocl-badge">{t('latestVersion')}: {status.latestVersion ?? '—'}</span>
           </div>
+          {status.latestCheckFailed
+            ? (
+                <p className="ocl-hint">
+                  {t('updateCheckFailed')}
+                  <button type="button" className="ocl-button" onClick={load}>{t('retry')}</button>
+                </p>
+              )
+            : null}
           {status.canAutoUpdate ? (
             <button
               type="button"
               className="ocl-button"
-              disabled={busy || !status.updateAvailable || status.updatedVersion !== undefined}
+              disabled={busy || !canInstallUpdate(status)}
               onClick={update}
             >
               {busy ? t('updating') : t('updateNow')}

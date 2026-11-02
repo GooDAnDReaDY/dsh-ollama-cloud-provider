@@ -154,7 +154,9 @@ export function createUsageReader(
   fetchImpl: typeof fetch = fetch,
 ): UsageReader {
   const cache = new Map<string, UsageResult>()
+  const inflight = new Map<string, Promise<UsageResult>>()
   const usageCalls: number[] = []
+  let generation = 0
 
   const keyFor = async (explicit?: string): Promise<string | undefined> => {
     if (explicit !== undefined && explicit !== '') return explicit
@@ -198,11 +200,13 @@ export function createUsageReader(
   const readUsage = async (
     key: string,
     range: UsageRange,
+    epoch: number,
   ): Promise<{ totals: UsageTotals; byModel: Array<{ model: string } & UsageTotals> } | undefined> => {
     const current = config()
     const cacheKey = `${fingerprint(key)}:${range}`
     const hit = cached(cacheKey)
-    if (hit?.report !== undefined) {
+    if (hit !== undefined) {
+      if (hit.report === undefined) return undefined
       const totals = hit.report.windows[range === '24h' ? 'd24' : range === '7d' ? 'd7' : 'd30']
       return totals === undefined ? undefined : { totals, byModel: hit.report.byModel }
     }
@@ -218,26 +222,32 @@ export function createUsageReader(
       url.searchParams.set('group_by', 'model')
       const response = await request(url.toString(), key)
       if (!response.ok) {
-        cache.set(cacheKey, {
-          error: `usage endpoint returned HTTP ${response.status}`,
-          checkedAt: Date.now(),
-        })
+        if (epoch === generation) {
+          cache.set(cacheKey, {
+            error: `usage endpoint returned HTTP ${response.status}`,
+            checkedAt: Date.now(),
+          })
+        }
         return undefined
       }
       return normalizeUsage(await response.json(), range)
     } catch (error) {
-      cache.set(cacheKey, {
-        error: error instanceof Error ? error.message : 'usage request failed',
-        checkedAt: Date.now(),
-      })
+      if (epoch === generation) {
+        cache.set(cacheKey, {
+          error: error instanceof Error ? error.message : 'usage request failed',
+          checkedAt: Date.now(),
+        })
+      }
       return undefined
     }
   }
 
-  const compose = async (key: string, range: UsageRange): Promise<UsageResult> => {
-    const [balance, usage] = await Promise.all([readBalance(key), readUsage(key, range)])
+  const compose = async (key: string, range: UsageRange, epoch: number): Promise<UsageResult> => {
+    const [balance, usage] = await Promise.all([readBalance(key), readUsage(key, range, epoch)])
     if (balance === undefined && usage === undefined) {
-      return { error: 'usage and balance are unavailable', checkedAt: Date.now() }
+      const result: UsageResult = { error: 'usage and balance are unavailable', checkedAt: Date.now() }
+      if (epoch === generation) cache.set(`${fingerprint(key)}:report:${range}`, result)
+      return result
     }
     const report: UsageReport = {
       kind: balance?.kind ?? 'credits',
@@ -254,9 +264,9 @@ export function createUsageReader(
       range,
     }
     const result: UsageResult = { report, checkedAt: Date.now() }
-    cache.set(`${fingerprint(key)}:report:${range}`, result)
-    if (usage !== undefined) {
-      cache.set(`${fingerprint(key)}:${range}`, result)
+    if (epoch === generation) {
+      cache.set(`${fingerprint(key)}:report:${range}`, result)
+      if (usage !== undefined) cache.set(`${fingerprint(key)}:${range}`, result)
     }
     return result
   }
@@ -266,12 +276,22 @@ export function createUsageReader(
     if (key === undefined) return { error: 'no credential', checkedAt: Date.now() }
     const cacheKey = `${fingerprint(key)}:report:${range}`
     const hit = cache.get(cacheKey)
-    if (hit?.report !== undefined && Date.now() - hit.checkedAt < BALANCE_TTL_MS) return hit
-    return compose(key, range)
+    const ttl = hit?.report === undefined ? FAILURE_TTL_MS : BALANCE_TTL_MS
+    if (hit !== undefined && Date.now() - hit.checkedAt < ttl) return hit
+    const existing = inflight.get(cacheKey)
+    if (existing !== undefined) return existing
+    const epoch = generation
+    const task = compose(key, range, epoch).finally(() => inflight.delete(cacheKey))
+    inflight.set(cacheKey, task)
+    return task
   }
 
   reader.read = (key?: string) => reader('7d', key)
   reader.usage = (range: UsageRange, key?: string) => reader(range, key)
-  reader.clear = (): void => { cache.clear() }
+  reader.clear = (): void => {
+    generation += 1
+    cache.clear()
+    inflight.clear()
+  }
   return reader as UsageReader
 }

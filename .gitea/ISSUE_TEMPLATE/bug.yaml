@@ -1,0 +1,32 @@
+name: Bug
+about: A confirmed defect in the plugin
+labels: [type/bug, status/confirmed]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Проблема
+      description: Факт с путём и строкой, цитатой кода или выводом команды.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Влияние
+      description: Что ломается у пользователя и при каких условиях.
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: Что сделать
+      description: Шаги и эталон из другого проекта, если есть.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Критерии готовности
+      description: Проверяемый чек-лист.
+    validations:
+      required: true

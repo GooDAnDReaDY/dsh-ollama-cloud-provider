@@ -32,6 +32,8 @@ import {
   cleanPrices,
   cleanStringArray,
   cleanTransports,
+  isCredentialRef,
+  normalizeCredentialRef,
 } from './routes-values.ts'
 import type { UsageRange, UsageReader } from './usage.ts'
 
@@ -45,6 +47,10 @@ export interface RouteDeps {
   readonly analytics?: (days: number) => Promise<AnalyticsReport>
   readonly heatmap?: (days: number) => Promise<RequestHeatmap>
   readonly refreshTui?: () => void
+  /** Test seam; defaults to verifying the cookie against the host API. */
+  readonly verifyDesktop?: (req: IncomingMessage) => Promise<boolean>
+  /** Same verifier for private reads; falls back to `verifyDesktop`. */
+  readonly verifyHost?: (req: IncomingMessage) => Promise<boolean>
 }
 
 type UsageValue = Awaited<ReturnType<UsageReader['read']>> | null
@@ -67,13 +73,32 @@ function sourceHost(value: string | undefined): string | undefined {
 
 /**
  * The Desktop renderer runs on `dsh-app://app`. Its host fetch has no Origin
- * or Referer, but it carries the signed host auth cookie and the desktop user
- * agent. Require both so a plain LAN client without either stays fail-closed.
+ * or Referer, but it carries the host auth cookie and the desktop user agent.
+ * The names alone are not proof: verify the cookie against the host's own
+ * authenticated API, which rejects forged values with 401/403.
  */
 function desktopShellRequest(req: IncomingMessage): boolean {
   const agent = req.headers['user-agent'] ?? ''
   const cookie = req.headers.cookie ?? ''
   return agent.includes('@deepseek-ai/dsh-desktop/') && cookie.includes('dsh-auth-')
+}
+
+async function defaultVerifyHost(req: IncomingMessage): Promise<boolean> {
+  const host = req.headers.host
+  const cookie = req.headers.cookie
+  if (host === undefined || host === '' || cookie === undefined || cookie === '') return false
+  try {
+    const response = await fetch(`http://${host}/api/version`, {
+      headers: { cookie, accept: 'application/json' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(2_500),
+    })
+    await response.body?.cancel()
+    if (response.status >= 300 && response.status < 400) return false
+    return response.status < 500 && response.status !== 401 && response.status !== 403
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -89,7 +114,6 @@ function writeSourceError(req: IncomingMessage): string | undefined {
   if (origin !== undefined && origin !== '') {
     return sourceHost(origin) === host ? undefined : 'cross-origin request refused'
   }
-  if (desktopShellRequest(req)) return undefined
   const referer = req.headers.referer
   if (referer === undefined || referer === '') return 'request origin required'
   return sourceHost(referer) === host ? undefined : 'cross-origin request refused'
@@ -147,7 +171,11 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   return parsed as Record<string, unknown>
 }
 
-function requirePost(req: IncomingMessage, res: ServerResponse): boolean {
+async function requirePost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  verifyDesktop: (req: IncomingMessage) => Promise<boolean>,
+): Promise<boolean> {
   if (req.method !== 'POST') {
     json(res, 405, { error: 'POST required' })
     return false
@@ -156,16 +184,23 @@ function requirePost(req: IncomingMessage, res: ServerResponse): boolean {
     json(res, 403, { error: 'non-loopback Host refused' })
     return false
   }
-  const sourceError = writeSourceError(req)
-  if (sourceError !== undefined) {
-    json(res, 403, { error: sourceError })
-    return false
-  }
   const remote = req.socket.remoteAddress ?? ''
   const loopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1'
   if (!loopback) {
     json(res, 403, { error: 'write endpoints are restricted to the local machine' })
     return false
+  }
+  if (desktopShellRequest(req)) {
+    if (!(await verifyDesktop(req))) {
+      json(res, 403, { error: 'desktop authentication failed' })
+      return false
+    }
+  } else {
+    const sourceError = writeSourceError(req)
+    if (sourceError !== undefined) {
+      json(res, 403, { error: sourceError })
+      return false
+    }
   }
   const type = req.headers['content-type'] ?? ''
   if (!type.includes('application/json')) {
@@ -208,11 +243,12 @@ function settingsRevision(ctx: Context): number | undefined {
  * key in the shared credential store.
  */
 function canWriteCredentialRef(config: ResolvedConfig, ref: string): boolean {
+  if (!isCredentialRef(ref)) return false
   if (ref === config.apiKeyEnv) return true
   for (const account of config.accounts) {
     if (typeof account.apiKeyEnv === 'string' && account.apiKeyEnv.trim() === ref) return true
   }
-  return /^OLLAMA_[A-Z0-9_]+$/.test(ref)
+  return true
 }
 
 function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset'; path: string[]; value?: unknown }> {
@@ -221,7 +257,15 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
     if (value === null || value === undefined) ops.push({ op: 'unset', path: [field] })
     else ops.push({ op: 'set', path: [field], value })
   }
-  if ('apiKeyEnv' in patch) set('apiKeyEnv', patch.apiKeyEnv)
+  if ('apiKeyEnv' in patch) {
+    if (patch.apiKeyEnv === null || patch.apiKeyEnv === undefined) {
+      set('apiKeyEnv', undefined)
+    } else {
+      const ref = normalizeCredentialRef(patch.apiKeyEnv)
+      if (ref === undefined) throw new Error('invalid credential reference')
+      set('apiKeyEnv', ref)
+    }
+  }
   if ('apiBase' in patch) set('apiBase', patch.apiBase)
   if ('openAiBase' in patch) set('openAiBase', patch.openAiBase)
   if ('usageUrl' in patch) set('usageUrl', patch.usageUrl)
@@ -231,6 +275,7 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
   if ('requestTimeoutMs' in patch) set('requestTimeoutMs', patch.requestTimeoutMs)
   if ('streamIdleTimeoutMs' in patch) set('streamIdleTimeoutMs', patch.streamIdleTimeoutMs)
   if ('visibleModels' in patch) set('visibleModels', cleanStringArray(patch.visibleModels))
+  if ('showAllModels' in patch) set('showAllModels', patch.showAllModels === true)
   if ('modelVisibility' in patch) set('modelVisibility', cleanBooleanRecord(patch.modelVisibility))
   if ('filterModelsByPlan' in patch) set('filterModelsByPlan', patch.filterModelsByPlan === true)
   if ('contextWindow' in patch) set('contextWindow', patch.contextWindow)
@@ -238,7 +283,15 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
     set('contextWindowOverrides', cleanNumberRecord(patch.contextWindowOverrides))
   }
   if ('maxOutputTokens' in patch) set('maxOutputTokens', patch.maxOutputTokens)
-  if ('accounts' in patch) set('accounts', cleanAccounts(patch.accounts))
+  if ('accounts' in patch) {
+    const accounts = cleanAccounts(patch.accounts)
+    for (const account of accounts) {
+      if (account.apiKeyEnv !== '' && !isCredentialRef(account.apiKeyEnv)) {
+        throw new Error('invalid credential reference')
+      }
+    }
+    set('accounts', accounts)
+  }
   if ('modelAccountRules' in patch) set('modelAccountRules', cleanModelAccountRules(patch.modelAccountRules))
   if ('stickySession' in patch) set('stickySession', patch.stickySession === true)
   if ('activeAccount' in patch) set('activeAccount', patch.activeAccount)
@@ -381,6 +434,7 @@ async function refreshAndState(ctx: Context, deps: RouteDeps, res: ServerRespons
 /** Register the Host HTTP surface consumed by the browser settings page. */
 export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void {
   const disposers: Array<() => void> = []
+  const verifyHost = deps.verifyHost ?? deps.verifyDesktop ?? defaultVerifyHost
   const route = (path: string, handler: Parameters<WebServer['register']>[0]['handler']): void => {
     disposers.push(web.register({ kind: 'exact', path, handler }))
   }
@@ -395,9 +449,17 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
     }
     return true
   }
+  const privateRead = async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
+    if (!readOnly(req, res)) return false
+    if (!(await verifyHost(req))) {
+      json(res, 403, { error: 'authentication required' })
+      return false
+    }
+    return true
+  }
 
   route('/dsh-ollama/state', async (req, res) => {
-    if (!readOnly(req, res)) return
+    if (!(await privateRead(req, res))) return
     await refreshAndState(ctx, deps, res)
   })
 
@@ -433,7 +495,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   })
 
   route('/dsh-ollama/analytics', async (req, res) => {
-    if (!readOnly(req, res)) return
+    if (!(await privateRead(req, res))) return
     const url = new URL(req.url ?? '/', 'http://localhost')
     const requested = Number(url.searchParams.get('days') ?? '30')
     const days = Number.isFinite(requested) ? Math.max(1, Math.min(365, Math.trunc(requested))) : 30
@@ -449,7 +511,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   })
 
   route('/dsh-ollama/usage', async (req, res) => {
-    if (!readOnly(req, res)) return
+    if (!(await privateRead(req, res))) return
     const url = new URL(req.url ?? '/', 'http://localhost')
     const raw = url.searchParams.get('range') ?? '7d'
     const range: UsageRange = raw === '24h' || raw === '30d' ? raw : '7d'
@@ -462,7 +524,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   })
 
   route('/dsh-ollama/balance', async (req, res) => {
-    if (!readOnly(req, res)) return
+    if (!(await privateRead(req, res))) return
     try {
       const result = await deps.usage.read()
       json(res, 200, result ?? { error: 'balance unavailable', checkedAt: Date.now() })
@@ -472,7 +534,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   })
 
   route('/dsh-ollama/config', async (req, res) => {
-    if (!requirePost(req, res)) return
+    if (!(await requirePost(req, res, verifyHost))) return
     const settings = getSettings(ctx)
     if (settings?.mutate === undefined) {
       json(res, 503, { error: 'settings service unavailable' })
@@ -487,7 +549,13 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
       const patch = typeof body.patch === 'object' && body.patch !== null && !Array.isArray(body.patch)
         ? body.patch as Record<string, unknown>
         : body
-      const ops = configOps(patch)
+      let ops: ReturnType<typeof configOps>
+      try {
+        ops = configOps(patch)
+      } catch (error) {
+        json(res, 400, { error: error instanceof Error ? error.message : 'invalid patch' })
+        return
+      }
       if (ops.length === 0) {
         json(res, 400, { error: 'no known fields in patch' })
         return
@@ -502,7 +570,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   })
 
   route('/dsh-ollama/key', async (req, res) => {
-    if (!requirePost(req, res)) return
+    if (!(await requirePost(req, res, verifyHost))) return
     const credentials = getCredentials(ctx)
     if (credentials === undefined) {
       json(res, 503, { error: 'credentials service unavailable' })
@@ -530,7 +598,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   })
 
   route('/dsh-ollama/key/clear', async (req, res) => {
-    if (!requirePost(req, res)) return
+    if (!(await requirePost(req, res, verifyHost))) return
     const credentials = getCredentials(ctx)
     if (credentials === undefined) {
       json(res, 503, { error: 'credentials service unavailable' })
@@ -553,13 +621,13 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   })
 
   route('/dsh-ollama/refresh', async (req, res) => {
-    if (!requirePost(req, res)) return
+    if (!(await requirePost(req, res, verifyHost))) return
     deps.usage.clear()
     await refreshAndState(ctx, deps, res)
   })
 
   route('/dsh-ollama/models/refresh', async (req, res) => {
-    if (!requirePost(req, res)) return
+    if (!(await requirePost(req, res, verifyHost))) return
     clearCatalogCache()
     deps.usage.clear()
     try {
@@ -572,7 +640,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   })
 
   route('/dsh-ollama/test', async (req, res) => {
-    if (!requirePost(req, res)) return
+    if (!(await requirePost(req, res, verifyHost))) return
     let body: Record<string, unknown>
     try {
       body = await readJson(req)

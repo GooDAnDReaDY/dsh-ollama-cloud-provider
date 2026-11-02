@@ -6,7 +6,9 @@ import { resolveConfig } from '../src/config.ts'
 
 const config = resolveConfig({ apiKey: 'key' })
 
-function deps(): Parameters<typeof applyCommands>[1] {
+function deps(
+  stream: (options: unknown) => AsyncGenerator<{ type: string; text?: string; reason?: unknown }> = async function* () {},
+): Parameters<typeof applyCommands>[1] {
   return {
     config: () => config,
     pool: {
@@ -28,19 +30,21 @@ function deps(): Parameters<typeof applyCommands>[1] {
       }],
       accountHealth: () => undefined,
       routingTrace: () => [],
-      stream: async function* () {},
+      stream,
     },
   } as unknown as Parameters<typeof applyCommands>[1]
 }
 
-function registered(): { handler: (invocation: { rawInput: string }) => Promise<{ kind: string; text: string }> } {
+function registered(
+  stream?: (options: unknown) => AsyncGenerator<{ type: string; text?: string; reason?: unknown }>,
+): { handler: (invocation: { rawInput: string }) => Promise<{ kind: string; text: string }> } {
   let definition: { handler: (invocation: { rawInput: string }) => Promise<{ kind: string; text: string }> } | undefined
   const ctx = {
     commands: {
       register: (value: typeof definition) => { definition = value },
     },
   } as never
-  applyCommands(ctx, deps())
+  applyCommands(ctx, deps(stream))
   assert.ok(definition !== undefined)
   return definition
 }
@@ -55,6 +59,29 @@ test('models command lists catalog entries', async () => {
   const result = await registered().handler({ rawInput: 'models' })
   assert.equal(result.kind, 'success')
   assert.match(result.text, /gpt-oss:120b/)
+})
+
+test('test command rejects a reasoning-only reply', async () => {
+  let options: { reasoningEffort?: unknown; maxTokens?: number } | undefined
+  const stream = async function* (seen: unknown) {
+    options = seen as { reasoningEffort?: unknown; maxTokens?: number }
+    yield { type: 'reasoning-delta', text: 'thinking only' }
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  }
+  const result = await registered(stream).handler({ rawInput: 'test gpt-oss:120b' })
+  assert.equal(result.kind, 'error')
+  assert.match(result.text, /empty reply/)
+  assert.equal(options?.maxTokens, 64)
+})
+
+test('test command accepts a text reply', async () => {
+  const stream = async function* () {
+    yield { type: 'text-delta', text: 'OK' }
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  }
+  const result = await registered(stream).handler({ rawInput: 'test gpt-oss:120b' })
+  assert.equal(result.kind, 'success')
+  assert.match(result.text, /OK/)
 })
 
 test('unknown command returns an error with the accepted verbs', async () => {

@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.1.15 — 2026-11-02
+
+- Desktop write requests are no longer accepted from a cookie name and a
+  Desktop user agent alone. After the loopback Host/socket checks, the plugin
+  verifies the `dsh-auth-*` cookie against the host's authenticated
+  `/api/version`; a 401/403 or a failed probe rejects the write. Forged
+  Desktop headers now return 403 (#42).
+- Truncated streams now fail instead of reporting success: the native parser
+  rejects EOF before `done:true`, and the OpenAI parser rejects EOF before
+  `[DONE]`/`finish_reason` without emitting `block-end` or `finish`. Malformed
+  SSE JSON is an error instead of being skipped (#43).
+- Added project-specific `AGENTS.md` and `index.md` with architecture,
+  constraints, compatibility, testing, security, and deployment facts (#44).
+- Investigated the dev-only Zod advisory (#46). DSH core packages pin
+  `zod@4.4.3` exactly in rc.4, rc.5, and 0.2.2-alpha, so no in-range
+  dependency update exists; forced overrides are not used. The production tree
+  (`npm audit --omit=dev`) reports zero because the plugin has no runtime npm
+  dependencies. The dev-only advisory remains tracked upstream.
+- Removed the local multi-version `test:engine` loop. It created its own DSH
+  runtime, installed a `file:` worktree package, and used forced cleanup,
+  contrary to the project test-server rules. Compatibility checks now follow
+  the approved test-server procedure in `docs/testing/test-server.md` (#47).
+- SSE normalization now operates on the accumulated buffer, so CRLF split
+  between network chunks and split UTF-8 sequences parse correctly (#48).
+- Live catalog metadata is scoped by API base, pruned when models disappear,
+  and invalidated together with the cache; a generation guard discards a
+  background refresh that finishes after a clear (#49).
+- Request analytics no longer deduplicates independent requests by timestamp;
+  concurrent requests that start in the same millisecond and their errors are
+  counted (#50).
+- Per-field price overrides now win over generated off-peak rates; partial
+  overrides apply only to the overridden field (#51).
+- `/ollama test` disables reasoning, uses 64 tokens, and reports an empty or
+  reasoning-only reply as an error instead of `OK` (#52).
+- Analytics scans the newest projection files by mtime when the directory
+  exceeds 5000 files and marks the report as truncated; the UI shows the
+  incompleteness warning (#53).
+- The update card distinguishes a failed registry check from “up to date” and
+  offers a retry; the install button is disabled while the check has failed
+  (#54).
+- Quota labels, window labels and credit detail are localized in English and
+  Chinese instead of rendering English strings directly (#55).
+- Sensitive read routes (`state`, `analytics`, `usage`, `balance`) require a
+  host-verified session cookie; `health` and `status` remain public (#56).
+- The usage reader honors its 30-second failure cache, caches a total failure,
+  and deduplicates concurrent reads (#57).
+- Credential config patches and key writes are restricted to the plugin's
+  `OLLAMA_*` namespace, closing the two-step `OTHER_PLUGIN_API_KEY` mutation
+  path (#60).
+- Saving or clearing a key refreshes server state without discarding an
+  unsaved settings draft (#62).
+- Added an explicit `showAllModels` switch: an empty `visibleModels` list with
+  `showAllModels:false` now means “hide all” and survives save/reload; legacy
+  configs with an absent switch keep the previous empty-means-all behavior
+  (#63).
+- Updated the design contract, README install examples and the default user
+  agent to the current version (#59).
+- Removed the unused SSE event parser and the redundant stored image `base64`
+  field; transports keep using the single `dataUrl` representation (#58).
+
 ## 0.1.14 — 2026-10-29
 
 - Model-scoped rejections (unsupported model or per-model quota) mark only that

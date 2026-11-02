@@ -12,6 +12,34 @@ import {
   requestLogPath,
 } from '../src/request-log.ts'
 
+test('keeps concurrent requests that share a timestamp', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-same-ms-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const at = new Date(2026, 0, 5, 14, 30).getTime()
+  try {
+    recordRequest('ollama-cloud', 'm', at, undefined, 'default', 'rotation', {
+      ok: false,
+      latencyMs: 100,
+      error: 'QUOTA',
+    })
+    recordRequest('ollama-cloud', 'm', at, undefined, 'default', 'rotation', {
+      ok: true,
+      latencyMs: 300,
+    })
+    await flushRequestLog()
+    const heatmap = await readRequestHeatmap(7, at + 200_000)
+    assert.equal(heatmap.total, 2)
+    const account = heatmap.accounts.find((entry) => entry.account === 'default')
+    assert.equal(account?.total, 2)
+    assert.equal(account?.errors, 1)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
 test('aggregates requests per account', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-accounts-'))
   const previous = process.env.DSH_HOME
@@ -85,20 +113,20 @@ test('records requests and builds a local weekday/hour heatmap', async () => {
     await appendFile(requestLogPath(), '{not-json\n', 'utf8')
 
     const heatmap = await readRequestHeatmap(7, now)
-    assert.equal(heatmap.total, 3)
-    assert.equal(heatmap.hours[14], 2)
+    assert.equal(heatmap.total, 4)
+    assert.equal(heatmap.hours[14], 3)
     assert.equal(heatmap.hours[9], 1)
-    assert.equal(heatmap.grid[0]?.[14], 2)
+    assert.equal(heatmap.grid[0]?.[14], 3)
     assert.equal(heatmap.grid[1]?.[9], 1)
-    assert.equal(heatmap.grid.flat().reduce((sum, value) => sum + value, 0), 3)
+    assert.equal(heatmap.grid.flat().reduce((sum, value) => sum + value, 0), 4)
     assert.equal(heatmap.firstAt, monday)
     assert.equal(heatmap.lastAt, tuesday)
 
     const m = heatmap.models.find((entry) => entry.model === 'm')
     const other = heatmap.models.find((entry) => entry.model === 'other')
     assert.equal(heatmap.models.length, 2)
-    assert.equal(m?.total, 2)
-    assert.equal(m?.grid[0]?.[14], 1)
+    assert.equal(m?.total, 3)
+    assert.equal(m?.grid[0]?.[14], 2)
     assert.equal(m?.grid[1]?.[9], 1)
     assert.equal(other?.total, 1)
     assert.equal(other?.grid[0]?.[14], 1)

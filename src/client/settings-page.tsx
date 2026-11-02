@@ -17,7 +17,7 @@ import {
   type TestResult,
   type TransportId,
 } from './api.ts'
-import { draftOf, patchOf, safeSame, type Draft } from './settings-draft.ts'
+import { draftOf, mergeLoadedDraft, patchOf, safeSame, type Draft } from './settings-draft.ts'
 import { CONFIG_CHANGED_EVENT } from './events.ts'
 import { accountMark, Field } from './settings-widgets.tsx'
 import { PluginUpdateCard } from './update-card.tsx'
@@ -89,14 +89,14 @@ export function OllamaCloudSettingsPage(props: {
   const [serviceBusy, setServiceBusy] = useState(false)
   const [serviceError, setServiceError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (preserveDraft = false) => {
     setLoading(true)
     try {
       const next = await fetchState()
       setState(next)
       const draftNext = draftOf(next)
-      setDraft(draftNext)
-      setOriginal(draftNext)
+      setDraft((current) => mergeLoadedDraft(current, draftNext, preserveDraft))
+      setOriginal((current) => mergeLoadedDraft(current, draftNext, preserveDraft))
       setError(null)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t('failed'))
@@ -229,7 +229,7 @@ export function OllamaCloudSettingsPage(props: {
             disabled={keyDraft.trim() === ''}
             onClick={() => {
               void saveKey(draft.apiKeyEnv || 'OLLAMA_API_KEY', keyDraft.trim())
-                .then(() => { setKeyDraft(''); setNotice(t('saved')); return load() })
+                .then(() => { setKeyDraft(''); setNotice(t('saved')); return load(true) })
                 .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : t('failed')))
             }}
           >
@@ -240,7 +240,7 @@ export function OllamaCloudSettingsPage(props: {
             className="ocl-button ocl-button-danger"
             onClick={() => {
               void clearKey(draft.apiKeyEnv || 'OLLAMA_API_KEY')
-                .then(() => { setNotice(t('saved')); return load() })
+                .then(() => { setNotice(t('saved')); return load(true) })
                 .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : t('failed')))
             }}
           >
@@ -425,7 +425,7 @@ export function OllamaCloudSettingsPage(props: {
                       .then(() => {
                         setAccountKeys((current) => ({ ...current, [account.label]: '' }))
                         setNotice(t('saved'))
-                        return load()
+                        return load(true)
                       })
                       .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : t('failed')))
                   }}
