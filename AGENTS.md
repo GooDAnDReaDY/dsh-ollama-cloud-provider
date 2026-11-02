@@ -12,9 +12,8 @@ stop and ask the owner before changing anything.
   models catalog, account/key pool, quota and usage cards, analytics, settings
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
-- Status: active. 0.1.14 is verified on the production Web host and Desktop;
-  0.1.15 is the current candidate and has passed the local typecheck, unit
-  suite, and production build.
+- Status: active. 0.1.15 is verified on the production Web host and Desktop;
+  0.1.14 is the previous release.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
