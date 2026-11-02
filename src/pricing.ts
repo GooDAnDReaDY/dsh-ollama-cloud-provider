@@ -83,10 +83,18 @@ export function isOffPeak(at = Date.now()): boolean {
 export function estimateCost(input: CostInput): CostEstimate {
   const price = priceFor(input.model, input.priceOverrides)
   const meta = metaForPrice(input.model)
-  const offPeak = isOffPeak(input.at) && meta?.cost.offPeakInput !== undefined
-  const inputRate = offPeak ? (meta?.cost.offPeakInput ?? price.input) : price.input
-  const outputRate = offPeak ? (meta?.cost.offPeakOutput ?? price.output) : price.output
-  const cacheRate = offPeak ? (meta?.cost.offPeakCacheRead ?? price.cacheRead) : price.cacheRead
+  const override = input.priceOverrides?.[input.model]
+    ?? input.priceOverrides?.[baseIdOf(input.model)]
+  const offPeakAvailable = meta?.cost.offPeakInput !== undefined
+    || meta?.cost.offPeakOutput !== undefined
+    || meta?.cost.offPeakCacheRead !== undefined
+  const offPeak = isOffPeak(input.at) && offPeakAvailable
+  const inputRate = override?.input
+    ?? (offPeak ? (meta?.cost.offPeakInput ?? price.input) : price.input)
+  const outputRate = override?.output
+    ?? (offPeak ? (meta?.cost.offPeakOutput ?? price.output) : price.output)
+  const cacheRate = override?.cacheRead
+    ?? (offPeak ? (meta?.cost.offPeakCacheRead ?? price.cacheRead) : price.cacheRead)
   const usd = (input.inputTokens * inputRate
     + input.outputTokens * outputRate
     + (input.cacheReadTokens ?? 0) * cacheRate) / 1_000_000

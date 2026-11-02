@@ -108,14 +108,18 @@ export async function* parseChatStream(
   let finishReason: string | undefined
   let usage: TokenUsage | undefined
   let sawContent = false
+  let terminated = false
 
   for await (const data of sseData(response.body, idleTimeoutMs, signal)) {
-    if (data === '[DONE]') break
+    if (data === '[DONE]') {
+      terminated = true
+      break
+    }
     let chunk: ChatChunk
     try {
       chunk = JSON.parse(data) as ChatChunk
-    } catch {
-      continue
+    } catch (error) {
+      throw new LlmError('Ollama Cloud sent an invalid SSE event', 'PROVIDER_HTTP_ERROR', { cause: error })
     }
     const streamError = classifyStreamError(chunk)
     if (streamError !== undefined) throw streamError
@@ -182,8 +186,16 @@ export async function* parseChatStream(
 
       if (choice.finish_reason !== undefined && choice.finish_reason !== null) {
         finishReason = choice.finish_reason
+        terminated = true
       }
     }
+  }
+
+  if (!sawContent) {
+    throw new LlmError('Ollama Cloud completed the request without content', 'EMPTY_RESPONSE')
+  }
+  if (!terminated) {
+    throw new LlmError('Ollama Cloud stream ended before [DONE] or finish_reason', 'TRANSPORT')
   }
 
   if (textIndex !== undefined) {
@@ -206,9 +218,6 @@ export async function* parseChatStream(
     }
   }
   if (usage !== undefined) yield { type: 'usage', usage }
-  if (!sawContent) {
-    throw new LlmError('Ollama Cloud completed the request without content', 'EMPTY_RESPONSE')
-  }
   yield { type: 'finish', reason: finishReasonOf(finishReason, toolCalls.size > 0) }
 }
 

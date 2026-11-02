@@ -64,6 +64,8 @@ test('quota bars expose credits and legacy windows', () => {
   assert.equal(credits.length, 1)
   assert.equal(credits[0]?.usedPercent, 75)
   assert.equal(credits[0]?.remainingPercent, 25)
+  assert.equal(credits[0]?.labelKey, 'quotaIncludedCredits')
+  assert.equal(credits[0]?.detailValues?.allowance, 100)
 
   const legacy = quotaBars({
     kind: 'legacy',
@@ -76,6 +78,7 @@ test('quota bars expose credits and legacy windows', () => {
     range: '7d',
   })
   assert.equal(legacy.length, 2)
+  assert.deepEqual(legacy.map((entry) => entry.labelKey), ['quotaFiveHour', 'quotaWeekly'])
   assert.equal(worstUsedPercent({
     kind: 'legacy',
     legacy: { fiveHour: { percentUsed: 60 }, weekly: { percentUsed: 10 } },
@@ -97,6 +100,7 @@ test('window rows expose only present spend windows', () => {
     range: '7d',
   })
   assert.deepEqual(rows.map((row) => row.key), ['24h', '7d'])
+  assert.deepEqual(rows.map((row) => row.labelKey), ['last24h', 'last7d'])
 })
 
 test('usage reader caches balance and usage per key', async () => {
@@ -150,4 +154,32 @@ test('usage reader fails open when both endpoints fail', async () => {
   const result = await reader.read()
   assert.ok(result?.error !== undefined)
   assert.equal(result?.report, undefined)
+})
+
+test('usage reader caches a failed check and deduplicates concurrent reads', async () => {
+  let calls = 0
+  const fakeFetch = (async () => {
+    calls += 1
+    return new Response('unavailable', { status: 503 })
+  }) as typeof fetch
+  const reader = createUsageReader(
+    () => ({
+      apiBase: 'https://ollama.com',
+      openAiBase: 'https://ollama.com/v1',
+      usageUrl: 'https://ollama.com/api/usage',
+      balanceUrl: 'https://ollama.com/api/balance',
+      userAgent: 'test',
+    }) as never,
+    async () => ({ key: 'key-3', source: 'test' }),
+    fakeFetch,
+  )
+
+  const concurrent = await Promise.all([reader.read(), reader.read()])
+  assert.equal(concurrent[0]?.error !== undefined, true)
+  assert.equal(concurrent[1]?.error !== undefined, true)
+  assert.equal(calls, 2)
+
+  const cached = await reader.read()
+  assert.equal(cached?.error !== undefined, true)
+  assert.equal(calls, 2)
 })

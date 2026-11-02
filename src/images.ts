@@ -3,7 +3,6 @@ import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 
 export interface ResolvedImage {
   readonly mediaType: string
-  readonly base64: string
   readonly dataUrl: string
   readonly width: number
   readonly height: number
@@ -94,7 +93,6 @@ export async function resolveImages(
     const base64 = Buffer.from(request.data).toString('base64')
     images.set(ref.attachmentId, {
       mediaType: request.mediaType,
-      base64,
       dataUrl: `data:${request.mediaType};base64,${base64}`,
       width: request.width,
       height: request.height,

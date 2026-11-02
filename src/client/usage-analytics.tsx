@@ -134,9 +134,9 @@ export function UsageAnalyticsView(props: {
             onChange={(event) => onDays(Number(event.target.value))}
             aria-label={t('days')}
           >
-            <option value="7">7 days</option>
-            <option value="30">30 days</option>
-            <option value="90">90 days</option>
+            <option value="7">{t('last7d')}</option>
+            <option value="30">{t('last30d')}</option>
+            <option value="90">{t('last90d')}</option>
           </select>
           <div className="ocl-tabs" role="tablist">
             {(['models', 'days', 'sessions'] as const).map((entry) => (
@@ -154,6 +154,10 @@ export function UsageAnalyticsView(props: {
           </div>
         </div>
       </div>
+
+      {analytics.truncated === true
+        ? <p className="ocl-hint">{t('analyticsTruncated')}</p>
+        : null}
 
       <div className="ocl-kpi-grid">
         <Kpi label={t('requests')} value={String(summary.requests)} />

@@ -11,6 +11,7 @@ export interface PublicConfig {
   requestTimeoutMs: number
   streamIdleTimeoutMs: number
   visibleModels: readonly string[]
+  showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
   filterModelsByPlan: boolean
   contextWindow: number | null
@@ -309,6 +310,8 @@ export interface AnalyticsReport {
   summary: AnalyticsSummary
   days: DayUsageRow[]
   sessions: SessionUsageRow[]
+  truncated?: boolean
+  totalFiles?: number
   heatmap?: RequestHeatmap
 }
 

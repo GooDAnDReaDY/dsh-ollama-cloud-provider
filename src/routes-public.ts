@@ -11,6 +11,7 @@ export interface PublicConfig {
   requestTimeoutMs: number
   streamIdleTimeoutMs: number
   visibleModels: readonly string[]
+  showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
   filterModelsByPlan: boolean
   contextWindow: number | null
@@ -38,6 +39,7 @@ export function publicConfig(config: ResolvedConfig): PublicConfig {
     requestTimeoutMs: config.requestTimeoutMs,
     streamIdleTimeoutMs: config.streamIdleTimeoutMs,
     visibleModels: config.visibleModels,
+    showAllModels: config.showAllModels,
     modelVisibility: config.modelVisibility,
     filterModelsByPlan: config.filterModelsByPlan,
     contextWindow: config.contextWindow ?? null,

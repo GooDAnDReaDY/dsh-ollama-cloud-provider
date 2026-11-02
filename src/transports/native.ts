@@ -161,4 +161,5 @@ export async function* parseNativeStream(
   if (!sawContent) {
     throw new LlmError('Ollama Cloud returned an empty stream', 'EMPTY_RESPONSE')
   }
+  throw new LlmError('Ollama Cloud stream ended before done:true', 'TRANSPORT')
 }

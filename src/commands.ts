@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-commands'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 
 import type { OllamaCloudAdapter } from './adapter.ts'
 import { effectiveModel } from './catalog.ts'
@@ -113,18 +114,27 @@ async function modelsText(deps: CommandDeps): Promise<string> {
 async function testText(deps: CommandDeps, model: string): Promise<{ ok: boolean; text: string }> {
   const started = Date.now()
   let text = ''
+  let reasoning = ''
   try {
     for await (const chunk of deps.adapter.stream({
       provider: PROVIDER,
       model,
       messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply with exactly OK.' }] }],
-      maxTokens: 16,
+      reasoningEffort: ReasoningEffortId('off'),
+      maxTokens: 64,
     })) {
       if (chunk.type === 'text-delta') text += chunk.text
+      else if (chunk.type === 'reasoning-delta') reasoning += chunk.text
+    }
+    if (text === '') {
+      return {
+        ok: false,
+        text: `${model}: empty reply${reasoning === '' ? '' : ` (reasoning only: ${reasoning.slice(0, 80)})`}`,
+      }
     }
     return {
       ok: true,
-      text: `${model}: OK in ${Date.now() - started} ms${text === '' ? '' : ` · ${text.slice(0, 80)}`}`,
+      text: `${model}: OK in ${Date.now() - started} ms · ${text.slice(0, 80)}`,
     }
   } catch (error) {
     return {

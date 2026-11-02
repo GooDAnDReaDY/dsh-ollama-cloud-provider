@@ -36,6 +36,11 @@ interface TagsPayload {
 const liveMeta = new Map<string, OllamaCloudModelMeta>()
 const cache = new Map<string, { at: number; ids: readonly string[] }>()
 const inflight = new Map<string, Promise<readonly string[]>>()
+let generation = 0
+
+function liveKey(base: string, id: string): string {
+  return `${base}|${id}`
+}
 
 const FALLBACK_META: OllamaCloudModelMeta = {
   id: '',
@@ -120,15 +125,22 @@ function metaFromLive(entry: LiveModel, caps: Set<string> | undefined): OllamaCl
   }
 }
 
-/** Replace the in-memory live metadata with one successful catalog response. */
-function adoptLive(models: readonly LiveModel[], tags: TagsPayload | undefined): string[] {
+/** Replace the in-memory live metadata for one API base with one successful response. */
+function adoptLive(models: readonly LiveModel[], tags: TagsPayload | undefined, base: string): string[] {
   const caps = capabilitiesByModel(tags)
   const ids: string[] = []
   for (const entry of models) {
     const meta = metaFromLive(entry, caps.get(str(entry.slug) ?? ''))
     if (meta.id === '') continue
-    liveMeta.set(meta.id, meta)
+    liveMeta.set(liveKey(base, meta.id), meta)
     ids.push(meta.id)
+  }
+  const keep = new Set(ids)
+  const prefix = `${base}|`
+  for (const key of liveMeta.keys()) {
+    if (!key.startsWith(prefix)) continue
+    const id = key.slice(prefix.length)
+    if (!keep.has(id)) liveMeta.delete(key)
   }
   return ids
 }
@@ -170,7 +182,7 @@ export async function refreshCatalog(
     if (Date.now() - cached.at >= CATALOG_TTL_MS) refreshInBackground(config, fetchImpl, key)
     return cached.ids
   }
-  return refreshNow(config, fetchImpl, key, cached !== undefined)
+  return refreshNow(config, fetchImpl, key, cached !== undefined, generation)
 }
 
 async function refreshNow(
@@ -178,18 +190,20 @@ async function refreshNow(
   fetchImpl: typeof fetch,
   key: string,
   keepOnFailure: boolean,
+  epoch: number,
 ): Promise<readonly string[]> {
   const signal = AbortSignal.timeout(CATALOG_TIMEOUT_MS)
   const [modelsResult, tagsResult] = await Promise.allSettled([
     fetchJson(modelsUrlFor(config), config, fetchImpl, signal),
     fetchJson(tagsUrlFor(config), config, fetchImpl, signal),
   ])
+  if (epoch !== generation) return Object.keys(GENERATED_MODELS)
   if (modelsResult.status === 'fulfilled') {
     const payload = modelsResult.value as ModelsPayload
     const tags = tagsResult.status === 'fulfilled' ? tagsResult.value as TagsPayload : undefined
     const live = Array.isArray(payload.models) ? payload.models : []
     if (live.length > 0) {
-      const ids = adoptLive(live, tags)
+      const ids = adoptLive(live, tags, key)
       if (ids.length > 0) {
         cache.set(key, { at: Date.now(), ids })
         return ids
@@ -199,6 +213,9 @@ async function refreshNow(
       ? payload.data.map((entry) => str(entry.id)).filter((id): id is string => id !== undefined)
       : []
     if (fromData.length > 0) {
+      for (const liveKey of liveMeta.keys()) {
+        if (liveKey.startsWith(`${key}|`)) liveMeta.delete(liveKey)
+      }
       cache.set(key, { at: Date.now(), ids: fromData })
       return fromData
     }
@@ -208,7 +225,7 @@ async function refreshNow(
     if (stale !== undefined) return stale.ids
   }
   const fallback = Object.keys(GENERATED_MODELS)
-  cache.set(key, { at: Date.now(), ids: fallback })
+  if (epoch === generation) cache.set(key, { at: Date.now(), ids: fallback })
   return fallback
 }
 
@@ -218,7 +235,8 @@ function refreshInBackground(
   key: string,
 ): void {
   if (inflight.has(key)) return
-  const task = refreshNow(config, fetchImpl, key, true)
+  const epoch = generation
+  const task = refreshNow(config, fetchImpl, key, true, epoch)
     .catch(() => cache.get(key)?.ids ?? Object.keys(GENERATED_MODELS))
     .finally(() => { inflight.delete(key) })
   inflight.set(key, task)
@@ -226,12 +244,14 @@ function refreshInBackground(
 }
 
 export function clearCatalogCache(): void {
+  generation += 1
   cache.clear()
   inflight.clear()
+  liveMeta.clear()
 }
 
-export function baseMeta(id: string): OllamaCloudModelMeta {
-  const meta = liveMeta.get(id) ?? GENERATED_MODELS[id]
+export function baseMeta(id: string, base: string): OllamaCloudModelMeta {
+  const meta = liveMeta.get(liveKey(base, id)) ?? GENERATED_MODELS[id]
   return meta === undefined ? { ...FALLBACK_META, id, name: id } : meta
 }
 
@@ -240,7 +260,7 @@ export interface EffectiveModel extends OllamaCloudModelMeta {
 }
 
 export function effectiveModel(id: string, config: ResolvedConfig): EffectiveModel {
-  const meta = baseMeta(id)
+  const meta = baseMeta(id, config.apiBase)
   return {
     ...meta,
     transport: config.modelTransports[id] ?? config.transport,
@@ -259,13 +279,13 @@ export function effectiveMaxTokens(meta: OllamaCloudModelMeta, config: ResolvedC
 export function modelVisible(id: string, config: ResolvedConfig): boolean {
   const override = config.modelVisibility[id]
   if (override !== undefined) return override
-  if (config.visibleModels.length === 0) return true
+  if (config.showAllModels) return true
   return config.visibleModels.includes(id)
 }
 
 export function modelAvailable(id: string, config: ResolvedConfig): boolean {
   if (!config.filterModelsByPlan) return true
-  return baseMeta(id).available !== false
+  return baseMeta(id, config.apiBase).available !== false
 }
 
 export function sortForPicker(

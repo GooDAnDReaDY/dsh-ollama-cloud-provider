@@ -153,7 +153,6 @@ export async function readRequestHeatmap(days: number, now = Date.now()): Promis
     ttftSum: number
     ttftCount: number
   }>()
-  const seen = new Set<string>()
   let total = 0
   let firstAt: number | null = null
   let lastAt: number | null = null
@@ -190,9 +189,6 @@ export async function readRequestHeatmap(days: number, now = Date.now()): Promis
       && (parsed as { account: string }).account !== ''
       ? (parsed as { account: string }).account
       : 'unknown'
-    const key = `${at}|${provider}|${model}|${account}`
-    if (seen.has(key)) continue
-    seen.add(key)
 
     const date = new Date(at)
     const hour = date.getHours()

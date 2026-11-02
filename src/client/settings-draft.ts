@@ -42,9 +42,9 @@ export function draftOf(state: HostState): Draft {
     accounts: state.config.accounts.map((account) => ({ ...account })),
     modelAccountRules: state.config.modelAccountRules.map((rule) => ({ ...rule })),
     stickySession: state.config.stickySession,
-    visibleModels: state.config.visibleModels.length === 0 ? allIds : [...state.config.visibleModels],
+    visibleModels: state.config.showAllModels ? allIds : [...state.config.visibleModels],
     filterModelsByPlan: state.config.filterModelsByPlan,
-    showAll: state.config.visibleModels.length === 0,
+    showAll: state.config.showAllModels,
     modelTransports: { ...state.config.modelTransports },
   }
 }
@@ -80,6 +80,7 @@ export function patchOf(draft: Draft): Record<string, unknown> {
       .filter((rule) => rule.pattern !== '' && rule.account !== ''),
     stickySession: draft.stickySession,
     visibleModels: draft.showAll ? [] : draft.visibleModels,
+    showAllModels: draft.showAll,
     filterModelsByPlan: draft.filterModelsByPlan,
     modelTransports: Object.fromEntries(
       Object.entries(draft.modelTransports).filter(([, value]) => value !== ''),
@@ -97,4 +98,9 @@ export function safeSame(a: Draft, b: Draft): boolean {
   } catch {
     return false
   }
+}
+
+/** Refresh may keep an unsaved draft, but a config save replaces it. */
+export function mergeLoadedDraft(current: Draft | null, next: Draft, preserve: boolean): Draft {
+  return preserve && current !== null ? current : next
 }
