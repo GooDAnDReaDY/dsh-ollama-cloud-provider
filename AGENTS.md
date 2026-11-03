@@ -31,8 +31,9 @@ stop and ask the owner before changing anything.
 - Created and checked: yes, `index.md`.
 - Entry points: `src/index.ts` (plugin), `src/client/index.tsx` (settings and
   sidebar UI), `cordis.patch.yml` (plugin manifest).
-- Navigation: `index.md`; detailed design in `@docs/design/DESIGN.md`;
-  test-server procedure in `@docs/testing/test-server.md`.
+- `index.md`; detailed design in `@docs/design/DESIGN.md`;
+  test-server procedure in `@docs/testing/test-server.md`; private-read role
+  policy in `@docs/security/roles.md`.
 
 ## Essential Files
 
