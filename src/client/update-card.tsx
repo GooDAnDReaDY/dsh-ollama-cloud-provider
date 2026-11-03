@@ -37,6 +37,29 @@ export function PluginUpdateCard(props: { t: (key: string) => string }): ReactNo
   }
 
   return (
+    <PluginUpdateCardView
+      status={status}
+      error={error}
+      busy={busy}
+      notice={notice}
+      t={t}
+      onRetry={load}
+      onUpdate={update}
+    />
+  )
+}
+
+export function PluginUpdateCardView(props: {
+  status: UpdateStatus | null
+  error: string | null
+  busy: boolean
+  notice: string | null
+  t: (key: string) => string
+  onRetry: () => void
+  onUpdate: () => void
+}): ReactNode {
+  const { status, error, busy, notice, t, onRetry, onUpdate } = props
+  return (
     <section className="ocl-card">
       <h3 className="ocl-card-title">
         {t('pluginUpdate')}
@@ -58,7 +81,7 @@ export function PluginUpdateCard(props: { t: (key: string) => string }): ReactNo
             ? (
                 <p className="ocl-hint">
                   {t('updateCheckFailed')}
-                  <button type="button" className="ocl-button" onClick={load}>{t('retry')}</button>
+                  <button type="button" className="ocl-button" onClick={onRetry}>{t('retry')}</button>
                 </p>
               )
             : null}
@@ -67,7 +90,7 @@ export function PluginUpdateCard(props: { t: (key: string) => string }): ReactNo
               type="button"
               className="ocl-button"
               disabled={busy || !canInstallUpdate(status)}
-              onClick={update}
+              onClick={onUpdate}
             >
               {busy ? t('updating') : t('updateNow')}
             </button>

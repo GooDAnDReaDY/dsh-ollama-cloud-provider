@@ -29,6 +29,7 @@ the previous release.
 - `@AGENTS.md` — project rules and constraints.
 - `@docs/design/DESIGN.md` — design contract.
 - `@docs/testing/test-server.md` — approved DSH test-server checks.
+- `@docs/security/roles.md` — private-read host/role policy.
 - `@README.md` — user-facing setup and usage.
 
 ## Deployment
