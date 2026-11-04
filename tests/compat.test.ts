@@ -10,7 +10,7 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
   devDependencies: Record<string, string>
 }
 
-const range = '0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.2-0'
+const range = '0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0'
 
 test('compatibility declarations use the same-channel range', () => {
   assert.equal(pkg.dsh.compatibility.dsh, range)
@@ -22,9 +22,17 @@ test('compatibility declarations use the same-channel range', () => {
 
 test('every tested release is inside the declared range and all dev packages agree', () => {
   const releases = Object.keys(pkg.dsh.compatibility.dshReleases)
-  assert.deepEqual(releases.sort(), ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4'])
+  assert.deepEqual(releases.sort(), [
+    '0.2.0-rc.2',
+    '0.2.1-rc.2',
+    '0.2.1-rc.3',
+    '0.2.1-rc.4',
+    '0.2.2-alpha.2',
+    '0.2.2-alpha.3',
+    '0.2.2-rc.1',
+  ])
   for (const release of releases) {
-    assert.match(release, /^(?:0\.2\.0-rc\.2|0\.2\.1-rc\.\d+)$/)
+    assert.match(release, /^(?:0\.2\.0-rc\.2|0\.2\.1-rc\.\d+|0\.2\.2-(?:alpha|rc)\.\d+)$/)
     assert.equal(pkg.dsh.compatibility.dshReleases[release], 'compatible')
   }
   const versions = new Set(
@@ -32,6 +40,6 @@ test('every tested release is inside the declared range and all dev packages agr
       .filter(([name]) => name.startsWith('@deepseek-ai/dsh'))
       .map(([, value]) => value),
   )
-  assert.deepEqual([...versions], ['0.2.1-rc.4'])
-  assert.ok(releases.includes('0.2.1-rc.4'))
+  assert.deepEqual([...versions], ['0.2.2-rc.1'])
+  assert.ok(releases.includes('0.2.2-rc.1'))
 })

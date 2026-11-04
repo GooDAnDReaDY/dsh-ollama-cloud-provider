@@ -16,8 +16,7 @@ bundle `zod`.
 ## Dependency trees
 
 - Development tree: DSH `0.2.1-rc.4` packages pin `zod@4.4.3` exactly.
-- `@deepseek-ai/dsh-llm@0.2.1-rc.5` also pins `zod@4.4.3`.
-- `@deepseek-ai/dsh-llm@0.2.2-alpha.2` also pins `zod@4.4.3`.
+- `@deepseek-ai/dsh-llm@0.2.1-rc.5`, `0.2.2-alpha.2/3` and `0.2.2-rc.1` also pin `zod@4.4.3`.
 - Production tree: `npm audit --omit=dev --package-lock-only` reports
   `high: 0, total: 0`.
 

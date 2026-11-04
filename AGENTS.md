@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.15 is verified on the production Web host and Desktop;
-  0.1.14 is the previous release.
+  0.1.16 adds the DSH 0.2.2 compatibility range.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -124,7 +124,7 @@ stop and ask the owner before changing anything.
 ## Dependencies
 
 - Node.js >= 22.
-- DSH `0.2.1-rc.*` peer packages; see `package.json`.
+- DSH `0.2.0-rc.2` and the `0.2.1`/`0.2.2` RC lines; see `package.json`.
 - No runtime npm dependencies; all DSH packages are peers.
 - Dev-only `zod` is an exact pin inside the DSH core packages. The plugin has
   no runtime npm dependencies, and the production tree reports no advisories.

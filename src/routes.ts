@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef, type CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import type { WebServer } from '@deepseek-ai/dsh-host-webserver'
+import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
 import { ReasoningEffortId, type GenerateOptions } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-settings'
 
@@ -435,7 +435,7 @@ async function refreshAndState(ctx: Context, deps: RouteDeps, res: ServerRespons
 export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void {
   const disposers: Array<() => void> = []
   const verifyHost = deps.verifyHost ?? deps.verifyDesktop ?? defaultVerifyHost
-  const route = (path: string, handler: Parameters<WebServer['register']>[0]['handler']): void => {
+  const route = (path: string, handler: WebRoute['handler']): void => {
     disposers.push(web.register({ kind: 'exact', path, handler }))
   }
   const readOnly = (req: IncomingMessage, res: ServerResponse): boolean => {

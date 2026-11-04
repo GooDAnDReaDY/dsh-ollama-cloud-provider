@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.16 — 2026-11-04
+
+- Added DSH 0.2.2 support: `0.2.2-alpha.2`, `0.2.2-alpha.3` and `0.2.2-rc.1`
+  are in `compatibility.dshReleases`; the accepted range is now
+  `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0` in `engines.dsh`,
+  `compatibility.dsh` and every DSH peer dependency.
+- Added the Cordis and Schemastery generations used by 0.2.2:
+  `~4.0.6-alpha.1`/`~4.1.0` and `~3.18.6-alpha.1`/`~3.19.0`.
+- Adapted host route registration to the 0.2.2 `WebRoute | WebResourceRoute`
+  union; command handlers use `WebRoute['handler']` without changing runtime
+  behavior.
+- Verified 0.2.2-alpha.3 and 0.2.2-alpha.2 with typecheck/build and the key
+  runtime suites; 0.2.2-rc.1 passes the full 99-test suite, typecheck and build.
+
 ## 0.1.15 — 2026-11-02
 
 - Desktop write requests are no longer accepted from a cookie name and a
