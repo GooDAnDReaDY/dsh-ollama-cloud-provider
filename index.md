@@ -7,8 +7,8 @@ key pool, quota/usage cards, analytics, settings page, and service status.
 
 ## Status
 
-Active. 0.1.15 is verified on the production Web host and Desktop; 0.1.16 adds
-the DSH 0.2.2 compatibility range.
+Active. 0.1.16 is verified on the production Web host and Desktop
+(DSH 0.2.1-rc.4); it adds the DSH 0.2.2 compatibility range.
 
 ## Entry Points
 
