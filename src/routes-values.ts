@@ -1,4 +1,4 @@
-import type { ManualModel, ModelPriceOverride, TransportId } from './config.ts'
+import type { ManualModel, ModelOverride, ModelPriceOverride, TransportId } from './config.ts'
 
 const TRANSPORTS = new Set<TransportId>(['native', 'openai-chat'])
 
@@ -82,6 +82,36 @@ export function cleanManualModels(value: unknown): ManualModel[] {
         : {}),
       ...(typeof record.tools === 'boolean' ? { tools: record.tools } : {}),
     })
+  }
+  return out
+}
+
+export function cleanModelOverrides(value: unknown): Record<string, ModelOverride> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  const out: Record<string, ModelOverride> = {}
+  for (const [id, entry] of Object.entries(value)) {
+    if (id === '' || id.includes('..') || typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
+    const record = entry as Record<string, unknown>
+    const efforts = Array.isArray(record.reasoningEfforts)
+      ? record.reasoningEfforts.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+      : undefined
+    const thinking = typeof record.thinking === 'boolean' ? record.thinking : undefined
+    const normalizedEfforts = thinking === true && (efforts === undefined || efforts.length === 0)
+      ? ['off', 'high']
+      : thinking === false ? [] : efforts
+    const outEntry: ModelOverride = {
+      ...(typeof record.contextWindow === 'number' && Number.isInteger(record.contextWindow) && record.contextWindow > 0
+        ? { contextWindow: record.contextWindow }
+        : {}),
+      ...(typeof record.image === 'boolean' ? { image: record.image } : {}),
+      ...(thinking === undefined ? {} : { thinking }),
+      ...(normalizedEfforts === undefined ? {} : { reasoningEfforts: normalizedEfforts }),
+      ...(typeof record.defaultEffort === 'string' && record.defaultEffort.trim() !== ''
+        ? { defaultEffort: record.defaultEffort.trim() }
+        : {}),
+      ...(typeof record.enabled === 'boolean' ? { enabled: record.enabled } : {}),
+    }
+    if (Object.keys(outEntry).length > 0) out[id] = outEntry
   }
   return out
 }

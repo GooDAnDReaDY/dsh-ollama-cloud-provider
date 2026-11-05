@@ -410,6 +410,42 @@ test('manual thinking=false clears inherited reasoning', () => {
   assert.equal(meta.tools, true)
 })
 
+test('per-model overrides win over manual entries and can disable a model', () => {
+  const config = resolveConfig({
+    apiKey: 'k',
+    showAllModels: true,
+    manualModels: [{
+      id: 'gpt-oss:120b',
+      name: 'Manual Name',
+      contextWindow: 64000,
+      image: true,
+      thinking: true,
+      reasoningEfforts: ['off', 'high'],
+      defaultReasoning: 'high',
+    }],
+    modelOverrides: {
+      'gpt-oss:120b': {
+        contextWindow: 32768,
+        image: false,
+        thinking: false,
+        reasoningEfforts: [],
+        defaultEffort: 'low',
+        enabled: false,
+      },
+    },
+  })
+  const meta = effectiveModel('gpt-oss:120b', config)
+  assert.equal(meta.name, 'Manual Name')
+  assert.equal(meta.contextWindow, 32768)
+  assert.deepEqual(meta.input, ['text'])
+  assert.deepEqual(meta.reasoning, [])
+  assert.equal(meta.reasoningToggle, false)
+  assert.equal(meta.defaultReasoning, 'low')
+  assert.equal(meta.available, false)
+  assert.equal(modelAvailable('gpt-oss:120b', config), false)
+  assert.deepEqual(sortForPicker(['gpt-oss:120b'], config), [])
+})
+
 test('pricing resolves exact ids, base tags and off-peak rates', () => {
   assert.equal(priceFor('gpt-oss:120b').input, 0.15)
   assert.equal(priceFor('gpt-oss').priced, true)

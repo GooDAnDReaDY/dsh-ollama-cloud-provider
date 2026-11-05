@@ -22,6 +22,7 @@ import { LocalModelsCard } from './local-models-card.tsx'
 import { CONFIG_CHANGED_EVENT } from './events.ts'
 import { accountMark, Field } from './settings-widgets.tsx'
 import { groupModels, reorderIds } from './model-groups.ts'
+import { ModelOverrideEditor } from './model-override-editor.tsx'
 import { PluginUpdateCard } from './update-card.tsx'
 import { UsageBars } from './usage-bars.tsx'
 
@@ -33,10 +34,11 @@ export function ModelEntry(props: {
   onTransport: (transport: TransportId | '') => void
   onDragStart?: () => void
   onDrop?: () => void
+  onEdit?: () => void
   dragging?: boolean
   t: (key: string) => string
 }): ReactNode {
-  const { model, visible, transport, onVisible, onTransport, onDragStart, onDrop, dragging, t } = props
+  const { model, visible, transport, onVisible, onTransport, onDragStart, onDrop, onEdit, dragging, t } = props
   return (
     <div
       className={`ocl-model${dragging === true ? ' ocl-dragging' : ''}`}
@@ -66,6 +68,7 @@ export function ModelEntry(props: {
           : null}
         {model.available ? null : <span className="ocl-badge ocl-badge-warn"> {t('unavailable')}</span>}
       </span>
+      <button type="button" className="ocl-button" onClick={onEdit}>{t('edit')}</button>
       <select
         className="ocl-select"
         value={transport === '' ? model.transport : transport}
@@ -93,6 +96,7 @@ export function OllamaCloudSettingsPage(props: {
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
+  const [editingModel, setEditingModel] = useState<string | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [keyDraft, setKeyDraft] = useState('')
   const [accountKeys, setAccountKeys] = useState<Record<string, string>>({})
@@ -652,6 +656,7 @@ export function OllamaCloudSettingsPage(props: {
                         if (dragId !== null) moveModel(dragId, model.id)
                         setDragId(null)
                       }}
+                      onEdit={() => setEditingModel(model.id)}
                       onVisible={(visible) => toggleModel(model.id, visible)}
                       onTransport={(transport) => {
                         const next = { ...draft.modelTransports }
@@ -666,6 +671,18 @@ export function OllamaCloudSettingsPage(props: {
               ))}
         </div>
       </section>
+
+      {editingModel !== null && state.models.some((model) => model.id === editingModel) && (
+        <section className="ocl-card">
+          <ModelOverrideEditor
+            model={state.models.find((model) => model.id === editingModel)!}
+            draft={draft}
+            t={t}
+            update={update}
+            close={() => setEditingModel(null)}
+          />
+        </section>
+      )}
 
       <section className="ocl-card">
         <h3 className="ocl-card-title">

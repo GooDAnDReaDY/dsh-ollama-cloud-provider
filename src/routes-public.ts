@@ -1,4 +1,4 @@
-import type { ManualModel, ModelPriceOverride, ResolvedConfig, TransportId } from './config.ts'
+import type { ManualModel, ModelOverride, ModelPriceOverride, ResolvedConfig, TransportId } from './config.ts'
 
 export interface PublicConfig {
   apiKeyEnv: string
@@ -15,6 +15,7 @@ export interface PublicConfig {
   showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
   manualModels: readonly ManualModel[]
+  modelOverrides: Readonly<Record<string, ModelOverride>>
   modelOrder: readonly string[]
   filterModelsByPlan: boolean
   contextWindow: number | null
@@ -58,6 +59,7 @@ export function publicConfig(config: ResolvedConfig): PublicConfig {
     showAllModels: config.showAllModels,
     modelVisibility: config.modelVisibility,
     manualModels: config.manualModels,
+    modelOverrides: config.modelOverrides,
     modelOrder: config.modelOrder,
     filterModelsByPlan: config.filterModelsByPlan,
     contextWindow: config.contextWindow ?? null,

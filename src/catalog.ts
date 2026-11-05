@@ -364,22 +364,27 @@ export function manualModelFor(id: string, config: ResolvedConfig): ManualModel 
 export function effectiveModel(id: string, config: ResolvedConfig): EffectiveModel {
   const meta = baseMeta(id, config.apiBase)
   const manual = manualModelFor(id, config)
+  const override = config.modelOverrides[id]
   return {
     ...meta,
     name: manual?.name ?? meta.name,
     transport: config.modelTransports[id] ?? config.transport,
-    contextWindow: config.contextWindowOverrides[id] ?? manual?.contextWindow ?? config.contextWindow ?? meta.contextWindow,
+    contextWindow: config.contextWindowOverrides[id]
+      ?? override?.contextWindow
+      ?? manual?.contextWindow
+      ?? config.contextWindow
+      ?? meta.contextWindow,
     maxTokens: manual?.maxTokens ?? meta.maxTokens,
-    input: manual?.image === true
+    input: (override?.image ?? manual?.image) === true
       ? ['text', 'image']
-      : manual?.image === false ? ['text'] : meta.input,
-    reasoning: manual?.reasoningEfforts ?? meta.reasoning,
-    reasoningToggle: manual?.thinking ?? meta.reasoningToggle,
-    ...((manual?.defaultReasoning ?? meta.defaultReasoning) === undefined
+      : (override?.image ?? manual?.image) === false ? ['text'] : meta.input,
+    reasoning: override?.reasoningEfforts ?? manual?.reasoningEfforts ?? meta.reasoning,
+    reasoningToggle: override?.thinking ?? manual?.thinking ?? meta.reasoningToggle,
+    ...((override?.defaultEffort ?? manual?.defaultReasoning ?? meta.defaultReasoning) === undefined
       ? {}
-      : { defaultReasoning: manual?.defaultReasoning ?? meta.defaultReasoning }),
+      : { defaultReasoning: override?.defaultEffort ?? manual?.defaultReasoning ?? meta.defaultReasoning }),
     tools: manual?.tools ?? meta.tools,
-    available: manual?.enabled === false ? false : meta.available,
+    available: override?.enabled === false || manual?.enabled === false ? false : meta.available,
   }
 }
 
@@ -400,7 +405,7 @@ export function modelVisible(id: string, config: ResolvedConfig): boolean {
 
 export function modelAvailable(id: string, config: ResolvedConfig): boolean {
   const manual = manualModelFor(id, config)
-  if (manual?.enabled === false) return false
+  if (config.modelOverrides[id]?.enabled === false || manual?.enabled === false) return false
   if (!config.filterModelsByPlan) return true
   return effectiveModel(id, config).available !== false
 }
