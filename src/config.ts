@@ -6,7 +6,7 @@ export const DEFAULT_API_BASE = 'https://ollama.com'
 export const DEFAULT_OPENAI_BASE = 'https://ollama.com/v1'
 export const DEFAULT_USAGE_URL = 'https://ollama.com/api/usage'
 export const DEFAULT_BALANCE_URL = 'https://ollama.com/api/balance'
-export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.21'
+export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.22'
 export const DEFAULT_CONTEXT_WINDOW = 131_072
 export const DEFAULT_MAX_TOKENS = 32_768
 export const DEFAULT_GENERATE_MAX_TOKENS = 131_072
@@ -55,6 +55,8 @@ export interface Config {
   requestTimeoutMs?: number
   /** Milliseconds a stream may stall; defaults to 300s. */
   streamIdleTimeoutMs?: number
+  /** Whole-attempt budget; 0 disables the independent budget. */
+  attemptTimeoutMs?: number
   /** Visible-model allowlist; empty with `showAllModels:false` means none. */
   visibleModels?: string[]
   /** Explicit all-models switch; absent means derive from `visibleModels`. */
@@ -118,6 +120,7 @@ export const Config: z<Config> = z.object({
   modelTransports: markVolatile(z.dict(z.union(['native', 'openai-chat'])).default({})),
   requestTimeoutMs: markVolatile(z.number().min(1).max(2_147_483_647).default(300_000)),
   streamIdleTimeoutMs: markVolatile(z.number().min(1).max(2_147_483_647).default(300_000)),
+  attemptTimeoutMs: markVolatile(z.number().min(0).max(3_600_000).step(1).default(0)),
   visibleModels: markVolatile(z.array(z.string()).default([])),
   showAllModels: markVolatile(z.boolean()),
   modelVisibility: markVolatile(z.dict(z.boolean()).default({})),
@@ -169,6 +172,7 @@ export interface ResolvedConfig {
   modelTransports: Readonly<Record<string, TransportId>>
   requestTimeoutMs: number
   streamIdleTimeoutMs: number
+  attemptTimeoutMs: number
   visibleModels: readonly string[]
   showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
@@ -327,6 +331,12 @@ export function resolveConfig(config: Config): ResolvedConfig {
     modelTransports: transportRecord(config.modelTransports),
     requestTimeoutMs: positiveInt(config.requestTimeoutMs, 300_000),
     streamIdleTimeoutMs: positiveInt(config.streamIdleTimeoutMs, 300_000),
+    attemptTimeoutMs: typeof config.attemptTimeoutMs === 'number'
+      && Number.isInteger(config.attemptTimeoutMs)
+      && config.attemptTimeoutMs >= 0
+      && config.attemptTimeoutMs <= 3_600_000
+      ? config.attemptTimeoutMs
+      : 0,
     visibleModels,
     showAllModels: config.showAllModels === true
       ? true

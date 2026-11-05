@@ -18,6 +18,12 @@ import {
   showLocalModel,
 } from './local-models.ts'
 import { isLocalEndpoint } from './model-probe.ts'
+import {
+  clearContextOverride,
+  describeContext,
+  parseContextValue,
+  setContextOverride,
+} from './context-override.ts'
 
 export interface CommandDeps {
   readonly config: () => ResolvedConfig
@@ -296,6 +302,33 @@ export function applyCommands(ctx: Context, deps: CommandDeps): void {
             text: `Unknown /ollama argument "${verb}". Use status, usage, balance, accounts, models, rules, test [model], or local.`,
           }
       }
+    },
+  })
+
+  ctx.commands.register({
+    name: 'ollama-context',
+    description: 'Set the native Ollama context size for this session',
+    input: { hint: 'status | 4k | 8k | 16k | 32k | 64k | 128k | <tokens> | follow | reset' },
+    handler: async (invocation) => {
+      const config = deps.config()
+      const sessionId = invocation.agent.id
+      const raw = invocation.rawInput.trim()
+      const value = parseContextValue(raw)
+      if (raw !== '' && raw.toLowerCase() !== 'status' && value === undefined) {
+        return {
+          kind: 'error',
+          text: 'Usage: /ollama-context status | 4k | 8k | 16k | 32k | 64k | 128k | <tokens> | follow | reset',
+        }
+      }
+      if (value === 'reset') {
+        clearContextOverride(sessionId)
+        return { kind: 'success', text: `${describeContext(config, sessionId)}\nSession override cleared.` }
+      }
+      if (value !== undefined) {
+        setContextOverride(sessionId, value)
+        return { kind: 'success', text: describeContext(config, sessionId) }
+      }
+      return { kind: 'success', text: describeContext(config, sessionId) }
     },
   })
 }

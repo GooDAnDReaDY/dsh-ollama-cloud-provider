@@ -346,6 +346,15 @@ test('generation defaults merge into native and OpenAI bodies with request prece
   assert.equal(overridden.options?.temperature, 0.2)
   assert.deepEqual(overridden.options?.stop, ['STOP'])
 
+  const sessionCtx = buildNativeBody(
+    base,
+    effectiveModel(base.model, resolveConfig({ apiKey: 'k', numCtx: 8192 })),
+    resolveConfig({ apiKey: 'k', numCtx: 8192 }),
+    undefined,
+    16384,
+  ) as { options?: Record<string, unknown> }
+  assert.equal(sessionCtx.options?.num_ctx, 16384)
+
   const openai = buildChatBody(base, effectiveModel(base.model, tuned), tuned) as Record<string, unknown>
   assert.equal(openai.temperature, 0.7)
   assert.equal(openai.top_p, 0.9)

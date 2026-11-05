@@ -177,6 +177,7 @@ export function buildNativeBody(
   model: EffectiveModel,
   config: ResolvedConfig,
   images?: ImageMap,
+  numCtxOverride?: number,
 ): Record<string, unknown> {
   const tools = buildTools(options.tools)
   const maxTokens = options.maxTokens ?? effectiveMaxTokens(model, config)
@@ -186,6 +187,7 @@ export function buildNativeBody(
   )
   const temperature = options.temperature ?? config.temperature
   const stop = options.stop ?? config.stop
+  const numCtx = numCtxOverride ?? config.numCtx
   const nativeOptions: Record<string, unknown> = {
     ...(temperature === undefined ? {} : { temperature }),
     ...(config.topK === undefined ? {} : { top_k: config.topK }),
@@ -194,7 +196,7 @@ export function buildNativeBody(
     ...(config.seed === undefined ? {} : { seed: config.seed }),
     ...(config.repeatPenalty === undefined ? {} : { repeat_penalty: config.repeatPenalty }),
     ...(config.repeatLastN === undefined ? {} : { repeat_last_n: config.repeatLastN }),
-    ...(config.numCtx === undefined ? {} : { num_ctx: config.numCtx }),
+    ...(numCtx === undefined ? {} : { num_ctx: numCtx }),
     ...(maxTokens === undefined || maxTokens <= 0 ? {} : { num_predict: maxTokens }),
     ...(stop === undefined || stop.length === 0 ? {} : { stop }),
   }

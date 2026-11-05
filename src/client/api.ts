@@ -10,6 +10,7 @@ export interface PublicConfig {
   modelTransports: Readonly<Record<string, TransportId>>
   requestTimeoutMs: number
   streamIdleTimeoutMs: number
+  attemptTimeoutMs: number
   visibleModels: readonly string[]
   showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>

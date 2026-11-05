@@ -9,6 +9,7 @@ export interface Draft {
   transport: TransportId
   requestTimeoutMs: string
   streamIdleTimeoutMs: string
+  attemptTimeoutMs: string
   maxOutputTokens: string
   contextWindow: string
   temperature: string
@@ -50,6 +51,7 @@ export function draftOf(state: HostState): Draft {
     transport: state.config.transport,
     requestTimeoutMs: String(state.config.requestTimeoutMs),
     streamIdleTimeoutMs: String(state.config.streamIdleTimeoutMs),
+    attemptTimeoutMs: String(state.config.attemptTimeoutMs ?? 0),
     maxOutputTokens: textOf(state.config.maxOutputTokens),
     contextWindow: textOf(state.config.contextWindow),
     temperature: textOf(state.config.temperature),
@@ -109,6 +111,7 @@ export function patchOf(draft: Draft): Record<string, unknown> {
     transport: draft.transport,
     requestTimeoutMs: numberOrNull(draft.requestTimeoutMs) ?? 300000,
     streamIdleTimeoutMs: numberOrNull(draft.streamIdleTimeoutMs) ?? 300000,
+    attemptTimeoutMs: boundedNumber(draft.attemptTimeoutMs, 0, 3_600_000, true) ?? 0,
     maxOutputTokens: numberOrNull(draft.maxOutputTokens),
     contextWindow: numberOrNull(draft.contextWindow),
     temperature: boundedNumber(draft.temperature, 0, 2, false),

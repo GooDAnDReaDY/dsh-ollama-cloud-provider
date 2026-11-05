@@ -8,6 +8,7 @@ import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 
 import { OllamaCloudAdapter } from '../src/adapter.ts'
 import { resolveConfig } from '../src/config.ts'
+import { clearContextOverride, setContextOverride } from '../src/context-override.ts'
 
 function paths(): { cooldownPath: string; stickyPath: string } {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-ollama-adapter-'))
@@ -35,6 +36,46 @@ const options: GenerateOptions = {
   model: 'gpt-oss:120b',
   messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
 }
+
+test('session context override reaches the native request body', async () => {
+  let body: { options?: { num_ctx?: number } } | undefined
+  const fetchImpl = (async (_url: string, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body)) as { options?: { num_ctx?: number } }
+    return ndjson(['{"message":{"role":"assistant","content":"ok"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k', numCtx: 8192 }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  try {
+    setContextOverride('session-context', 16384)
+    await collect(adapter.stream({ ...options, sessionId: 'session-context' as never }))
+    assert.equal(body?.options?.num_ctx, 16384)
+    clearContextOverride('session-context')
+    await collect(adapter.stream({ ...options, sessionId: 'session-context' as never }))
+    assert.equal(body?.options?.num_ctx, 8192)
+  } finally {
+    clearContextOverride('session-context')
+  }
+})
+
+test('per-attempt timeout aborts a stalled chat attempt', async () => {
+  const fetchImpl = (async (_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k', attemptTimeoutMs: 10, requestTimeoutMs: 5000 }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  await assert.rejects(
+    collect(adapter.stream(options)),
+    (error: unknown) => error instanceof Error && 'code' in error && error.code === 'TIMEOUT',
+  )
+})
 
 test('native stream emits thinking, text, usage and finish', async () => {
   const fetchImpl = (async () => ndjson([

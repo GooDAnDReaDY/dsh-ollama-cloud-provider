@@ -1,5 +1,7 @@
 import { WebError, type WebFetchProvider, type WebFetchRequest, type WebFetchResult, type WebSearchProvider, type WebSearchRequest, type WebSearchResult, type WebSearchSource } from '@deepseek-ai/dsh-web'
 
+import { createAttemptBudget } from './attempt.ts'
+
 export const OLLAMA_WEB_PROVIDER_ID = 'ollama-cloud'
 export const MAX_SEARCH_RESULTS = 10
 export const MAX_FETCH_CHARS = 256 * 1024
@@ -56,11 +58,6 @@ function isRedirectFailure(error: unknown): boolean {
   return false
 }
 
-function abortReason(caller: AbortSignal | undefined, own: AbortSignal): 'caller' | 'timeout' | undefined {
-  if (caller?.aborted === true) return 'caller'
-  return own.aborted ? 'timeout' : undefined
-}
-
 async function postOnce(
   options: OllamaWebOptions,
   url: string,
@@ -76,8 +73,7 @@ async function postOnce(
   }
   const fetchImpl = options.fetch ?? fetch
   const timeoutMs = options.timeoutMs ?? WEB_TIMEOUT_MS
-  const own = AbortSignal.timeout(timeoutMs)
-  const signal = caller === undefined ? own : AbortSignal.any([caller, own])
+  const budget = createAttemptBudget(timeoutMs, caller)
   let response: Response
   try {
     response = await fetchImpl(url, {
@@ -89,14 +85,14 @@ async function postOnce(
       },
       body: JSON.stringify(payload),
       redirect: 'error',
-      signal,
+      signal: budget.signal,
     })
   } catch (error) {
-    const reason = abortReason(caller, own)
-    if (reason === 'caller') {
+    budget.dispose()
+    if (budget.callerAborted) {
       throw new WebError('ollama-cloud web request aborted by caller', 'ABORTED', { cause: error })
     }
-    if (reason === 'timeout') {
+    if (budget.timedOut) {
       throw new WebError(`ollama-cloud web request timed out after ${timeoutMs}ms`, 'OLLAMA_WEB_TIMEOUT', { cause: error })
     }
     if (isRedirectFailure(error)) {
@@ -106,6 +102,7 @@ async function postOnce(
     throw new WebError(`could not reach ${url}${detail}`, 'OLLAMA_WEB_TRANSPORT', { cause: error })
   }
   if (!response.ok) {
+    budget.dispose()
     await response.body?.cancel()
     const hint = response.status === 401 || response.status === 403 ? '; check the API key' : ''
     throw new WebError(`${url} answered ${response.status}${hint}`, 'WEB_PROVIDER_ERROR')
@@ -113,7 +110,15 @@ async function postOnce(
   try {
     return { status: response.status, body: await response.json() }
   } catch (error) {
+    if (budget.callerAborted) {
+      throw new WebError('ollama-cloud web request aborted by caller', 'ABORTED', { cause: error })
+    }
+    if (budget.timedOut) {
+      throw new WebError(`ollama-cloud web request timed out after ${timeoutMs}ms`, 'OLLAMA_WEB_TIMEOUT', { cause: error })
+    }
     throw new WebError(`${url} did not answer with JSON`, 'OLLAMA_WEB_BAD_REPLY', { cause: error })
+  } finally {
+    budget.dispose()
   }
 }
 

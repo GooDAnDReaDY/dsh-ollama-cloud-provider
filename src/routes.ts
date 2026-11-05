@@ -285,6 +285,7 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
   if ('modelTransports' in patch) set('modelTransports', cleanTransports(patch.modelTransports))
   if ('requestTimeoutMs' in patch) set('requestTimeoutMs', patch.requestTimeoutMs)
   if ('streamIdleTimeoutMs' in patch) set('streamIdleTimeoutMs', patch.streamIdleTimeoutMs)
+  if ('attemptTimeoutMs' in patch) set('attemptTimeoutMs', patch.attemptTimeoutMs)
   if ('visibleModels' in patch) set('visibleModels', cleanStringArray(patch.visibleModels))
   if ('showAllModels' in patch) set('showAllModels', patch.showAllModels === true)
   if ('modelVisibility' in patch) set('modelVisibility', cleanBooleanRecord(patch.modelVisibility))
