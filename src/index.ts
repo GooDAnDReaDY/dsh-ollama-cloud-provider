@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-web'
 
 import { OllamaCloudAdapter } from './adapter.ts'
 import { setBestEffortLogger } from './best-effort.ts'
@@ -15,6 +16,7 @@ import { flushRequestLog, readRequestHeatmap } from './request-log.ts'
 import { applyRoutes } from './routes.ts'
 import { applyOllamaTuiSettings } from './tui-settings.ts'
 import { createUsageReader } from './usage.ts'
+import { OllamaWebFetchProvider, OllamaWebSearchProvider } from './web.ts'
 
 export const name = 'llm-ollama-cloud'
 export const inject = ['llm']
@@ -98,6 +100,27 @@ export function apply(ctx: Context, config: Config): void {
       showSidebarQuota: () => current().showSidebarQuota,
       planLabel: () => current().planLabel,
     })
+  })
+
+  ctx.inject(['web'], (webCtx) => {
+    const options = {
+      baseURL: () => current().apiBase,
+      resolveApiKey: async (): Promise<string | undefined> => {
+        try {
+          return (await keys.resolve(PROVIDER)).key
+        } catch {
+          return undefined
+        }
+      },
+    }
+    webCtx.effect(
+      () => webCtx.web.registerSearchProvider(new OllamaWebSearchProvider(options)),
+      'dsh-ollama-cloud-provider: web search provider',
+    )
+    webCtx.effect(
+      () => webCtx.web.registerFetchProvider(new OllamaWebFetchProvider(options)),
+      'dsh-ollama-cloud-provider: web fetch provider',
+    )
   })
 
   ctx.inject(['webServer'], (webCtx) => {

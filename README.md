@@ -35,6 +35,23 @@ It registers one native LLM route, `ollama-cloud`, served by `https://ollama.com
 
 Requests resolve the key per call, so a changed credential reaches the next request without a restart.
 
+## Web search and fetch
+
+When the `web` service is present, the plugin registers Ollama Cloud as both a
+search and a fetch provider (`id: ollama-cloud`). It calls
+`POST <apiBase>/api/web_search` and `POST <apiBase>/api/web_fetch` with the same
+credential reference as chat. Requests fail closed on redirects, retry one
+transport/timeout failure, cap search results at 10 and fetched text at 256 KiB.
+
+Select it in the profile:
+
+```yaml
+- id: web
+  config:
+    searchProvider: ollama-cloud
+    fetchProvider: ollama-cloud
+```
+
 ## Architecture
 
 ```mermaid
@@ -104,17 +121,17 @@ npm pack
 Install the published package:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.16
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.17
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.16
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.17
 ```
 
 Or install the packed tarball into a profile:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.16.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.17.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.16.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.17.tgz
 ```
 
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.

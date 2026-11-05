@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.17 — 2026-11-05
+
+- Added Ollama web capabilities behind `ctx.web`: a search provider and a fetch
+  provider with id `ollama-cloud`, using `POST /api/web_search` and
+  `POST /api/web_fetch` with the configured credential.
+- Web requests fail closed on redirects, use a 15s per-attempt timeout, retry
+  one pre-response transport/timeout failure, cap search results at 10 and
+  bound fetched bodies at 256 KiB with a `truncated` result.
+- Registered the providers only when the `web` service exists; selecting them is
+  a profile policy (`web.searchProvider` / `web.fetchProvider`).
+- Added a deterministic mock Ollama contract server and tests for
+  `/api/tags`, `/api/show`, `/api/chat`, `/api/web_search` and `/api/web_fetch`.
+
 ## 0.1.16 — 2026-11-04
 
 - Added DSH 0.2.2 support: `0.2.2-alpha.2`, `0.2.2-alpha.3` and `0.2.2-rc.1`
