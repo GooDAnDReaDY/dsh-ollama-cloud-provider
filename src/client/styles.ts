@@ -75,7 +75,7 @@ export const CSS = `
 .ocl-bar-fill-warn { background: var(--ocl-warning); opacity: 1; }
 .ocl-bar-fill-bad { background: var(--ocl-danger); opacity: 1; }
 .ocl-models { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow: auto; padding-right: 4px; }
-.ocl-model { display: grid; grid-template-columns: 16px 22px minmax(0,1fr) 120px; gap: 8px; align-items: center; font-size: 12px; padding: 3px 0; }
+.ocl-model { display: grid; grid-template-columns: 16px 22px minmax(0,1fr) auto 120px; gap: 8px; align-items: center; font-size: 12px; padding: 3px 0; }
 .ocl-drag-handle { cursor: grab; color: var(--ocl-text-secondary); user-select: none; }
 .ocl-dragging { opacity: 0.5; }
 .ocl-model-group { display: flex; flex-direction: column; gap: 2px; }

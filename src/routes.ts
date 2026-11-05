@@ -25,7 +25,7 @@ import {
   removeLocalModel,
   showLocalModel,
 } from './local-models.ts'
-import { isLocalEndpoint } from './model-probe.ts'
+import { clearModelProbeCache, isLocalEndpoint } from './model-probe.ts'
 import { priceFor } from './pricing.ts'
 import { PROVIDER } from './provider-ids.ts'
 import type { RequestHeatmap } from './request-log.ts'
@@ -36,6 +36,7 @@ import {
   cleanBooleanRecord,
   cleanModelAccountRules,
   cleanManualModels,
+  cleanModelOverrides,
   cleanNumberRecord,
   cleanPrices,
   cleanStringArray,
@@ -292,6 +293,7 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
   if ('modelVisibility' in patch) set('modelVisibility', cleanBooleanRecord(patch.modelVisibility))
   if ('manualModels' in patch) set('manualModels', cleanManualModels(patch.manualModels))
   if ('modelOrder' in patch) set('modelOrder', cleanStringArray(patch.modelOrder))
+  if ('modelOverrides' in patch) set('modelOverrides', cleanModelOverrides(patch.modelOverrides))
   if ('filterModelsByPlan' in patch) set('filterModelsByPlan', patch.filterModelsByPlan === true)
   if ('contextWindow' in patch) set('contextWindow', patch.contextWindow)
   if ('contextWindowOverrides' in patch) {
@@ -716,6 +718,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
     const write = (value: unknown): void => { res.write(`${JSON.stringify(value)}\n`) }
     try {
       const last = await pullLocalModel(config, model, write, deps.localFetch)
+      clearModelProbeCache(config.apiBase)
       write({ status: last.status, done: true })
     } catch (error) {
       write({ error: error instanceof Error ? error.message : 'pull failed' })
@@ -744,6 +747,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
     const model = typeof body.model === 'string' ? body.model : ''
     try {
       await removeLocalModel(config, model, deps.localFetch)
+      clearModelProbeCache(config.apiBase)
       json(res, 200, { ok: true, model })
     } catch (error) {
       json(res, 502, { error: error instanceof Error ? error.message : 'remove failed' })

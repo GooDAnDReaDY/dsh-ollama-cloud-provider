@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.24 — 2026-11-05
+
+- Added per-model capability/thinking overrides (`modelOverrides`) for
+  context, vision, thinking, reasoning efforts/default and enabled; the
+  override wins over manual entries and live discovery. Disabled models are
+  hidden from the picker.
+- Added a model override editor exposing context, input/output/cacheRead
+  prices, visibility, vision/thinking/enabled tri-state and reset-to-live.
+- `/api/show` capability probes remain TTL-cached and are invalidated on local
+  pull/remove.
+- Added override precedence and validation tests; 129/129.
+
 ## 0.1.23 — 2026-11-05
 
 - Richer model catalog rows grouped by effective context, collapsible groups,

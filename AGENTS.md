@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.23 is verified on the production Web host and Desktop;
-  0.1.22 is the previous release.
+  0.1.24 adds per-model capability overrides and the override editor.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -49,6 +49,7 @@ stop and ask the owner before changing anything.
 - `src/web.ts` — Ollama web search/fetch providers for `ctx.web`.
 - `src/client/` — settings page, quota card/panel, analytics, heatmap.
 - `src/client/model-groups.ts` — context groups and drag-order helper.
+- `src/client/model-override-editor.tsx` — per-model context/price/capability editor.
 - `src/settings.ts`, `src/config.ts`, `src/keys.ts` — configuration and
   credential handling.
 - `tests/` — unit and integration tests using `node:test`.

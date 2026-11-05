@@ -13,6 +13,21 @@ export interface ManualModelDraft {
   tools: boolean
 }
 
+export interface ModelOverrideDraft {
+  contextWindow: string
+  image: '' | 'yes' | 'no'
+  thinking: '' | 'yes' | 'no'
+  reasoningEfforts: string
+  defaultEffort: string
+  enabled: '' | 'yes' | 'no'
+}
+
+export interface PriceOverrideDraft {
+  input: string
+  output: string
+  cacheRead: string
+}
+
 export interface Draft {
   apiKeyEnv: string
   apiBase: string
@@ -47,6 +62,9 @@ export interface Draft {
   filterModelsByPlan: boolean
   modelVisibility: Record<string, boolean>
   manualModels: ManualModelDraft[]
+  modelOverrides: Record<string, ModelOverrideDraft>
+  contextWindowOverrides: Record<string, string>
+  priceOverrides: Record<string, PriceOverrideDraft>
   modelOrder: string[]
   showAll: boolean
   modelTransports: Record<string, TransportId | ''>
@@ -104,6 +122,26 @@ export function draftOf(state: HostState): Draft {
       tools: model.tools === true,
     })),
     modelOrder: [...(state.config.modelOrder ?? [])],
+    contextWindowOverrides: Object.fromEntries(
+      Object.entries(state.config.contextWindowOverrides).map(([id, value]) => [id, String(value)]),
+    ),
+    priceOverrides: Object.fromEntries(
+      Object.entries(state.config.priceOverrides).map(([id, price]) => [id, {
+        input: price.input === undefined ? '' : String(price.input),
+        output: price.output === undefined ? '' : String(price.output),
+        cacheRead: price.cacheRead === undefined ? '' : String(price.cacheRead),
+      }]),
+    ),
+    modelOverrides: Object.fromEntries(
+      Object.entries(state.config.modelOverrides ?? {}).map(([id, override]) => [id, {
+        contextWindow: override.contextWindow === undefined ? '' : String(override.contextWindow),
+        image: override.image === undefined ? '' : override.image ? 'yes' : 'no',
+        thinking: override.thinking === undefined ? '' : override.thinking ? 'yes' : 'no',
+        reasoningEfforts: (override.reasoningEfforts ?? []).join(', '),
+        defaultEffort: override.defaultEffort ?? '',
+        enabled: override.enabled === undefined ? '' : override.enabled ? 'yes' : 'no',
+      }]),
+    ),
     showAll: state.config.showAllModels,
     modelTransports: { ...state.config.modelTransports },
   }
@@ -187,6 +225,40 @@ export function patchOf(draft: Draft): Record<string, unknown> {
         tools: model.tools,
       })),
     modelOrder: draft.modelOrder.filter((id) => id !== ''),
+    contextWindowOverrides: Object.fromEntries(
+      Object.entries(draft.contextWindowOverrides)
+        .map(([id, value]) => [id, numberOrNull(value)] as const)
+        .filter((entry): entry is readonly [string, number] => entry[1] !== null && entry[1] > 0),
+    ),
+    priceOverrides: Object.fromEntries(
+      Object.entries(draft.priceOverrides)
+        .map(([id, price]) => {
+          const out: Record<string, number> = {}
+          for (const [field, value] of Object.entries(price)) {
+            const parsed = numberOrNull(value)
+            if (parsed !== null) out[field] = parsed
+          }
+          return [id, out] as const
+        })
+        .filter((entry) => Object.keys(entry[1]).length > 0),
+    ),
+    modelOverrides: Object.fromEntries(
+      Object.entries(draft.modelOverrides)
+        .map(([id, override]) => {
+          const contextWindow = numberOrNull(override.contextWindow)
+          const efforts = stopList(override.reasoningEfforts)
+          const out: Record<string, unknown> = {
+            ...(contextWindow === null || contextWindow <= 0 ? {} : { contextWindow }),
+            ...(override.image === '' ? {} : { image: override.image === 'yes' }),
+            ...(override.thinking === '' ? {} : { thinking: override.thinking === 'yes' }),
+            ...(efforts.length === 0 ? {} : { reasoningEfforts: efforts }),
+            ...(override.defaultEffort.trim() === '' ? {} : { defaultEffort: override.defaultEffort.trim() }),
+            ...(override.enabled === '' ? {} : { enabled: override.enabled === 'yes' }),
+          }
+          return [id, out] as const
+        })
+        .filter((entry) => Object.keys(entry[1]).length > 0),
+    ),
     modelTransports: Object.fromEntries(
       Object.entries(draft.modelTransports).filter(([, value]) => value !== ''),
     ),

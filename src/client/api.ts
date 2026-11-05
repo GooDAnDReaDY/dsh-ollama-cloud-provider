@@ -15,6 +15,7 @@ export interface PublicConfig {
   showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
   manualModels: ManualModel[]
+  modelOverrides: Record<string, ModelOverride>
   modelOrder: readonly string[]
   filterModelsByPlan: boolean
   contextWindow: number | null
@@ -64,6 +65,15 @@ export interface ManualModel {
   reasoningEfforts?: string[]
   defaultReasoning?: string
   tools?: boolean
+}
+
+export interface ModelOverride {
+  contextWindow?: number
+  image?: boolean
+  thinking?: boolean
+  reasoningEfforts?: string[]
+  defaultEffort?: string
+  enabled?: boolean
 }
 
 export interface ModelRow {
