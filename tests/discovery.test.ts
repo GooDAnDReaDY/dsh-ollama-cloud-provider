@@ -4,11 +4,10 @@ import test from 'node:test'
 import { DiscoveryError, discoverModels } from '../src/discovery.ts'
 import { startMockOllama } from './mock-ollama.ts'
 
-test('discovers models from an unsaved local endpoint without a key', async () => {
+test('discovers models from an unsaved endpoint without a key', async () => {
   const mock = await startMockOllama()
   try {
     const result = await discoverModels(mock.url, '')
-    assert.equal(result.local, true)
     assert.deepEqual(result.models, ['gpt-oss:120b', 'llama3.2:3b'])
     assert.equal(mock.requests.some((entry) => entry.headers.authorization !== undefined), false)
   } finally {

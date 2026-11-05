@@ -3,7 +3,6 @@ import test from 'node:test'
 
 import { applyCommands } from '../src/commands.ts'
 import { resolveConfig } from '../src/config.ts'
-import { startMockOllama } from './mock-ollama.ts'
 
 const config = resolveConfig({ apiKey: 'key' })
 
@@ -122,29 +121,4 @@ test('context command applies presets per session and follows config', async () 
   assert.match(reset.text, /Session override cleared/)
   const invalid = await handler.handler({ rawInput: 'nonsense', agent: { id: 'session-a' } })
   assert.equal(invalid.kind, 'error')
-})
-
-test('local command lists models and requires --yes for removal', async () => {
-  const mock = await startMockOllama()
-  try {
-    const local = deps()
-    ;(local as { config: () => ReturnType<typeof resolveConfig> }).config =
-      () => resolveConfig({ apiKeyEnv: '', apiBase: mock.url })
-    const handler = registered(undefined, local)
-
-    const list = await handler.handler({ rawInput: 'local models' })
-    assert.equal(list.kind, 'success')
-    assert.match(list.text, /gpt-oss:120b/)
-    assert.match(list.text, /RUNNING/)
-
-    const denied = await handler.handler({ rawInput: 'local remove llama3.2:3b' })
-    assert.equal(denied.kind, 'error')
-    assert.match(denied.text, /--yes/)
-
-    const removed = await handler.handler({ rawInput: 'local remove llama3.2:3b --yes' })
-    assert.equal(removed.kind, 'success')
-    assert.match(removed.text, /removed/)
-  } finally {
-    await mock.close()
-  }
 })

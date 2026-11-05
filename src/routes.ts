@@ -20,13 +20,6 @@ import {
 import { NS, type Config, type ResolvedConfig } from './config.ts'
 import type { KeyPool } from './credentials.ts'
 import { discoverModels } from './discovery.ts'
-import {
-  pullLocalModel,
-  readLocalInventory,
-  removeLocalModel,
-  showLocalModel,
-} from './local-models.ts'
-import { clearModelProbeCache, isLocalEndpoint } from './model-probe.ts'
 import { priceFor } from './pricing.ts'
 import { PROVIDER } from './provider-ids.ts'
 import type { RequestHeatmap } from './request-log.ts'
@@ -62,8 +55,6 @@ export interface RouteDeps {
   readonly verifyDesktop?: (req: IncomingMessage) => Promise<boolean>
   /** Same verifier for private reads; falls back to `verifyDesktop`. */
   readonly verifyHost?: (req: IncomingMessage) => Promise<boolean>
-  /** Test seam for local Ollama inventory and mutation routes. */
-  readonly localFetch?: typeof fetch
   /** Test seam for unsaved-endpoint discovery. */
   readonly discoveryFetch?: typeof fetch
 }
@@ -678,92 +669,6 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
       bestEffortFailed('catalog refresh failed', error)
     }
     await refreshAndState(ctx, deps, res)
-  })
-
-  route('/dsh-ollama/local/models', async (req, res) => {
-    if (!(await privateRead(req, res))) return
-    const config = deps.config()
-    if (!isLocalEndpoint(config)) {
-      json(res, 400, { error: 'local endpoint required' })
-      return
-    }
-    try {
-      json(res, 200, await readLocalInventory(config, deps.localFetch))
-    } catch (error) {
-      json(res, 502, { error: error instanceof Error ? error.message : 'local models failed' })
-    }
-  })
-
-  route('/dsh-ollama/local/show', async (req, res) => {
-    if (!(await privateRead(req, res))) return
-    const config = deps.config()
-    if (!isLocalEndpoint(config)) {
-      json(res, 400, { error: 'local endpoint required' })
-      return
-    }
-    const model = new URL(req.url ?? '/', 'http://localhost').searchParams.get('model') ?? ''
-    try {
-      json(res, 200, await showLocalModel(config, model, deps.localFetch))
-    } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'show failed' })
-    }
-  })
-
-  route('/dsh-ollama/local/pull', async (req, res) => {
-    if (!(await requirePost(req, res, verifyHost))) return
-    const config = deps.config()
-    if (!isLocalEndpoint(config)) {
-      json(res, 400, { error: 'local endpoint required' })
-      return
-    }
-    let body: Record<string, unknown>
-    try {
-      body = await readJson(req)
-    } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'invalid body' })
-      return
-    }
-    const model = typeof body.model === 'string' ? body.model : ''
-    res.statusCode = 200
-    res.setHeader('content-type', 'application/x-ndjson; charset=utf-8')
-    res.setHeader('cache-control', 'no-store')
-    const write = (value: unknown): void => { res.write(`${JSON.stringify(value)}\n`) }
-    try {
-      const last = await pullLocalModel(config, model, write, deps.localFetch)
-      clearModelProbeCache(config.apiBase)
-      write({ status: last.status, done: true })
-    } catch (error) {
-      write({ error: error instanceof Error ? error.message : 'pull failed' })
-    }
-    res.end()
-  })
-
-  route('/dsh-ollama/local/remove', async (req, res) => {
-    if (!(await requirePost(req, res, verifyHost))) return
-    const config = deps.config()
-    if (!isLocalEndpoint(config)) {
-      json(res, 400, { error: 'local endpoint required' })
-      return
-    }
-    let body: Record<string, unknown>
-    try {
-      body = await readJson(req)
-    } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'invalid body' })
-      return
-    }
-    if (body.confirm !== true) {
-      json(res, 400, { error: 'confirmation required' })
-      return
-    }
-    const model = typeof body.model === 'string' ? body.model : ''
-    try {
-      await removeLocalModel(config, model, deps.localFetch)
-      clearModelProbeCache(config.apiBase)
-      json(res, 200, { ok: true, model })
-    } catch (error) {
-      json(res, 502, { error: error instanceof Error ? error.message : 'remove failed' })
-    }
   })
 
   route('/dsh-ollama/discover', async (req, res) => {

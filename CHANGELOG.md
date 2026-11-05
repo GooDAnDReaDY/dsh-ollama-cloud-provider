@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.29 — 2026-11-05
+
+- Made the plugin cloud-only. Removed the local endpoint mode, local model
+  management (`/api/tags`, `/api/ps`, pull/remove), local GUI/CLI, `/api/show`
+  probes and the empty-key local credential path. `apiKeyEnv` now falls back to
+  the cloud credential reference instead of enabling a local endpoint.
+- Added the native `settings.models.provider-card` provider card showing
+  provider identity, key state, model count, transport and quota bars; the
+  existing settings page remains available.
+- Removed local tests/docs and added provider-card render coverage; 130/130.
+
 ## 0.1.27 — 2026-11-05
 
 - Usage reader keeps the last good snapshot per key/range and returns it as

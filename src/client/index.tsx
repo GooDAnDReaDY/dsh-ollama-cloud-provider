@@ -10,6 +10,7 @@ import type {} from './slots.ts'
 import { dictionaries, NS } from './locales.ts'
 import { QuotaCard, QuotaPanel } from './quota-card.tsx'
 import { OllamaCloudSettingsPage } from './settings-page.tsx'
+import { OllamaProviderCard } from './provider-card.tsx'
 import { CSS, CSS_ID } from './styles.ts'
 
 interface LayoutSeam {
@@ -53,6 +54,12 @@ export function apply(ctx: Context): void {
     label: () => t('nav'),
     locale: NS,
   }, OllamaCloudSettingsPage))
+
+  ctx.slots.inject('settings.models.provider-card', () => slots.register({
+    name: 'settings.models.provider-card',
+    key: 'ollama-cloud',
+    locale: NS,
+  }, OllamaProviderCard))
 
   // The center-column panel the sidebar card opens. `main` is declared by
   // dsh-client-ui-layout; when that slot is absent this inject never fires.
