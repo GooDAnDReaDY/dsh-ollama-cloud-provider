@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.27 — 2026-11-05
+
+- Usage reader keeps the last good snapshot per key/range and returns it as
+  `stale` when balance and usage later fail; the card marks stale data instead
+  of losing the meters.
+- Usage requests retry transient/429/5xx failures with bounded backoff.
+- Added session/weekly/monthly aliases and per-window model activity
+  (`byWindow`) alongside the existing 24h/7d/30d windows and sidebar meters.
+- Added last-good, retry and window tests; 138/138.
+
 ## 0.1.26 — 2026-11-05
 
 - Added configurable pre-response retry/backoff (`retryMaxRetries`, base/max

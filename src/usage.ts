@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import type { ResolvedConfig } from './config.ts'
 import type { KeyResolver } from './credentials.ts'
 import { PROVIDER } from './provider-ids.ts'
+import { isRetryableStatus, retryDelay, retryPolicy } from './retry.ts'
 
 export type UsageRange = '24h' | '7d' | '30d'
 
@@ -32,8 +33,16 @@ export interface UsageReport {
   kind: 'credits' | 'legacy'
   credits?: CreditBalance
   legacy?: { fiveHour?: UsageWindow; weekly?: UsageWindow }
-  windows: { d24?: UsageTotals; d7?: UsageTotals; d30?: UsageTotals }
+  windows: {
+    d24?: UsageTotals
+    d7?: UsageTotals
+    d30?: UsageTotals
+    session?: UsageTotals
+    weekly?: UsageTotals
+    monthly?: UsageTotals
+  }
   byModel: Array<{ model: string } & UsageTotals>
+  byWindow?: Partial<Record<UsageRange, Array<{ model: string } & UsageTotals>>>
   range: UsageRange
 }
 
@@ -41,6 +50,7 @@ export interface UsageResult {
   report?: UsageReport
   error?: string
   checkedAt: number
+  stale?: boolean
 }
 
 export interface UsageReader {
@@ -154,6 +164,7 @@ export function createUsageReader(
   fetchImpl: typeof fetch = fetch,
 ): UsageReader {
   const cache = new Map<string, UsageResult>()
+  const lastGood = new Map<string, UsageResult>()
   const inflight = new Map<string, Promise<UsageResult>>()
   const usageCalls: number[] = []
   let generation = 0
@@ -176,14 +187,32 @@ export function createUsageReader(
 
   const request = async (url: string, key: string): Promise<Response> => {
     const current = config()
-    return fetchImpl(url, {
-      headers: {
-        authorization: `Bearer ${key}`,
-        accept: 'application/json',
-        'user-agent': current.userAgent,
-      },
-      signal: AbortSignal.timeout(USAGE_TIMEOUT_MS),
-    })
+    const policy = retryPolicy({ ...current, retryMaxRetries: Math.max(2, current.retryMaxRetries) })
+    for (let attempt = 0; ; attempt += 1) {
+      let response: Response
+      try {
+        response = await fetchImpl(url, {
+          headers: {
+            authorization: `Bearer ${key}`,
+            accept: 'application/json',
+            'user-agent': current.userAgent,
+          },
+          signal: AbortSignal.timeout(USAGE_TIMEOUT_MS),
+        })
+      } catch (error) {
+        if (attempt < policy.maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay(attempt, policy)))
+          continue
+        }
+        throw error
+      }
+      if (attempt < policy.maxRetries && isRetryableStatus(response.status)) {
+        await response.body?.cancel()
+        await new Promise((resolve) => setTimeout(resolve, retryDelay(attempt, policy)))
+        continue
+      }
+      return response
+    }
   }
 
   const readBalance = async (key: string): Promise<Pick<UsageReport, 'kind' | 'credits' | 'legacy'> | undefined> => {
@@ -246,11 +275,18 @@ export function createUsageReader(
 
   const compose = async (key: string, range: UsageRange, epoch: number): Promise<UsageResult> => {
     const [balance, usage] = await Promise.all([readBalance(key), readUsage(key, range, epoch)])
+    const reportKey = `${fingerprint(key)}:report:${range}`
     if (balance === undefined && usage === undefined) {
       const result: UsageResult = { error: 'usage and balance are unavailable', checkedAt: Date.now() }
-      if (epoch === generation) cache.set(`${fingerprint(key)}:report:${range}`, result)
-      return result
+      const previous = lastGood.get(reportKey)
+      if (epoch === generation) cache.set(reportKey, result)
+      return previous === undefined ? result : {
+        ...previous,
+        stale: true,
+        ...(result.error === undefined ? {} : { error: result.error }),
+      }
     }
+    const windowKey = range === '24h' ? 'd24' as const : range === '7d' ? 'd7' as const : 'd30' as const
     const report: UsageReport = {
       kind: balance?.kind ?? 'credits',
       ...(balance?.credits === undefined ? {} : { credits: balance.credits }),
@@ -258,17 +294,22 @@ export function createUsageReader(
       windows: usage === undefined
         ? {}
         : {
-            ...(range === '24h' ? { d24: usage.totals } : {}),
-            ...(range === '7d' ? { d7: usage.totals } : {}),
-            ...(range === '30d' ? { d30: usage.totals } : {}),
+            [windowKey]: usage.totals,
+            ...(range === '24h' ? { session: usage.totals } : {}),
+            ...(range === '7d' ? { weekly: usage.totals } : {}),
+            ...(range === '30d' ? { monthly: usage.totals } : {}),
           },
       byModel: usage?.byModel ?? [],
+      ...(usage === undefined ? {} : { byWindow: { [range]: usage.byModel } }),
       range,
     }
     const result: UsageResult = { report, checkedAt: Date.now() }
     if (epoch === generation) {
-      cache.set(`${fingerprint(key)}:report:${range}`, result)
-      if (usage !== undefined) cache.set(`${fingerprint(key)}:${range}`, result)
+      cache.set(reportKey, result)
+      if (usage !== undefined) {
+        cache.set(`${fingerprint(key)}:${range}`, result)
+        lastGood.set(reportKey, result)
+      }
     }
     return result
   }
@@ -279,7 +320,17 @@ export function createUsageReader(
     const cacheKey = `${fingerprint(key)}:report:${range}`
     const hit = cache.get(cacheKey)
     const ttl = hit?.report === undefined ? FAILURE_TTL_MS : BALANCE_TTL_MS
-    if (hit !== undefined && Date.now() - hit.checkedAt < ttl) return hit
+    if (hit !== undefined && Date.now() - hit.checkedAt < ttl) {
+      if (hit.report === undefined) {
+        const previous = lastGood.get(cacheKey)
+        if (previous !== undefined) return {
+          ...previous,
+          stale: true,
+          ...(hit.error === undefined ? {} : { error: hit.error }),
+        }
+      }
+      return hit
+    }
     const existing = inflight.get(cacheKey)
     if (existing !== undefined) return existing
     const epoch = generation

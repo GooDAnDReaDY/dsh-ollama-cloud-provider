@@ -123,8 +123,16 @@ export interface UsageReport {
   kind: 'credits' | 'legacy'
   credits?: CreditBalance
   legacy?: { fiveHour?: UsageWindow; weekly?: UsageWindow }
-  windows: { d24?: UsageTotals; d7?: UsageTotals; d30?: UsageTotals }
+  windows: {
+    d24?: UsageTotals
+    d7?: UsageTotals
+    d30?: UsageTotals
+    session?: UsageTotals
+    weekly?: UsageTotals
+    monthly?: UsageTotals
+  }
   byModel: Array<{ model: string } & UsageTotals>
+  byWindow?: Partial<Record<'24h' | '7d' | '30d', Array<{ model: string } & UsageTotals>>>
   range: '24h' | '7d' | '30d'
 }
 
@@ -132,6 +140,7 @@ export interface UsageState {
   report?: UsageReport
   error?: string
   checkedAt: number
+  stale?: boolean
 }
 
 export interface AccountRow {
