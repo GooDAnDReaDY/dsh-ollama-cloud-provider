@@ -6,7 +6,7 @@ import test from 'node:test'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 
 import { resolveConfig } from '../src/config.ts'
-import { applyRoutes } from '../src/routes.ts'
+import { applyRoutes, localVerificationOrigin } from '../src/routes.ts'
 
 function fakeRes(): {
   statusCode: number
@@ -61,7 +61,10 @@ test('state route serves the catalog and write routes enforce JSON', async () =>
       return () => {}
     },
   } as never
-  const config = resolveConfig({ apiKey: 'k' })
+  const config = resolveConfig({
+    apiKey: 'k',
+    accounts: [{ label: 'second', apiKeyEnv: 'OLLAMA_API_KEY_2' }],
+  })
   let seen: GenerateOptions | undefined
   const adapter = {
     listModels: async () => [{
@@ -176,7 +179,7 @@ test('credential writes stay inside the plugin namespace', async () => {
       return () => {}
     },
   } as never
-  const config = resolveConfig({ apiKey: 'k' })
+  let config = resolveConfig({ apiKey: 'k' })
   const adapter = {
     listModels: async () => [],
     accountHealth: () => undefined,
@@ -210,11 +213,26 @@ test('credential writes stay inside the plugin namespace', async () => {
   await configRoute(postJson({ apiKeyEnv: 'OLLAMA_CUSTOM' }), ownConfig)
   assert.equal(ownConfig.statusCode, 200)
   assert.equal(mutations.length, 1)
+  config = resolveConfig({ apiKey: 'k', apiKeyEnv: 'OLLAMA_CUSTOM' })
 
   const ownKey = fakeRes()
   await keyRoute(postJson({ ref: 'OLLAMA_CUSTOM', key: 'x' }), ownKey)
   assert.equal(ownKey.statusCode, 200)
   assert.equal(written.length, 1)
+
+  const unconfiguredKey = fakeRes()
+  await keyRoute(postJson({ ref: 'OLLAMA_UNCONFIGURED', key: 'x' }), unconfiguredKey)
+  assert.equal(unconfiguredKey.statusCode, 400)
+  assert.equal(written.length, 1)
+})
+
+test('host verification uses the local socket, never the request Host', () => {
+  assert.equal(localVerificationOrigin({ socket: { localPort: 3080 } } as never), 'http://127.0.0.1:3080')
+  assert.equal(
+    localVerificationOrigin({ socket: { localPort: 3443, encrypted: true } } as never),
+    'https://127.0.0.1:3443',
+  )
+  assert.equal(localVerificationOrigin({ socket: {} } as never), undefined)
 })
 
 test('write routes require a same-origin source and a loopback socket', async () => {
@@ -460,7 +478,7 @@ test('default Desktop verifier accepts only a host-verified cookie', async () =>
 
     const request = (cookie: string) => ({
       method: 'POST',
-      socket: { remoteAddress: '127.0.0.1' },
+      socket: { remoteAddress: '127.0.0.1', localPort: port },
       headers: {
         host: `127.0.0.1:${port}`,
         'user-agent': 'Mozilla/5.0 @deepseek-ai/dsh-desktop/0.2.1-rc.2 Electron/44.7.0',

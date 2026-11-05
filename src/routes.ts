@@ -93,18 +93,38 @@ function desktopShellRequest(req: IncomingMessage): boolean {
   return agent.includes('@deepseek-ai/dsh-desktop/') && cookie.includes('dsh-auth-')
 }
 
+export function localVerificationOrigin(req: Pick<IncomingMessage, 'socket'>): string | undefined {
+  const port = req.socket.localPort
+  if (port === undefined || port <= 0) return undefined
+  const secure = (req.socket as { encrypted?: boolean }).encrypted === true
+  return `${secure ? 'https' : 'http'}://127.0.0.1:${port}`
+}
+
 async function defaultVerifyHost(req: IncomingMessage): Promise<boolean> {
-  const host = req.headers.host
+  const localOrigin = localVerificationOrigin(req)
   const cookie = req.headers.cookie
-  if (host === undefined || host === '' || cookie === undefined || cookie === '') return false
+  if (localOrigin === undefined || cookie === undefined || cookie === '') return false
   try {
-    const response = await fetch(`http://${host}/api/version`, {
+    // Never build this URL from the request Host: that turns the verifier into
+    // an SSRF/cookie-exfiltration primitive under DNS rebinding.
+    const response = await fetch(`${localOrigin}/api/version`, {
       headers: { cookie, accept: 'application/json' },
       redirect: 'manual',
       signal: AbortSignal.timeout(2_500),
     })
     await response.body?.cancel()
     if (response.status >= 300 && response.status < 400) return false
+    if (response.status === 404) {
+      // DSH uses 404 after auth for an otherwise unknown route. Confirm that the
+      // route is actually auth-protected: a public host also answers 404.
+      const anonymous = await fetch(`${localOrigin}/api/version`, {
+        headers: { accept: 'application/json' },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(2_500),
+      })
+      await anonymous.body?.cancel()
+      return anonymous.status === 401 || anonymous.status === 403
+    }
     return response.status < 500 && response.status !== 401 && response.status !== 403
   } catch {
     return false
@@ -258,7 +278,7 @@ function canWriteCredentialRef(config: ResolvedConfig, ref: string): boolean {
   for (const account of config.accounts) {
     if (typeof account.apiKeyEnv === 'string' && account.apiKeyEnv.trim() === ref) return true
   }
-  return true
+  return false
 }
 
 function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset'; path: string[]; value?: unknown }> {
