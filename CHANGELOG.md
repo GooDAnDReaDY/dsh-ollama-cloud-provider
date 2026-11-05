@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.21 — 2026-11-05
+
+- Added local Ollama model management: `/api/tags` disk inventory, `/api/ps`
+  running models and VRAM, `/api/show` details, `/api/pull` progress streaming,
+  and confirmed `/api/delete`. Cloud endpoints are rejected.
+- Added `/ollama local [models|ps|show|pull|remove]` CLI commands; removal
+  requires `--yes` and never forces a delete.
+- Added the local models settings card with pull progress, disk/running totals,
+  details and a two-step remove confirmation.
+- Extended the mock Ollama contract with tags sizes, ps, pull and delete;
+  119/119 tests.
+
 ## 0.1.20 — 2026-11-05
 
 - Persisted the catalog snapshot under `$DSH_HOME/cache/dsh-ollama-cloud/`

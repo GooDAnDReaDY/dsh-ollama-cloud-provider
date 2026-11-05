@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.20 is verified on the production Web host and Desktop;
-  0.1.19 is the previous release.
+  0.1.21 adds local model inventory, pull/remove and a local settings card.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -42,6 +42,7 @@ stop and ask the owner before changing anything.
 - `src/transports/openai-chat.ts` — optional OpenAI-compatible SSE transport.
 - `src/catalog.ts` — model catalog and stale-while-revalidate refresh.
 - `src/catalog-cache.ts` — atomic persistent catalog snapshot.
+- `src/local-models.ts` — local Ollama tags/ps/show/pull/delete contract.
 - `src/routes.ts` — host HTTP routes and write-route guards.
 - `src/web.ts` — Ollama web search/fetch providers for `ctx.web`.
 - `src/client/` — settings page, quota card/panel, analytics, heatmap.
@@ -105,7 +106,11 @@ stop and ask the owner before changing anything.
 
 ## Locked Decisions
 
-- 2026-10-21 — Ollama Cloud only; no local Ollama route.
+- 2026-11-05 — local model management is opt-in for a local endpoint only
+  (`apiKeyEnv:""` or a loopback `apiBase`); removal requires explicit
+  confirmation and never uses force. The cloud provider remains the default.
+- 2026-10-21 — Ollama Cloud only; no local Ollama route. (Cloud remains the
+  default; the 2026-11-05 local-management decision adds the opt-in exception.)
 - 2026-10-21 — native `/api/chat` by default; OpenAI transport is an option.
 - 2026-10-21 — settings live in `settings.section` (`ollama`, order 20), in
   parity with the reference plugins.

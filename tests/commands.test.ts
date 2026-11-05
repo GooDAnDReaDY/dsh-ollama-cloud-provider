@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { applyCommands } from '../src/commands.ts'
 import { resolveConfig } from '../src/config.ts'
+import { startMockOllama } from './mock-ollama.ts'
 
 const config = resolveConfig({ apiKey: 'key' })
 
@@ -37,6 +38,7 @@ function deps(
 
 function registered(
   stream?: (options: unknown) => AsyncGenerator<{ type: string; text?: string; reason?: unknown }>,
+  source: Parameters<typeof applyCommands>[1] = deps(stream),
 ): { handler: (invocation: { rawInput: string }) => Promise<{ kind: string; text: string }> } {
   let definition: { handler: (invocation: { rawInput: string }) => Promise<{ kind: string; text: string }> } | undefined
   const ctx = {
@@ -44,7 +46,7 @@ function registered(
       register: (value: typeof definition) => { definition = value },
     },
   } as never
-  applyCommands(ctx, deps(stream))
+  applyCommands(ctx, source)
   assert.ok(definition !== undefined)
   return definition
 }
@@ -88,4 +90,29 @@ test('unknown command returns an error with the accepted verbs', async () => {
   const result = await registered().handler({ rawInput: 'bogus' })
   assert.equal(result.kind, 'error')
   assert.match(result.text, /Unknown \/ollama argument/)
+})
+
+test('local command lists models and requires --yes for removal', async () => {
+  const mock = await startMockOllama()
+  try {
+    const local = deps()
+    ;(local as { config: () => ReturnType<typeof resolveConfig> }).config =
+      () => resolveConfig({ apiKeyEnv: '', apiBase: mock.url })
+    const handler = registered(undefined, local)
+
+    const list = await handler.handler({ rawInput: 'local models' })
+    assert.equal(list.kind, 'success')
+    assert.match(list.text, /gpt-oss:120b/)
+    assert.match(list.text, /RUNNING/)
+
+    const denied = await handler.handler({ rawInput: 'local remove llama3.2:3b' })
+    assert.equal(denied.kind, 'error')
+    assert.match(denied.text, /--yes/)
+
+    const removed = await handler.handler({ rawInput: 'local remove llama3.2:3b --yes' })
+    assert.equal(removed.kind, 'success')
+    assert.match(removed.text, /removed/)
+  } finally {
+    await mock.close()
+  }
 })

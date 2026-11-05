@@ -10,6 +10,14 @@ import { formatUsd, priceFor } from './pricing.ts'
 import { PROVIDER } from './provider-ids.ts'
 import { quotaBars, windowRows } from './quota-model.ts'
 import type { UsageReader, UsageResult } from './usage.ts'
+import {
+  formatBytes,
+  pullLocalModel,
+  readLocalInventory,
+  removeLocalModel,
+  showLocalModel,
+} from './local-models.ts'
+import { isLocalEndpoint } from './model-probe.ts'
 
 export interface CommandDeps {
   readonly config: () => ResolvedConfig
@@ -144,6 +152,71 @@ async function testText(deps: CommandDeps, model: string): Promise<{ ok: boolean
   }
 }
 
+async function localText(deps: CommandDeps): Promise<string> {
+  const config = deps.config()
+  if (!isLocalEndpoint(config)) return 'Local models are available only with a local Ollama endpoint.'
+  const inventory = await readLocalInventory(config)
+  const running = new Map(inventory.running.map((entry) => [entry.name, entry]))
+  const lines = [
+    `Local Ollama · disk ${formatBytes(inventory.diskBytes)} · running ${formatBytes(inventory.runningBytes)}`,
+  ]
+  if (inventory.models.length === 0) return [...lines, 'No local models.'].join('\n')
+  for (const model of inventory.models) {
+    const active = running.get(model.name)
+    const details = model.details === undefined
+      ? ''
+      : [model.details.family, model.details.parameterSize, model.details.quantization]
+        .filter((entry): entry is string => entry !== undefined)
+        .join(' ')
+    lines.push(`- ${model.name} · ${formatBytes(model.size)}${active === undefined ? '' : ' · RUNNING'}`
+      + `${details === '' ? '' : ` · ${details}`}`)
+  }
+  return lines.join('\n')
+}
+
+async function localPsText(deps: CommandDeps): Promise<string> {
+  const config = deps.config()
+  if (!isLocalEndpoint(config)) return 'Local models are available only with a local Ollama endpoint.'
+  const inventory = await readLocalInventory(config)
+  if (inventory.running.length === 0) return 'No running models.'
+  return inventory.running
+    .map((entry) => `- ${entry.name} · VRAM ${formatBytes(entry.sizeVram)}`
+      + `${entry.expiresAt === undefined ? '' : ` · expires ${entry.expiresAt}`}`)
+    .join('\n')
+}
+
+async function localShowText(deps: CommandDeps, model: string): Promise<string> {
+  const config = deps.config()
+  if (!isLocalEndpoint(config)) return 'Local models are available only with a local Ollama endpoint.'
+  const show = await showLocalModel(config, model)
+  const lines = [`Local model: ${show.name}`]
+  if (show.modifiedAt !== undefined) lines.push(`Modified: ${show.modifiedAt}`)
+  if (show.details !== undefined) {
+    lines.push(`Details: ${show.details.family ?? '?'} ${show.details.parameterSize ?? ''} ${show.details.quantization ?? ''}`.trim())
+  }
+  if (show.capabilities.length > 0) lines.push(`Capabilities: ${show.capabilities.join(', ')}`)
+  if (show.parameters !== undefined) lines.push(`Parameters:\n${show.parameters.slice(0, 2000)}`)
+  return lines.join('\n')
+}
+
+async function localPullText(deps: CommandDeps, model: string): Promise<string> {
+  const config = deps.config()
+  if (!isLocalEndpoint(config)) return 'Local models are available only with a local Ollama endpoint.'
+  let fraction = 0
+  const result = await pullLocalModel(config, model, (progress) => {
+    if (progress.total !== undefined && progress.total > 0) fraction = (progress.completed ?? 0) / progress.total
+  })
+  return `${model}: ${result.status}${fraction > 0 ? ` · ${Math.round(fraction * 100)}%` : ''}`
+}
+
+async function localRemoveText(deps: CommandDeps, model: string, confirmed: boolean): Promise<string> {
+  if (!confirmed) return `Refusing to remove ${model}: add --yes to confirm.`
+  const config = deps.config()
+  if (!isLocalEndpoint(config)) return 'Local models are available only with a local Ollama endpoint.'
+  await removeLocalModel(config, model)
+  return `${model}: removed.`
+}
+
 async function statusText(deps: CommandDeps): Promise<string> {
   const config = deps.config()
   const rules = config.modelAccountRules.length === 0
@@ -165,7 +238,7 @@ export function applyCommands(ctx: Context, deps: CommandDeps): void {
   ctx.commands.register({
     name: 'ollama',
     description: 'Ollama Cloud status, balance, accounts, models and rules',
-    input: { hint: 'status | usage | balance | accounts | models | rules | test [model]' },
+    input: { hint: 'status | usage | balance | accounts | models | rules | test [model] | local [models|ps|show|pull|remove] [model]' },
     handler: async (invocation) => {
       const raw = invocation.rawInput.trim()
       const parts = raw === '' ? ['status'] : raw.split(/\s+/)
@@ -193,10 +266,34 @@ export function applyCommands(ctx: Context, deps: CommandDeps): void {
             ? { kind: 'success', text: result.text }
             : { kind: 'error', text: result.text }
         }
+        case 'local': {
+          const words = arg === '' ? [] : arg.split(/\s+/)
+          const action = (words[0] ?? 'models').toLowerCase()
+          const confirmed = words.includes('--yes')
+          const model = words.slice(1).filter((word) => word !== '--yes').join(' ')
+          try {
+            if (action === 'models') return { kind: 'success', text: await localText(deps) }
+            if (action === 'ps') return { kind: 'success', text: await localPsText(deps) }
+            if (model === '') {
+              return { kind: 'error', text: `Usage: /ollama local ${action} <model>` }
+            }
+            if (action === 'show') return { kind: 'success', text: await localShowText(deps, model) }
+            if (action === 'pull') return { kind: 'success', text: await localPullText(deps, model) }
+            if (action === 'remove') {
+              return {
+                kind: confirmed ? 'success' : 'error',
+                text: await localRemoveText(deps, model, confirmed),
+              }
+            }
+            return { kind: 'error', text: `Unknown local action "${action}". Use models, ps, show, pull, or remove.` }
+          } catch (error) {
+            return { kind: 'error', text: error instanceof Error ? error.message : 'local command failed' }
+          }
+        }
         default:
           return {
             kind: 'error',
-            text: `Unknown /ollama argument "${verb}". Use status, usage, balance, accounts, models, rules, or test [model].`,
+            text: `Unknown /ollama argument "${verb}". Use status, usage, balance, accounts, models, rules, test [model], or local.`,
           }
       }
     },

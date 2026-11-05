@@ -18,6 +18,7 @@ import {
   type TransportId,
 } from './api.ts'
 import { draftOf, mergeLoadedDraft, patchOf, safeSame, type Draft } from './settings-draft.ts'
+import { LocalModelsCard } from './local-models-card.tsx'
 import { CONFIG_CHANGED_EVENT } from './events.ts'
 import { accountMark, Field } from './settings-widgets.tsx'
 import { PluginUpdateCard } from './update-card.tsx'
@@ -595,6 +596,14 @@ export function OllamaCloudSettingsPage(props: {
               ))}
         </div>
       </section>
+
+      {state !== null && (
+        <LocalModelsCard
+          t={t}
+          config={state.config}
+          onChanged={() => { void reloadModels() }}
+        />
+      )}
 
       <section className="ocl-card">
         <h3 className="ocl-card-title">{t('generation')}</h3>
