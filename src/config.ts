@@ -6,7 +6,7 @@ export const DEFAULT_API_BASE = 'https://ollama.com'
 export const DEFAULT_OPENAI_BASE = 'https://ollama.com/v1'
 export const DEFAULT_USAGE_URL = 'https://ollama.com/api/usage'
 export const DEFAULT_BALANCE_URL = 'https://ollama.com/api/balance'
-export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.25'
+export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.26'
 export const DEFAULT_CONTEXT_WINDOW = 131_072
 export const DEFAULT_MAX_TOKENS = 32_768
 export const DEFAULT_GENERATE_MAX_TOKENS = 131_072
@@ -79,6 +79,12 @@ export interface Config {
   streamIdleTimeoutMs?: number
   /** Whole-attempt budget; 0 disables the independent budget. */
   attemptTimeoutMs?: number
+  /** Pre-response retry count; 0 disables internal retries. */
+  retryMaxRetries?: number
+  retryBaseDelayMs?: number
+  retryMaxDelayMs?: number
+  /** Jitter fraction, 0..1. */
+  retryJitter?: number
   /** Visible-model allowlist; empty with `showAllModels:false` means none. */
   visibleModels?: string[]
   /** Explicit all-models switch; absent means derive from `visibleModels`. */
@@ -149,6 +155,10 @@ export const Config: z<Config> = z.object({
   requestTimeoutMs: markVolatile(z.number().min(1).max(2_147_483_647).default(300_000)),
   streamIdleTimeoutMs: markVolatile(z.number().min(1).max(2_147_483_647).default(300_000)),
   attemptTimeoutMs: markVolatile(z.number().min(0).max(3_600_000).step(1).default(0)),
+  retryMaxRetries: markVolatile(z.number().min(0).max(10).step(1).default(0)),
+  retryBaseDelayMs: markVolatile(z.number().min(0).max(60_000).step(1).default(250)),
+  retryMaxDelayMs: markVolatile(z.number().min(0).max(120_000).step(1).default(2000)),
+  retryJitter: markVolatile(z.number().min(0).max(1).default(0.2)),
   visibleModels: markVolatile(z.array(z.string()).default([])),
   showAllModels: markVolatile(z.boolean()),
   modelVisibility: markVolatile(z.dict(z.boolean()).default({})),
@@ -222,6 +232,10 @@ export interface ResolvedConfig {
   requestTimeoutMs: number
   streamIdleTimeoutMs: number
   attemptTimeoutMs: number
+  retryMaxRetries: number
+  retryBaseDelayMs: number
+  retryMaxDelayMs: number
+  retryJitter: number
   visibleModels: readonly string[]
   showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
@@ -461,6 +475,17 @@ export function resolveConfig(config: Config): ResolvedConfig {
       && config.attemptTimeoutMs <= 3_600_000
       ? config.attemptTimeoutMs
       : 0,
+    retryMaxRetries: typeof config.retryMaxRetries === 'number'
+      && Number.isInteger(config.retryMaxRetries)
+      && config.retryMaxRetries >= 0
+      && config.retryMaxRetries <= 10
+      ? config.retryMaxRetries
+      : 0,
+    retryBaseDelayMs: positiveInt(config.retryBaseDelayMs, 250),
+    retryMaxDelayMs: positiveInt(config.retryMaxDelayMs, 2000),
+    retryJitter: typeof config.retryJitter === 'number' && config.retryJitter >= 0 && config.retryJitter <= 1
+      ? config.retryJitter
+      : 0.2,
     visibleModels,
     showAllModels: config.showAllModels === true
       ? true

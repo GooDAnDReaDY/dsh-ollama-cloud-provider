@@ -1,5 +1,7 @@
 import { CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, isContextWindowExceededError } from '@deepseek-ai/dsh-llm'
 
+import { redactText } from './sanitize.ts'
+
 interface ProviderErrorBody {
   message?: string
   type?: string
@@ -58,7 +60,7 @@ function isQuotaText(detail: string): boolean {
  */
 export function classifyResponseError(status: number, text: string, headers: Headers): LlmError {
   const body = parseErrorBody(text)
-  const message = body.message ?? (text.trim() === '' ? `HTTP ${status}` : text.trim().slice(0, 500))
+  const message = redactText(body.message ?? (text.trim() === '' ? `HTTP ${status}` : text.trim().slice(0, 500)))
   const detail = `${body.type ?? ''} ${message}`.toLowerCase()
   const retry = retryAfterMs(headers)
   const options = { status, ...(retry === undefined ? {} : { providerRetryAfterMs: retry }) }

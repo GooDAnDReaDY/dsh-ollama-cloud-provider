@@ -1,4 +1,5 @@
 import type { ManualModel, ModelOverride, ModelPriceOverride, ResolvedConfig, TransportId } from './config.ts'
+import { sanitizeUrl } from './sanitize.ts'
 
 export interface PublicConfig {
   apiKeyEnv: string
@@ -11,6 +12,10 @@ export interface PublicConfig {
   requestTimeoutMs: number
   streamIdleTimeoutMs: number
   attemptTimeoutMs: number
+  retryMaxRetries: number
+  retryBaseDelayMs: number
+  retryMaxDelayMs: number
+  retryJitter: number
   visibleModels: readonly string[]
   showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
@@ -46,15 +51,19 @@ export interface PublicConfig {
 export function publicConfig(config: ResolvedConfig): PublicConfig {
   return {
     apiKeyEnv: config.apiKeyEnv,
-    apiBase: config.apiBase,
-    openAiBase: config.openAiBase,
-    usageUrl: config.usageUrl,
-    balanceUrl: config.balanceUrl,
+    apiBase: sanitizeUrl(config.apiBase),
+    openAiBase: sanitizeUrl(config.openAiBase),
+    usageUrl: sanitizeUrl(config.usageUrl),
+    balanceUrl: sanitizeUrl(config.balanceUrl),
     transport: config.transport,
     modelTransports: config.modelTransports,
     requestTimeoutMs: config.requestTimeoutMs,
     streamIdleTimeoutMs: config.streamIdleTimeoutMs,
     attemptTimeoutMs: config.attemptTimeoutMs,
+    retryMaxRetries: config.retryMaxRetries,
+    retryBaseDelayMs: config.retryBaseDelayMs,
+    retryMaxDelayMs: config.retryMaxDelayMs,
+    retryJitter: config.retryJitter,
     visibleModels: config.visibleModels,
     showAllModels: config.showAllModels,
     modelVisibility: config.modelVisibility,

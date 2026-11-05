@@ -3,6 +3,8 @@
  * skipped; when a host logger is registered the label and message go to debug
  * instead of disappearing.
  */
+import { redactText } from './sanitize.ts'
+
 export interface BestEffortLogger {
   debug?: (message: string) => void
 }
@@ -15,7 +17,7 @@ export function setBestEffortLogger(logger: BestEffortLogger | undefined): void 
 
 export function bestEffortFailed(label: string, error: unknown): void {
   try {
-    sink?.debug?.(`${label}: ${error instanceof Error ? error.message : String(error)}`)
+    sink?.debug?.(`${label}: ${redactText(error instanceof Error ? error.message : String(error))}`)
   } catch {
     // Logging must never break the caller.
   }

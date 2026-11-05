@@ -45,6 +45,7 @@ import {
   isCredentialRef,
   normalizeCredentialRef,
 } from './routes-values.ts'
+import { safeErrorMessage } from './sanitize.ts'
 import type { UsageRange, UsageReader } from './usage.ts'
 
 const MAX_BODY_BYTES = 256 * 1024
@@ -70,10 +71,14 @@ export interface RouteDeps {
 type UsageValue = Awaited<ReturnType<UsageReader['read']>> | null
 
 function json(res: ServerResponse, status: number, value: unknown): void {
+  const safe = typeof value === 'object' && value !== null && !Array.isArray(value)
+    && typeof (value as { error?: unknown }).error === 'string'
+    ? { ...value, error: safeErrorMessage((value as { error: string }).error) }
+    : value
   res.statusCode = status
   res.setHeader('content-type', 'application/json; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
-  res.end(JSON.stringify(value))
+  res.end(JSON.stringify(safe))
 }
 
 function sourceHost(value: string | undefined): string | undefined {
@@ -291,6 +296,10 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
   if ('requestTimeoutMs' in patch) set('requestTimeoutMs', patch.requestTimeoutMs)
   if ('streamIdleTimeoutMs' in patch) set('streamIdleTimeoutMs', patch.streamIdleTimeoutMs)
   if ('attemptTimeoutMs' in patch) set('attemptTimeoutMs', patch.attemptTimeoutMs)
+  if ('retryMaxRetries' in patch) set('retryMaxRetries', patch.retryMaxRetries)
+  if ('retryBaseDelayMs' in patch) set('retryBaseDelayMs', patch.retryBaseDelayMs)
+  if ('retryMaxDelayMs' in patch) set('retryMaxDelayMs', patch.retryMaxDelayMs)
+  if ('retryJitter' in patch) set('retryJitter', patch.retryJitter)
   if ('visibleModels' in patch) set('visibleModels', cleanStringArray(patch.visibleModels))
   if ('showAllModels' in patch) set('showAllModels', patch.showAllModels === true)
   if ('modelVisibility' in patch) set('modelVisibility', cleanBooleanRecord(patch.modelVisibility))

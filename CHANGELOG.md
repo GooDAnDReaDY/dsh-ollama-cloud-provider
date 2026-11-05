@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.26 — 2026-11-05
+
+- Added configurable pre-response retry/backoff (`retryMaxRetries`, base/max
+  delay, jitter). Only headers/pre-first-token failures retry; post-token
+  streams never retry, and account rotation is not duplicated.
+- Sanitized endpoint URLs, provider errors, status errors and web errors:
+  userinfo and secret query parameters are stripped, control characters and
+  tokens are redacted, and long messages are bounded before logs/UI.
+- Added retry/backoff and sanitizer tests, plus a 503 retry adapter test;
+  137/137.
+
 ## 0.1.25 — 2026-11-05
 
 - Added safe model discovery against an unsaved endpoint with an optional

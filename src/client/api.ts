@@ -11,6 +11,10 @@ export interface PublicConfig {
   requestTimeoutMs: number
   streamIdleTimeoutMs: number
   attemptTimeoutMs: number
+  retryMaxRetries: number
+  retryBaseDelayMs: number
+  retryMaxDelayMs: number
+  retryJitter: number
   visibleModels: readonly string[]
   showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>

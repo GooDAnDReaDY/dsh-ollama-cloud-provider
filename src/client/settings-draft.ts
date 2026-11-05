@@ -38,6 +38,10 @@ export interface Draft {
   requestTimeoutMs: string
   streamIdleTimeoutMs: string
   attemptTimeoutMs: string
+  retryMaxRetries: string
+  retryBaseDelayMs: string
+  retryMaxDelayMs: string
+  retryJitter: string
   maxOutputTokens: string
   contextWindow: string
   temperature: string
@@ -86,6 +90,10 @@ export function draftOf(state: HostState): Draft {
     requestTimeoutMs: String(state.config.requestTimeoutMs),
     streamIdleTimeoutMs: String(state.config.streamIdleTimeoutMs),
     attemptTimeoutMs: String(state.config.attemptTimeoutMs ?? 0),
+    retryMaxRetries: String(state.config.retryMaxRetries ?? 0),
+    retryBaseDelayMs: String(state.config.retryBaseDelayMs ?? 250),
+    retryMaxDelayMs: String(state.config.retryMaxDelayMs ?? 2000),
+    retryJitter: String(state.config.retryJitter ?? 0.2),
     maxOutputTokens: textOf(state.config.maxOutputTokens),
     contextWindow: textOf(state.config.contextWindow),
     temperature: textOf(state.config.temperature),
@@ -180,6 +188,10 @@ export function patchOf(draft: Draft): Record<string, unknown> {
     requestTimeoutMs: numberOrNull(draft.requestTimeoutMs) ?? 300000,
     streamIdleTimeoutMs: numberOrNull(draft.streamIdleTimeoutMs) ?? 300000,
     attemptTimeoutMs: boundedNumber(draft.attemptTimeoutMs, 0, 3_600_000, true) ?? 0,
+    retryMaxRetries: boundedNumber(draft.retryMaxRetries, 0, 10, true) ?? 0,
+    retryBaseDelayMs: boundedNumber(draft.retryBaseDelayMs, 0, 60_000, true) ?? 250,
+    retryMaxDelayMs: boundedNumber(draft.retryMaxDelayMs, 0, 120_000, true) ?? 2000,
+    retryJitter: boundedNumber(draft.retryJitter, 0, 1, false) ?? 0.2,
     maxOutputTokens: numberOrNull(draft.maxOutputTokens),
     contextWindow: numberOrNull(draft.contextWindow),
     temperature: boundedNumber(draft.temperature, 0, 2, false),

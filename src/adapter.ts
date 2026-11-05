@@ -36,6 +36,8 @@ import { classifyResponseError } from './errors.ts'
 import { effectiveNumCtx } from './context-override.ts'
 import { hasImages, resolveImages, type ImageMap } from './images.ts'
 import { buildChatBody, buildNativeBody } from './messages.ts'
+import { isRetryableStatus, retryDelay, retryPolicy } from './retry.ts'
+import { redactText } from './sanitize.ts'
 import { PROVIDER } from './provider-ids.ts'
 import { recordRequest as defaultRecordRequest, type RequestOutcome } from './request-log.ts'
 import { endpointFor } from './routing.ts'
@@ -351,7 +353,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
           : error instanceof LlmError
             ? error
             : new LlmError(
-                error instanceof Error ? error.message : 'Ollama Cloud request failed',
+                error instanceof Error ? redactText(error.message) : 'Ollama Cloud request failed',
                 'TRANSPORT',
                 { cause: error },
               )
@@ -500,37 +502,59 @@ export class OllamaCloudAdapter extends LlmAdapter {
       accept: model.transport === 'openai-chat' ? 'text/event-stream' : 'application/x-ndjson',
       'user-agent': config.userAgent,
     }
+    const policy = retryPolicy(config)
+    const wait = async (attempt: number): Promise<void> => {
+      await new Promise<void>((resolve) => setTimeout(resolve, retryDelay(attempt, policy)))
+      signal?.throwIfAborted()
+    }
 
-    const controller = new AbortController()
-    let timedOut = false
-    const onAbort = (): void => controller.abort(signal?.reason)
-    signal?.addEventListener('abort', onAbort, { once: true })
-    const timer = setTimeout(() => {
-      timedOut = true
-      controller.abort()
-    }, config.requestTimeoutMs)
-    timer.unref?.()
+    for (let attempt = 0; ; attempt += 1) {
+      const controller = new AbortController()
+      let timedOut = false
+      const onAbort = (): void => controller.abort(signal?.reason)
+      signal?.addEventListener('abort', onAbort, { once: true })
+      const timer = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, config.requestTimeoutMs)
+      timer.unref?.()
 
-    try {
-      return await this.fetchImpl(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-    } catch (error) {
-      if (signal?.aborted === true) throw signal.reason ?? error
-      if (timedOut) {
-        throw new LlmError(
-          `Ollama Cloud did not return response headers within ${config.requestTimeoutMs}ms`,
-          'TIMEOUT',
-          { cause: error },
-        )
+      try {
+        const response = await this.fetchImpl(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        })
+        if (attempt < policy.maxRetries && isRetryableStatus(response.status)) {
+          await response.body?.cancel()
+          await wait(attempt)
+          continue
+        }
+        return response
+      } catch (error) {
+        if (signal?.aborted === true) throw signal.reason ?? error
+        if (timedOut) {
+          const timeout = new LlmError(
+            `Ollama Cloud did not return response headers within ${config.requestTimeoutMs}ms`,
+            'TIMEOUT',
+            { cause: error },
+          )
+          if (attempt < policy.maxRetries) {
+            await wait(attempt)
+            continue
+          }
+          throw timeout
+        }
+        if (attempt < policy.maxRetries) {
+          await wait(attempt)
+          continue
+        }
+        throw error
+      } finally {
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
       }
-      throw error
-    } finally {
-      clearTimeout(timer)
-      signal?.removeEventListener('abort', onAbort)
     }
   }
 

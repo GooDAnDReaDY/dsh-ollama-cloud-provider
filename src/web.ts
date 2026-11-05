@@ -1,6 +1,7 @@
 import { WebError, type WebFetchProvider, type WebFetchRequest, type WebFetchResult, type WebSearchProvider, type WebSearchRequest, type WebSearchResult, type WebSearchSource } from '@deepseek-ai/dsh-web'
 
 import { createAttemptBudget } from './attempt.ts'
+import { redactText, sanitizeUrl } from './sanitize.ts'
 
 export const OLLAMA_WEB_PROVIDER_ID = 'ollama-cloud'
 export const MAX_SEARCH_RESULTS = 10
@@ -73,6 +74,7 @@ async function postOnce(
   }
   const fetchImpl = options.fetch ?? fetch
   const timeoutMs = options.timeoutMs ?? WEB_TIMEOUT_MS
+  const safeUrl = sanitizeUrl(url)
   const budget = createAttemptBudget(timeoutMs, caller)
   let response: Response
   try {
@@ -96,16 +98,16 @@ async function postOnce(
       throw new WebError(`ollama-cloud web request timed out after ${timeoutMs}ms`, 'OLLAMA_WEB_TIMEOUT', { cause: error })
     }
     if (isRedirectFailure(error)) {
-      throw new WebError(`${url} attempted a redirect`, 'WEB_PROVIDER_ERROR', { cause: error })
+      throw new WebError(`${safeUrl} attempted a redirect`, 'WEB_PROVIDER_ERROR', { cause: error })
     }
-    const detail = error instanceof Error && error.message !== '' ? `: ${error.message}` : ''
-    throw new WebError(`could not reach ${url}${detail}`, 'OLLAMA_WEB_TRANSPORT', { cause: error })
+    const detail = error instanceof Error && error.message !== '' ? `: ${redactText(error.message)}` : ''
+    throw new WebError(`could not reach ${safeUrl}${detail}`, 'OLLAMA_WEB_TRANSPORT', { cause: error })
   }
   if (!response.ok) {
     budget.dispose()
     await response.body?.cancel()
     const hint = response.status === 401 || response.status === 403 ? '; check the API key' : ''
-    throw new WebError(`${url} answered ${response.status}${hint}`, 'WEB_PROVIDER_ERROR')
+    throw new WebError(`${safeUrl} answered ${response.status}${hint}`, 'WEB_PROVIDER_ERROR')
   }
   try {
     return { status: response.status, body: await response.json() }
@@ -116,7 +118,7 @@ async function postOnce(
     if (budget.timedOut) {
       throw new WebError(`ollama-cloud web request timed out after ${timeoutMs}ms`, 'OLLAMA_WEB_TIMEOUT', { cause: error })
     }
-    throw new WebError(`${url} did not answer with JSON`, 'OLLAMA_WEB_BAD_REPLY', { cause: error })
+    throw new WebError(`${safeUrl} did not answer with JSON`, 'OLLAMA_WEB_BAD_REPLY', { cause: error })
   } finally {
     budget.dispose()
   }
