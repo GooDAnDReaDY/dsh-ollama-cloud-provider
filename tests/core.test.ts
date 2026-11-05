@@ -287,6 +287,60 @@ test('OpenAI body uses reasoning_effort and max_tokens', () => {
   assert.deepEqual(body.stream_options, { include_usage: true })
 })
 
+test('generation defaults merge into native and OpenAI bodies with request precedence', () => {
+  const tuned = resolveConfig({
+    apiKey: 'k',
+    temperature: 0.7,
+    topK: 40,
+    topP: 0.9,
+    minP: 0.05,
+    seed: 42,
+    repeatPenalty: 1.1,
+    repeatLastN: 64,
+    numCtx: 8192,
+    keepAlive: '5m',
+    stop: ['END'],
+  })
+  const base: GenerateOptions = {
+    provider: 'ollama-cloud',
+    model: 'gpt-oss:120b',
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+  }
+  const native = buildNativeBody(base, effectiveModel(base.model, tuned), tuned) as {
+    keep_alive?: string
+    options?: Record<string, unknown>
+  }
+  assert.equal(native.keep_alive, '5m')
+  assert.deepEqual(native.options, {
+    temperature: 0.7,
+    top_k: 40,
+    top_p: 0.9,
+    min_p: 0.05,
+    seed: 42,
+    repeat_penalty: 1.1,
+    repeat_last_n: 64,
+    num_ctx: 8192,
+    num_predict: 32768,
+    stop: ['END'],
+  })
+
+  const overridden = buildNativeBody(
+    { ...base, temperature: 0.2, stop: ['STOP'] },
+    effectiveModel(base.model, tuned),
+    tuned,
+  ) as { options?: Record<string, unknown> }
+  assert.equal(overridden.options?.temperature, 0.2)
+  assert.deepEqual(overridden.options?.stop, ['STOP'])
+
+  const openai = buildChatBody(base, effectiveModel(base.model, tuned), tuned) as Record<string, unknown>
+  assert.equal(openai.temperature, 0.7)
+  assert.equal(openai.top_p, 0.9)
+  assert.equal(openai.seed, 42)
+  assert.deepEqual(openai.stop, ['END'])
+  assert.equal('top_k' in openai, false)
+  assert.equal('keep_alive' in openai, false)
+})
+
 test('pricing resolves exact ids, base tags and off-peak rates', () => {
   assert.equal(priceFor('gpt-oss:120b').input, 0.15)
   assert.equal(priceFor('gpt-oss').priced, true)

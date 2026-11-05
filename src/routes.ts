@@ -285,6 +285,16 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
     set('contextWindowOverrides', cleanNumberRecord(patch.contextWindowOverrides))
   }
   if ('maxOutputTokens' in patch) set('maxOutputTokens', patch.maxOutputTokens)
+  if ('temperature' in patch) set('temperature', patch.temperature)
+  if ('topK' in patch) set('topK', patch.topK)
+  if ('topP' in patch) set('topP', patch.topP)
+  if ('minP' in patch) set('minP', patch.minP)
+  if ('seed' in patch) set('seed', patch.seed)
+  if ('repeatPenalty' in patch) set('repeatPenalty', patch.repeatPenalty)
+  if ('repeatLastN' in patch) set('repeatLastN', patch.repeatLastN)
+  if ('numCtx' in patch) set('numCtx', patch.numCtx)
+  if ('keepAlive' in patch) set('keepAlive', patch.keepAlive)
+  if ('stop' in patch) set('stop', cleanStringArray(patch.stop))
   if ('accounts' in patch) {
     const accounts = cleanAccounts(patch.accounts)
     for (const account of accounts) {

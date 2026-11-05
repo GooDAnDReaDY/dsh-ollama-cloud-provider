@@ -6,7 +6,7 @@ export const DEFAULT_API_BASE = 'https://ollama.com'
 export const DEFAULT_OPENAI_BASE = 'https://ollama.com/v1'
 export const DEFAULT_USAGE_URL = 'https://ollama.com/api/usage'
 export const DEFAULT_BALANCE_URL = 'https://ollama.com/api/balance'
-export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.18'
+export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.19'
 export const DEFAULT_CONTEXT_WINDOW = 131_072
 export const DEFAULT_MAX_TOKENS = 32_768
 export const DEFAULT_GENERATE_MAX_TOKENS = 131_072
@@ -69,6 +69,17 @@ export interface Config {
   contextWindowOverrides?: Record<string, number>
   /** Per-turn output cap; `0` omits `num_predict`/`max_tokens`. */
   maxOutputTokens?: number
+  /** Optional Ollama native generation defaults. */
+  temperature?: number
+  topK?: number
+  topP?: number
+  minP?: number
+  seed?: number
+  repeatPenalty?: number
+  repeatLastN?: number
+  numCtx?: number
+  keepAlive?: string
+  stop?: string[]
   /** Extra accounts for rotation. */
   accounts?: AccountConfig[]
   /** Preferred account per model glob; others remain fallbacks. */
@@ -110,6 +121,16 @@ export const Config: z<Config> = z.object({
   contextWindow: markVolatile(z.number().min(1).max(10_000_000).step(1)),
   contextWindowOverrides: markVolatile(z.dict(z.number().min(1).max(10_000_000).step(1)).default({})),
   maxOutputTokens: markVolatile(z.number().min(0).max(10_000_000).step(1)),
+  temperature: markVolatile(z.number().min(0).max(2)),
+  topK: markVolatile(z.number().min(1).max(1_000_000).step(1)),
+  topP: markVolatile(z.number().min(0).max(1)),
+  minP: markVolatile(z.number().min(0).max(1)),
+  seed: markVolatile(z.number().min(0).max(4_294_967_295).step(1)),
+  repeatPenalty: markVolatile(z.number().min(0).max(2)),
+  repeatLastN: markVolatile(z.number().min(-1).max(1_000_000).step(1)),
+  numCtx: markVolatile(z.number().min(1).max(10_000_000).step(1)),
+  keepAlive: markVolatile(z.string()),
+  stop: markVolatile(z.array(z.string())),
   accounts: markVolatile(z.array(z.object({
     label: z.string(),
     apiKeyEnv: z.string().role('credential-ref'),
@@ -149,6 +170,16 @@ export interface ResolvedConfig {
   contextWindow?: number
   contextWindowOverrides: Readonly<Record<string, number>>
   maxOutputTokens?: number
+  temperature?: number
+  topK?: number
+  topP?: number
+  minP?: number
+  seed?: number
+  repeatPenalty?: number
+  repeatLastN?: number
+  numCtx?: number
+  keepAlive?: string
+  stop?: readonly string[]
   accounts: readonly AccountConfig[]
   modelAccountRules: readonly ModelAccountRule[]
   stickySession: boolean
@@ -176,6 +207,23 @@ export function unwrapVolatileConfig(config: Config): Config {
 
 function positiveInt(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : fallback
+}
+
+function numberInRange(value: unknown, min: number, max: number): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+    ? value
+    : undefined
+}
+
+function integerInRange(value: unknown, min: number, max: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) return undefined
+  return value
+}
+
+function nonEmptyStrings(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const out = value.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
+  return out.length === 0 ? undefined : out
 }
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -245,6 +293,15 @@ export function resolveConfig(config: Config): ResolvedConfig {
   const visibleModels = Array.isArray(config.visibleModels)
     ? config.visibleModels.filter((id): id is string => typeof id === 'string' && id !== '')
     : []
+  const temperature = numberInRange(config.temperature, 0, 2)
+  const topK = integerInRange(config.topK, 1, 1_000_000)
+  const topP = numberInRange(config.topP, 0, 1)
+  const minP = numberInRange(config.minP, 0, 1)
+  const seed = integerInRange(config.seed, 0, 4_294_967_295)
+  const repeatPenalty = numberInRange(config.repeatPenalty, 0, 2)
+  const repeatLastN = integerInRange(config.repeatLastN, -1, 1_000_000)
+  const numCtx = integerInRange(config.numCtx, 1, 10_000_000)
+  const stop = nonEmptyStrings(config.stop)
   return {
     apiKeyEnv: typeof config.apiKeyEnv === 'string'
       ? config.apiKeyEnv.trim()
@@ -279,6 +336,16 @@ export function resolveConfig(config: Config): ResolvedConfig {
       && config.maxOutputTokens >= 0
       ? { maxOutputTokens: config.maxOutputTokens }
       : {}),
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(topK === undefined ? {} : { topK }),
+    ...(topP === undefined ? {} : { topP }),
+    ...(minP === undefined ? {} : { minP }),
+    ...(seed === undefined ? {} : { seed }),
+    ...(repeatPenalty === undefined ? {} : { repeatPenalty }),
+    ...(repeatLastN === undefined ? {} : { repeatLastN }),
+    ...(numCtx === undefined ? {} : { numCtx }),
+    ...(typeof config.keepAlive === 'string' && config.keepAlive.trim() !== '' ? { keepAlive: config.keepAlive.trim() } : {}),
+    ...(stop === undefined ? {} : { stop }),
     accounts: Array.isArray(config.accounts) ? config.accounts : [],
     modelAccountRules: ruleList(config.modelAccountRules),
     stickySession: config.stickySession !== false,

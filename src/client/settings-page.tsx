@@ -597,6 +597,23 @@ export function OllamaCloudSettingsPage(props: {
       </section>
 
       <section className="ocl-card">
+        <h3 className="ocl-card-title">{t('generation')}</h3>
+        <p className="ocl-hint">{t('generationHint')}</p>
+        <div className="ocl-grid">
+          <Field label={t('temperature')} type="number" value={draft.temperature} onChange={(value) => update({ temperature: value })} />
+          <Field label={t('topK')} type="number" value={draft.topK} onChange={(value) => update({ topK: value })} />
+          <Field label={t('topP')} type="number" value={draft.topP} onChange={(value) => update({ topP: value })} />
+          <Field label={t('minP')} type="number" value={draft.minP} onChange={(value) => update({ minP: value })} />
+          <Field label={t('seed')} type="number" value={draft.seed} onChange={(value) => update({ seed: value })} />
+          <Field label={t('repeatPenalty')} type="number" value={draft.repeatPenalty} onChange={(value) => update({ repeatPenalty: value })} />
+          <Field label={t('repeatLastN')} type="number" value={draft.repeatLastN} onChange={(value) => update({ repeatLastN: value })} />
+          <Field label={t('numCtx')} type="number" value={draft.numCtx} onChange={(value) => update({ numCtx: value })} />
+          <Field label={t('keepAlive')} hint={t('keepAliveHint')} value={draft.keepAlive} onChange={(value) => update({ keepAlive: value })} />
+          <Field label={t('stop')} hint={t('stopHint')} value={draft.stop} onChange={(value) => update({ stop: value })} />
+        </div>
+      </section>
+
+      <section className="ocl-card">
         <h3 className="ocl-card-title">{t('advanced')}</h3>
         <div className="ocl-grid">
           <Field label={t('apiKeyEnv')} hint={t('apiKeyEnvHint')} value={draft.apiKeyEnv} onChange={(value) => update({ apiKeyEnv: value })} />

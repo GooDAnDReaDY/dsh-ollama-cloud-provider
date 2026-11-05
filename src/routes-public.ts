@@ -17,6 +17,16 @@ export interface PublicConfig {
   contextWindow: number | null
   contextWindowOverrides: Readonly<Record<string, number>>
   maxOutputTokens: number | null
+  temperature: number | null
+  topK: number | null
+  topP: number | null
+  minP: number | null
+  seed: number | null
+  repeatPenalty: number | null
+  repeatLastN: number | null
+  numCtx: number | null
+  keepAlive: string
+  stop: readonly string[]
   accounts: ReadonlyArray<{ label: string; apiKeyEnv: string }>
   modelAccountRules: ReadonlyArray<{ pattern: string; account: string }>
   stickySession: boolean
@@ -45,6 +55,16 @@ export function publicConfig(config: ResolvedConfig): PublicConfig {
     contextWindow: config.contextWindow ?? null,
     contextWindowOverrides: config.contextWindowOverrides,
     maxOutputTokens: config.maxOutputTokens ?? null,
+    temperature: config.temperature ?? null,
+    topK: config.topK ?? null,
+    topP: config.topP ?? null,
+    minP: config.minP ?? null,
+    seed: config.seed ?? null,
+    repeatPenalty: config.repeatPenalty ?? null,
+    repeatLastN: config.repeatLastN ?? null,
+    numCtx: config.numCtx ?? null,
+    keepAlive: config.keepAlive ?? '',
+    stop: config.stop ?? [],
     accounts: config.accounts.map((account) => ({
       label: typeof account.label === 'string' ? account.label : '',
       apiKeyEnv: typeof account.apiKeyEnv === 'string' ? account.apiKeyEnv : '',
