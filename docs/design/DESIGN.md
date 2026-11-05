@@ -3,7 +3,7 @@
 ## Product / Purpose
 - Назначение: нативный LLM-провайдер Ollama Cloud для DeepSeek Harness (DSH).
 - Аудитория: пользователи DSH Desktop/Web/TUI, у которых есть ключ Ollama Cloud.
-- Статус: 0.1.20 опубликован и проверен на production Web/Desktop; 0.1.21 добавляет local model inventory, pull/remove и local settings card. Источник версии: `package.json`; история: `CHANGELOG.md`.
+- Статус: 0.1.21 опубликован и проверен на production Web/Desktop; 0.1.20 — предыдущий релиз. Источник версии: `package.json`; история: `CHANGELOG.md`.
 
 ## User Surfaces
 - Web/UI: settings-страница, карточка квоты в сайдбаре, центральная панель с расходом, аналитикой и heatmap.
