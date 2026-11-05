@@ -1,6 +1,6 @@
 {
   "name": "@goodandready/dsh-ollama-cloud-provider",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "description": "Ollama Cloud LLM provider plugin for DeepSeek Harness (dsh).",
   "license": "MIT",
   "type": "module",
@@ -73,7 +73,7 @@
     "build": "tsdown",
     "prepare": "tsdown 1>&2",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/core.test.ts tests/usage.test.ts tests/adapter.test.ts tests/routes.test.ts tests/native.test.ts tests/openai-chat.test.ts tests/commands.test.ts tests/tui-settings.test.ts tests/analytics.test.ts tests/apply.test.ts tests/account-rules.test.ts tests/request-log.test.ts tests/image-budget.test.ts tests/tool-schema.test.ts tests/tools.test.ts tests/plugin-updater.test.ts tests/compat.test.ts tests/status.test.ts tests/settings-draft.test.ts tests/update-state.test.ts tests/ui-render.test.tsx tests/update-card-view.test.tsx tests/web.test.ts tests/mock-ollama.test.ts tests/local.test.ts tests/reasoning.test.ts tests/catalog-cache.test.ts tests/local-models.test.ts tests/attempt.test.ts tests/model-groups.test.tsx",
+    "test": "node --import tsx --test tests/core.test.ts tests/usage.test.ts tests/adapter.test.ts tests/routes.test.ts tests/native.test.ts tests/openai-chat.test.ts tests/commands.test.ts tests/tui-settings.test.ts tests/analytics.test.ts tests/apply.test.ts tests/account-rules.test.ts tests/request-log.test.ts tests/image-budget.test.ts tests/tool-schema.test.ts tests/tools.test.ts tests/plugin-updater.test.ts tests/compat.test.ts tests/status.test.ts tests/settings-draft.test.ts tests/update-state.test.ts tests/ui-render.test.tsx tests/update-card-view.test.tsx tests/web.test.ts tests/mock-ollama.test.ts tests/local.test.ts tests/reasoning.test.ts tests/catalog-cache.test.ts tests/local-models.test.ts tests/attempt.test.ts tests/model-groups.test.tsx tests/discovery.test.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "release": "npm run check && npm pack",
     "sync:models": "node scripts/sync-models.mjs"
