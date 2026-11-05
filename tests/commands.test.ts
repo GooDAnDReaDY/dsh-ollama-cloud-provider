@@ -40,13 +40,23 @@ function registered(
   stream?: (options: unknown) => AsyncGenerator<{ type: string; text?: string; reason?: unknown }>,
   source: Parameters<typeof applyCommands>[1] = deps(stream),
 ): { handler: (invocation: { rawInput: string }) => Promise<{ kind: string; text: string }> } {
-  let definition: { handler: (invocation: { rawInput: string }) => Promise<{ kind: string; text: string }> } | undefined
+  return command('ollama', source)
+}
+
+function command(
+  name: string,
+  source: Parameters<typeof applyCommands>[1] = deps(),
+): { handler: (invocation: { rawInput: string; agent?: { id: string } }) => Promise<{ kind: string; text: string }> } {
+  let definitions: Map<string, { handler: (invocation: { rawInput: string; agent?: { id: string } }) => Promise<{ kind: string; text: string }> }> | undefined = new Map()
   const ctx = {
     commands: {
-      register: (value: typeof definition) => { definition = value },
+      register: (value: { name: string; handler: (invocation: { rawInput: string; agent?: { id: string } }) => Promise<{ kind: string; text: string }> }) => {
+        definitions?.set(value.name, value)
+      },
     },
   } as never
   applyCommands(ctx, source)
+  const definition = definitions?.get(name)
   assert.ok(definition !== undefined)
   return definition
 }
@@ -90,6 +100,28 @@ test('unknown command returns an error with the accepted verbs', async () => {
   const result = await registered().handler({ rawInput: 'bogus' })
   assert.equal(result.kind, 'error')
   assert.match(result.text, /Unknown \/ollama argument/)
+})
+
+test('context command applies presets per session and follows config', async () => {
+  const source = deps()
+  ;(source as { config: () => ReturnType<typeof resolveConfig> }).config =
+    () => resolveConfig({ apiKey: 'key', numCtx: 8192 })
+  const handler = command('ollama-context', source)
+
+  const preset = await handler.handler({ rawInput: '16k', agent: { id: 'session-a' } })
+  assert.equal(preset.kind, 'success')
+  assert.match(preset.text, /16384 tokens/)
+  const isolated = await handler.handler({ rawInput: 'status', agent: { id: 'session-b' } })
+  assert.match(isolated.text, /session=unset/)
+  assert.match(isolated.text, /effective=8192 tokens/)
+
+  const follow = await handler.handler({ rawInput: 'follow', agent: { id: 'session-a' } })
+  assert.match(follow.text, /session=follow/)
+  assert.match(follow.text, /effective=8192 tokens/)
+  const reset = await handler.handler({ rawInput: 'reset', agent: { id: 'session-a' } })
+  assert.match(reset.text, /Session override cleared/)
+  const invalid = await handler.handler({ rawInput: 'nonsense', agent: { id: 'session-a' } })
+  assert.equal(invalid.kind, 'error')
 })
 
 test('local command lists models and requires --yes for removal', async () => {

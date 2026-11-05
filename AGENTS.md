@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.21 is verified on the production Web host and Desktop;
-  0.1.20 is the previous release.
+  0.1.22 adds session context overrides and per-attempt budgets.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -43,6 +43,8 @@ stop and ask the owner before changing anything.
 - `src/catalog.ts` — model catalog and stale-while-revalidate refresh.
 - `src/catalog-cache.ts` — atomic persistent catalog snapshot.
 - `src/local-models.ts` — local Ollama tags/ps/show/pull/delete contract.
+- `src/context-override.ts` — session-scoped native `num_ctx` overrides.
+- `src/attempt.ts` — one abort/timeout budget per attempt.
 - `src/routes.ts` — host HTTP routes and write-route guards.
 - `src/web.ts` — Ollama web search/fetch providers for `ctx.web`.
 - `src/client/` — settings page, quota card/panel, analytics, heatmap.

@@ -6,6 +6,7 @@ import {
   type TransportId,
 } from './config.ts'
 import { clearCatalogSnapshot, loadCatalogSnapshot, saveCatalogSnapshot } from './catalog-cache.ts'
+import { createAttemptBudget } from './attempt.ts'
 import { GENERATED_MODELS, type OllamaCloudModelMeta } from './models.generated.ts'
 import { clearModelProbeCache, isLocalEndpoint, probeModelOutcome, type ModelProbe } from './model-probe.ts'
 import { formatPrice, priceFor } from './pricing.ts'
@@ -269,11 +270,17 @@ async function refreshNow(
   keepOnFailure: boolean,
   epoch: number,
 ): Promise<readonly string[]> {
-  const signal = AbortSignal.timeout(CATALOG_TIMEOUT_MS)
-  const [modelsResult, tagsResult] = await Promise.allSettled([
-    fetchJson(modelsUrlFor(config), config, fetchImpl, signal),
-    fetchJson(tagsUrlFor(config), config, fetchImpl, signal),
-  ])
+  const budget = createAttemptBudget(CATALOG_TIMEOUT_MS)
+  let modelsResult: PromiseSettledResult<unknown>
+  let tagsResult: PromiseSettledResult<unknown>
+  try {
+    [modelsResult, tagsResult] = await Promise.allSettled([
+      fetchJson(modelsUrlFor(config), config, fetchImpl, budget.signal),
+      fetchJson(tagsUrlFor(config), config, fetchImpl, budget.signal),
+    ])
+  } finally {
+    budget.dispose()
+  }
   if (epoch !== generation) return Object.keys(GENERATED_MODELS)
   if (modelsResult.status === 'fulfilled') {
     const payload = modelsResult.value as ModelsPayload

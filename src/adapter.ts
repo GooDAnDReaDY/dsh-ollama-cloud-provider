@@ -21,6 +21,7 @@ import {
 
 import { matchModelAccount, orderKeysForModel } from './account-rules.ts'
 import { bestEffortFailed } from './best-effort.ts'
+import { createAttemptBudget } from './attempt.ts'
 import {
   describeModel,
   effectiveMaxTokens,
@@ -32,6 +33,7 @@ import {
 import type { ResolvedConfig } from './config.ts'
 import type { KeyResolver, ResolvedKey } from './credentials.ts'
 import { classifyResponseError } from './errors.ts'
+import { effectiveNumCtx } from './context-override.ts'
 import { hasImages, resolveImages, type ImageMap } from './images.ts'
 import { buildChatBody, buildNativeBody } from './messages.ts'
 import { PROVIDER } from './provider-ids.ts'
@@ -250,7 +252,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
     }
     const body = model.transport === 'openai-chat'
       ? buildChatBody(bodyOptions, model, config, images)
-      : buildNativeBody(bodyOptions, model, config, images)
+      : buildNativeBody(bodyOptions, model, config, images, effectiveNumCtx(config, options.sessionId))
 
     let lastError: LlmError | undefined
     let lastAccount = 'default'
@@ -276,8 +278,9 @@ export class OllamaCloudAdapter extends LlmAdapter {
           ...(errorCode === undefined ? {} : { error: errorCode }),
         })
       }
+      const budget = createAttemptBudget(config.attemptTimeoutMs, options.signal)
       try {
-        const response = await this.send(url, entry.key, model, body, config, options.signal)
+        const response = await this.send(url, entry.key, model, body, config, budget.signal)
         if (!response.ok) {
           const text = await response.text().catch(() => '')
           const error = classifyResponseError(response.status, text, response.headers)
@@ -324,8 +327,8 @@ export class OllamaCloudAdapter extends LlmAdapter {
           ok: true,
         })
         const chunks = model.transport === 'openai-chat'
-          ? parseChatStream(response, config.streamIdleTimeoutMs, options.signal)
-          : parseNativeStream(response, config.streamIdleTimeoutMs, options.signal)
+          ? parseChatStream(response, config.streamIdleTimeoutMs, budget.signal)
+          : parseNativeStream(response, config.streamIdleTimeoutMs, budget.signal)
         for await (const chunk of chunks) {
           if (firstChunkAt === undefined) firstChunkAt = Date.now()
           started = true
@@ -334,15 +337,21 @@ export class OllamaCloudAdapter extends LlmAdapter {
         logAttempt(true)
         return
       } catch (error) {
-        const classified = error instanceof LlmError
-          ? error
-          : new LlmError(
-              error instanceof Error ? error.message : 'Ollama Cloud request failed',
-              'TRANSPORT',
+        const classified = budget.timedOut
+          ? new LlmError(
+              `Ollama Cloud attempt exceeded ${config.attemptTimeoutMs}ms`,
+              'TIMEOUT',
               { cause: error },
             )
+          : error instanceof LlmError
+            ? error
+            : new LlmError(
+                error instanceof Error ? error.message : 'Ollama Cloud request failed',
+                'TRANSPORT',
+                { cause: error },
+              )
         logAttempt(false, classified.code)
-        if (started || options.signal?.aborted === true) throw error
+        if (started || options.signal?.aborted === true) throw budget.timedOut ? classified : error
         lastError = classified
         const transient = this.isTransient(classified)
         const canRotate = index < keys.length - 1 && (transient || this.modelScoped(classified))
@@ -364,6 +373,8 @@ export class OllamaCloudAdapter extends LlmAdapter {
           this.markCooldown(entry.key, 0)
         }
         if (!canRotate) throw classified
+      } finally {
+        budget.dispose()
       }
     }
 

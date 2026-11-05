@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.22 — 2026-11-05
+
+- Added `/ollama-context` with 4k/8k/16k/32k/64k/128k presets, custom token
+  values, follow, status and reset. The override is session-scoped and wins
+  over configured `num_ctx`; sessions remain isolated.
+- Added an independent whole-attempt budget (`attemptTimeoutMs`, default off)
+  for chat, catalog and web requests. Each retry gets a fresh budget; caller
+  cancellation is distinguished from timeout.
+- Added settings for the attempt budget and tests for budget/timeout/session
+  isolation; 124/124 tests.
+
 ## 0.1.21 — 2026-11-05
 
 - Added local Ollama model management: `/api/tags` disk inventory, `/api/ps`
