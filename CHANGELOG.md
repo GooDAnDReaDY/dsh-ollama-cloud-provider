@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.25 — 2026-11-05
+
+- Added safe model discovery against an unsaved endpoint with an optional
+  one-shot key. The key is used only for that request and is never persisted,
+  saved or logged; discovery has no state side effects.
+- Discovery returns a draft catalog preview (v1/models with tags fallback),
+  rejects invalid/credential-bearing URLs, and keeps the current provider
+  settings unchanged.
+- Added discovery UI and 401/no-leak/invalid-URL tests; 132/132.
+
 ## 0.1.24 — 2026-11-05
 
 - Added per-model capability/thinking overrides (`modelOverrides`) for

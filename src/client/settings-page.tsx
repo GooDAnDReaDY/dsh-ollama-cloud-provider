@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { quotaBars, windowRows, worstUsedPercent } from '../quota-model.ts'
 import {
   clearKey,
+  discoverModels,
   fetchServiceStatus,
   fetchState,
   refreshModels,
@@ -11,6 +12,7 @@ import {
   saveConfig,
   saveKey,
   testConnection,
+  type DiscoveryResult,
   type HostState,
   type ModelRow,
   type ServiceStatus,
@@ -106,6 +108,11 @@ export function OllamaCloudSettingsPage(props: {
   const [service, setService] = useState<ServiceStatus | null>(null)
   const [serviceBusy, setServiceBusy] = useState(false)
   const [serviceError, setServiceError] = useState<string | null>(null)
+  const [discoverBase, setDiscoverBase] = useState('')
+  const [discoverKey, setDiscoverKey] = useState('')
+  const [discoverResult, setDiscoverResult] = useState<DiscoveryResult | null>(null)
+  const [discovering, setDiscovering] = useState(false)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
 
   const load = useCallback(async (preserveDraft = false) => {
     setLoading(true)
@@ -182,6 +189,23 @@ export function OllamaCloudSettingsPage(props: {
   }, [t])
 
   useEffect(() => { void loadService() }, [loadService])
+
+  const runDiscovery = async (): Promise<void> => {
+    const base = discoverBase.trim() || draft?.apiBase || ''
+    if (base === '' || discovering) return
+    setDiscovering(true)
+    setDiscoverError(null)
+    try {
+      const result = await discoverModels(base, discoverKey)
+      setDiscoverResult(result)
+      setDiscoverKey('')
+    } catch (caught) {
+      setDiscoverResult(null)
+      setDiscoverError(caught instanceof Error ? caught.message : t('discoveryFailed'))
+    } finally {
+      setDiscovering(false)
+    }
+  }
 
   if (loading && state === null) return <p className="ocl-hint">{t('loading')}</p>
   if (state === null || draft === null) {
@@ -771,6 +795,51 @@ export function OllamaCloudSettingsPage(props: {
           <Field label={t('contextWindow')} type="number" value={draft.contextWindow} onChange={(value) => update({ contextWindow: value })} />
           <Field label={t('planLabel')} hint={t('planLabelHint')} value={draft.planLabel} onChange={(value) => update({ planLabel: value })} />
         </div>
+      </section>
+
+      <section className="ocl-card">
+        <h3 className="ocl-card-title">{t('discover')}</h3>
+        <p className="ocl-hint">{t('discoverHint')}</p>
+        <label className="ocl-field">
+          <span>{t('endpoint')}</span>
+          <input
+            className="ocl-input"
+            value={discoverBase}
+            placeholder={draft.apiBase}
+            onChange={(event) => setDiscoverBase(event.target.value)}
+          />
+        </label>
+        <label className="ocl-field">
+          <span>{t('oneShotKey')}</span>
+          <input
+            className="ocl-input"
+            type="password"
+            autoComplete="off"
+            value={discoverKey}
+            placeholder={t('oneShotKeyPlaceholder')}
+            onChange={(event) => setDiscoverKey(event.target.value)}
+          />
+        </label>
+        <p className="ocl-hint">{t('oneShotKeyHint')}</p>
+        <button type="button" className="ocl-button" disabled={discovering} onClick={() => { void runDiscovery() }}>
+          {discovering ? t('discovering') : t('discoverAction')}
+        </button>
+        {discoverError !== null && <p className="ocl-error">{discoverError}</p>}
+        {discoverResult !== null && (
+          <div className="ocl-model-section">
+            <div className="ocl-model-section-head">
+              <span>{discoverResult.base} · {discoverResult.models.length} {t('modelCount')}</span>
+            </div>
+            <p className="ocl-hint">{t('currentOnly')}</p>
+            <div className="ocl-models">
+              {discoverResult.models.slice(0, 100).map((model) => (
+                <div className="ocl-model" key={model}>
+                  <span className="ocl-model-name">{model}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="ocl-card">

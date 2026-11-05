@@ -19,6 +19,7 @@ import {
 } from './catalog.ts'
 import { NS, type Config, type ResolvedConfig } from './config.ts'
 import type { KeyPool } from './credentials.ts'
+import { discoverModels } from './discovery.ts'
 import {
   pullLocalModel,
   readLocalInventory,
@@ -62,6 +63,8 @@ export interface RouteDeps {
   readonly verifyHost?: (req: IncomingMessage) => Promise<boolean>
   /** Test seam for local Ollama inventory and mutation routes. */
   readonly localFetch?: typeof fetch
+  /** Test seam for unsaved-endpoint discovery. */
+  readonly discoveryFetch?: typeof fetch
 }
 
 type UsageValue = Awaited<ReturnType<UsageReader['read']>> | null
@@ -751,6 +754,25 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
       json(res, 200, { ok: true, model })
     } catch (error) {
       json(res, 502, { error: error instanceof Error ? error.message : 'remove failed' })
+    }
+  })
+
+  route('/dsh-ollama/discover', async (req, res) => {
+    if (!(await requirePost(req, res, verifyHost))) return
+    let body: Record<string, unknown>
+    try {
+      body = await readJson(req)
+    } catch (error) {
+      json(res, 400, { error: error instanceof Error ? error.message : 'invalid body' })
+      return
+    }
+    const apiBase = typeof body.apiBase === 'string' ? body.apiBase : ''
+    const apiKey = typeof body.apiKey === 'string' ? body.apiKey : ''
+    try {
+      const result = await discoverModels(apiBase, apiKey, deps.discoveryFetch)
+      json(res, 200, result)
+    } catch (error) {
+      json(res, 400, { error: error instanceof Error ? error.message : 'discovery failed' })
     }
   })
 

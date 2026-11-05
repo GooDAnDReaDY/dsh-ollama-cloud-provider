@@ -191,6 +191,19 @@ export function refreshModels(): Promise<HostState> {
   return call<HostState>('/dsh-ollama/models/refresh', { method: 'POST', body: '{}' })
 }
 
+export interface DiscoveryResult {
+  base: string
+  models: string[]
+  local: boolean
+}
+
+export function discoverModels(apiBase: string, apiKey: string): Promise<DiscoveryResult> {
+  return call<DiscoveryResult>('/dsh-ollama/discover', {
+    method: 'POST',
+    body: JSON.stringify({ apiBase, apiKey }),
+  })
+}
+
 export interface LocalModelDetails {
   family?: string
   parameterSize?: string

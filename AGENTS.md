@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.24 is verified on the production Web host and Desktop;
-  0.1.23 is the previous release.
+  0.1.25 adds unsaved-endpoint discovery with a one-shot key.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -43,6 +43,7 @@ stop and ask the owner before changing anything.
 - `src/catalog.ts` — model catalog and stale-while-revalidate refresh.
 - `src/catalog-cache.ts` — atomic persistent catalog snapshot.
 - `src/local-models.ts` — local Ollama tags/ps/show/pull/delete contract.
+- `src/discovery.ts` — side-effect-free draft endpoint discovery.
 - `src/context-override.ts` — session-scoped native `num_ctx` overrides.
 - `src/attempt.ts` — one abort/timeout budget per attempt.
 - `src/routes.ts` — host HTTP routes and write-route guards.
