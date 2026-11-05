@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.30 — 2026-11-05
+
+- Security: credential writes now accept only the configured default/account
+  refs; the allowlist no longer falls through to every `OLLAMA_*` name.
+- Security: private-read host verification uses the local socket origin instead
+  of the request Host and rejects a public 404 probe, closing DNS-rebinding
+  cookie/SSRF exposure while preserving DSH's authenticated-404 behavior.
+- Security: unsaved-endpoint discovery now requires HTTPS and rejects
+  loopback/link-local/private/reserved addresses; test-only private targets are
+  explicit.
+- Build: declared `react-dom` and `@types/react-dom`; clean `npm ci` now passes
+  the full test/build gate. Added host-verification coverage; 132/132.
+
 ## 0.1.29 — 2026-11-05
 
 - Made the plugin cloud-only. Removed the local endpoint mode, local model

@@ -1,6 +1,14 @@
 const DISCOVERY_TIMEOUT_MS = 15_000
 
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
+
 import { sanitizeUrl } from './sanitize.ts'
+
+export interface DiscoveryOptions {
+  /** Test seam only; production discovery rejects private, loopback and HTTP targets. */
+  readonly allowPrivate?: boolean
+}
 
 export interface DiscoveryResult {
   readonly base: string
@@ -29,6 +37,59 @@ function normalizeBase(raw: string): string {
     throw new DiscoveryError('endpoint URL must not contain credentials')
   }
   return sanitizeUrl(value)
+}
+
+function isPrivateV4(address: string): boolean {
+  const parts = address.split('.').map(Number)
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true
+  const [a, b] = parts as [number, number, number, number]
+  return a === 0
+    || a === 10
+    || a === 127
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168)
+    || (a === 192 && b === 0)
+    || (a === 198 && (b === 18 || b === 19))
+    || a >= 224
+}
+
+function isPrivateAddress(address: string): boolean {
+  const clean = address.toLowerCase().replace(/^\[|\]$/g, '')
+  if (isIP(clean) === 4) return isPrivateV4(clean)
+  if (isIP(clean) !== 6) return true
+  return clean === '::1'
+    || clean === '::'
+    || clean.startsWith('fc')
+    || clean.startsWith('fd')
+    || /^fe[89ab]/.test(clean)
+    || clean.startsWith('ff')
+    || clean.startsWith('2001:db8')
+    || clean.startsWith('::ffff:')
+}
+
+async function assertPublicEndpoint(base: string, options: DiscoveryOptions): Promise<void> {
+  if (options.allowPrivate === true) return
+  const url = new URL(base)
+  if (url.protocol !== 'https:') throw new DiscoveryError('endpoint must use https')
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    throw new DiscoveryError('private endpoint refused')
+  }
+  let addresses: string[]
+  if (isIP(host) !== 0) {
+    addresses = [host]
+  } else {
+    try {
+      addresses = (await lookup(host, { all: true, verbatim: true })).map((entry) => entry.address)
+    } catch {
+      throw new DiscoveryError('could not resolve endpoint')
+    }
+  }
+  if (addresses.length === 0 || addresses.some(isPrivateAddress)) {
+    throw new DiscoveryError('private endpoint refused')
+  }
 }
 
 function idsOf(payload: unknown): string[] {
@@ -81,8 +142,10 @@ export async function discoverModels(
   rawBase: string,
   key: string,
   fetchImpl: typeof fetch = fetch,
+  options: DiscoveryOptions = {},
 ): Promise<DiscoveryResult> {
   const base = normalizeBase(rawBase)
+  await assertPublicEndpoint(base, options)
   const budget = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS)
   let payload: unknown
   try {
