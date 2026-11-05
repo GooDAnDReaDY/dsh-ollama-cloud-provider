@@ -479,7 +479,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
   ): Promise<Response> {
     const headers: Record<string, string> = {
       ...attributionHeaders(),
-      authorization: `Bearer ${key}`,
+      ...(key === '' ? {} : { authorization: `Bearer ${key}` }),
       'content-type': 'application/json',
       accept: model.transport === 'openai-chat' ? 'text/event-stream' : 'application/x-ndjson',
       'user-agent': config.userAgent,

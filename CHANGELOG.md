@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.18 — 2026-11-05
+
+- Added local/self-hosted Ollama mode: an explicit empty `apiKeyEnv` means no
+  authentication. Native and OpenAI requests omit `Authorization`, the key pool
+  returns a synthetic empty credential, and usage/balance requests are skipped.
+- `/api/show` probing enriches local model discovery with context window,
+  vision, tools and thinking capabilities; successful probes are cached for five
+  minutes and cleared with the catalog cache or explicitly.
+- Catalog discovery now falls back to `/api/tags` ids when `/v1/models` is
+  empty and adopts `/api/show` metadata for local endpoints.
+- Added local-mode, probe-cache and no-auth tests; 109/109 tests.
+
 ## 0.1.17 — 2026-11-05
 
 - Added Ollama web capabilities behind `ctx.web`: a search provider and a fetch
