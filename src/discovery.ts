@@ -5,7 +5,6 @@ import { sanitizeUrl } from './sanitize.ts'
 export interface DiscoveryResult {
   readonly base: string
   readonly models: readonly string[]
-  readonly local: boolean
 }
 
 export class DiscoveryError extends Error {
@@ -30,15 +29,6 @@ function normalizeBase(raw: string): string {
     throw new DiscoveryError('endpoint URL must not contain credentials')
   }
   return sanitizeUrl(value)
-}
-
-function isLoopback(url: string): boolean {
-  try {
-    const host = new URL(url).hostname
-    return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]'
-  } catch {
-    return false
-  }
 }
 
 function idsOf(payload: unknown): string[] {
@@ -105,5 +95,5 @@ export async function discoverModels(
       throw error
     }
   }
-  return { base, models: [...new Set(idsOf(payload))], local: isLoopback(base) }
+  return { base, models: [...new Set(idsOf(payload))] }
 }

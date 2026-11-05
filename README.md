@@ -52,22 +52,6 @@ Select it in the profile:
     fetchProvider: ollama-cloud
 ```
 
-## Local Ollama
-
-Set `apiKeyEnv` to an empty string and point `apiBase` at the local or
-self-hosted Ollama server. No `Authorization` header is sent, and cloud
-usage/balance reads are skipped.
-
-```yaml
-- id: llm-ollama-cloud
-  config:
-    apiKeyEnv: ''
-    apiBase: http://127.0.0.1:11434
-```
-
-Local model discovery uses `/api/tags` and enriches each model through
-`/api/show`; successful capability probes are cached for five minutes.
-
 ## Architecture
 
 ```mermaid
@@ -137,17 +121,17 @@ npm pack
 Install the published package:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.27
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.29
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.27
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.29
 ```
 
 Or install the packed tarball into a profile:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.27.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.29.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.27.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.29.tgz
 ```
 
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.

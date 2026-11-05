@@ -6,7 +6,7 @@ export const DEFAULT_API_BASE = 'https://ollama.com'
 export const DEFAULT_OPENAI_BASE = 'https://ollama.com/v1'
 export const DEFAULT_USAGE_URL = 'https://ollama.com/api/usage'
 export const DEFAULT_BALANCE_URL = 'https://ollama.com/api/balance'
-export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.27'
+export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.29'
 export const DEFAULT_CONTEXT_WINDOW = 131_072
 export const DEFAULT_MAX_TOKENS = 32_768
 export const DEFAULT_GENERATE_MAX_TOKENS = 131_072
@@ -453,7 +453,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
   const numCtx = integerInRange(config.numCtx, 1, 10_000_000)
   const stop = nonEmptyStrings(config.stop)
   return {
-    apiKeyEnv: typeof config.apiKeyEnv === 'string'
+    apiKeyEnv: typeof config.apiKeyEnv === 'string' && config.apiKeyEnv.trim() !== ''
       ? config.apiKeyEnv.trim()
       : DEFAULT_API_KEY_ENV,
     ...(apiKey === undefined ? {} : { apiKey }),

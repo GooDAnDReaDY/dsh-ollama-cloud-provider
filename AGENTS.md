@@ -12,8 +12,8 @@ stop and ask the owner before changing anything.
   models catalog, account/key pool, quota and usage cards, analytics, settings
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
-- Status: active. 0.1.27 is verified on the production Web host and Desktop;
-  0.1.26 is the previous release.
+- Status: active. 0.1.29 is cloud-only and verified on the production Web host
+  and Desktop; 0.1.27 is the previous release.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -42,7 +42,6 @@ stop and ask the owner before changing anything.
 - `src/transports/openai-chat.ts` — optional OpenAI-compatible SSE transport.
 - `src/catalog.ts` — model catalog and stale-while-revalidate refresh.
 - `src/catalog-cache.ts` — atomic persistent catalog snapshot.
-- `src/local-models.ts` — local Ollama tags/ps/show/pull/delete contract.
 - `src/discovery.ts` — side-effect-free draft endpoint discovery.
 - `src/context-override.ts` — session-scoped native `num_ctx` overrides.
 - `src/attempt.ts` — one abort/timeout budget per attempt.
@@ -53,6 +52,7 @@ stop and ask the owner before changing anything.
 - `src/client/` — settings page, quota card/panel, analytics, heatmap.
 - `src/client/model-groups.ts` — context groups and drag-order helper.
 - `src/client/model-override-editor.tsx` — per-model context/price/capability editor.
+- `src/client/provider-card.tsx` — native Models-page provider card.
 - `src/settings.ts`, `src/config.ts`, `src/keys.ts` — configuration and
   credential handling.
 - `tests/` — unit and integration tests using `node:test`.
@@ -113,11 +113,9 @@ stop and ask the owner before changing anything.
 
 ## Locked Decisions
 
-- 2026-11-05 — local model management is opt-in for a local endpoint only
-  (`apiKeyEnv:""` or a loopback `apiBase`); removal requires explicit
-  confirmation and never uses force. The cloud provider remains the default.
-- 2026-10-21 — Ollama Cloud only; no local Ollama route. (Cloud remains the
-  default; the 2026-11-05 local-management decision adds the opt-in exception.)
+- 2026-11-05 — the plugin is cloud-only. No local endpoint mode, local model
+  management, local routing, or local OpenAI-compatible backends.
+- 2026-10-21 — Ollama Cloud only; no local Ollama route.
 - 2026-10-21 — native `/api/chat` by default; OpenAI transport is an option.
 - 2026-10-21 — settings live in `settings.section` (`ollama`, order 20), in
   parity with the reference plugins.

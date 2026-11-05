@@ -211,11 +211,6 @@ test('credential writes stay inside the plugin namespace', async () => {
   assert.equal(ownConfig.statusCode, 200)
   assert.equal(mutations.length, 1)
 
-  const localConfig = fakeRes()
-  await configRoute(postJson({ apiKeyEnv: '' }), localConfig)
-  assert.equal(localConfig.statusCode, 200)
-  assert.deepEqual(mutations.at(-1)?.[0]?.value, '')
-
   const ownKey = fakeRes()
   await keyRoute(postJson({ ref: 'OLLAMA_CUSTOM', key: 'x' }), ownKey)
   assert.equal(ownKey.statusCode, 200)
