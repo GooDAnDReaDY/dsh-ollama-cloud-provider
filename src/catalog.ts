@@ -6,6 +6,7 @@ import {
   type TransportId,
 } from './config.ts'
 import { GENERATED_MODELS, type OllamaCloudModelMeta } from './models.generated.ts'
+import { clearModelProbeCache, isLocalEndpoint, probeModel } from './model-probe.ts'
 import { formatPrice, priceFor } from './pricing.ts'
 import { modelsUrlFor, tagsUrlFor } from './routing.ts'
 
@@ -125,6 +126,41 @@ function metaFromLive(entry: LiveModel, caps: Set<string> | undefined): OllamaCl
   }
 }
 
+function metaFromProbe(id: string, probe: Awaited<ReturnType<typeof probeModel>>): OllamaCloudModelMeta | undefined {
+  if (probe === undefined) return undefined
+  const base = GENERATED_MODELS[id]
+  return {
+    id,
+    name: base?.name ?? id,
+    transport: base?.transport ?? 'native',
+    contextWindow: probe.contextWindow ?? base?.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+    maxTokens: base?.maxTokens ?? DEFAULT_MAX_TOKENS,
+    input: [...probe.input],
+    reasoning: probe.reasoning.length > 0 ? [...probe.reasoning] : (base?.reasoning ?? []),
+    reasoningToggle: probe.reasoningToggle || base?.reasoningToggle === true,
+    tools: probe.tools || base?.tools === true,
+    free: base?.free === true,
+    available: probe.available,
+    ...(base?.defaultReasoning === undefined ? {} : { defaultReasoning: base.defaultReasoning }),
+    cost: base?.cost ?? { input: 0, output: 0, cacheRead: 0 },
+  }
+}
+
+async function adoptProbes(
+  config: ResolvedConfig,
+  ids: readonly string[],
+  base: string,
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  const probes = await Promise.all(ids.slice(0, 64).map(async (id) => ({
+    id,
+    meta: metaFromProbe(id, await probeModel(config, id, fetchImpl)),
+  })))
+  for (const { id, meta } of probes) {
+    if (meta !== undefined) liveMeta.set(liveKey(base, id), meta)
+  }
+}
+
 /** Replace the in-memory live metadata for one API base with one successful response. */
 function adoptLive(models: readonly LiveModel[], tags: TagsPayload | undefined, base: string): string[] {
   const caps = capabilitiesByModel(tags)
@@ -212,12 +248,18 @@ async function refreshNow(
     const fromData = Array.isArray(payload.data)
       ? payload.data.map((entry) => str(entry.id)).filter((id): id is string => id !== undefined)
       : []
-    if (fromData.length > 0) {
+    const tagsPayload = tagsResult.status === 'fulfilled' ? tagsResult.value as TagsPayload : undefined
+    const fromTags = (tagsPayload?.models ?? [])
+      .map((entry) => str(entry.name) ?? str(entry.model))
+      .filter((id): id is string => id !== undefined)
+    const ids = fromData.length > 0 ? fromData : fromTags
+    if (ids.length > 0) {
       for (const liveKey of liveMeta.keys()) {
         if (liveKey.startsWith(`${key}|`)) liveMeta.delete(liveKey)
       }
-      cache.set(key, { at: Date.now(), ids: fromData })
-      return fromData
+      if (isLocalEndpoint(config)) await adoptProbes(config, ids, key, fetchImpl)
+      cache.set(key, { at: Date.now(), ids })
+      return ids
     }
   }
   if (keepOnFailure) {
@@ -248,6 +290,7 @@ export function clearCatalogCache(): void {
   cache.clear()
   inflight.clear()
   liveMeta.clear()
+  clearModelProbeCache()
 }
 
 export function baseMeta(id: string, base: string): OllamaCloudModelMeta {

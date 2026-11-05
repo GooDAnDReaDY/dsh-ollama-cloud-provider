@@ -187,6 +187,7 @@ export function createUsageReader(
   }
 
   const readBalance = async (key: string): Promise<Pick<UsageReport, 'kind' | 'credits' | 'legacy'> | undefined> => {
+    if (key === '') return undefined
     const current = config()
     try {
       const response = await request(current.balanceUrl, key)
@@ -202,6 +203,7 @@ export function createUsageReader(
     range: UsageRange,
     epoch: number,
   ): Promise<{ totals: UsageTotals; byModel: Array<{ model: string } & UsageTotals> } | undefined> => {
+    if (key === '') return undefined
     const current = config()
     const cacheKey = `${fingerprint(key)}:${range}`
     const hit = cached(cacheKey)

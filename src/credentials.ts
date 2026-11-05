@@ -95,6 +95,13 @@ async function resolveSlot(ctx: Context, slot: Slot): Promise<ResolvedKey | unde
 export function createKeyPool(ctx: Context, config: () => ResolvedConfig): KeyPool {
   const all = async (): Promise<readonly ResolvedKey[]> => {
     const current = config()
+    const hasConfiguredKey = current.apiKey !== undefined
+      || current.accounts.some((account) =>
+        (typeof account.apiKey === 'string' && account.apiKey.trim() !== '')
+        || (typeof account.apiKeyEnv === 'string' && account.apiKeyEnv.trim() !== ''))
+    if (current.apiKeyEnv === '' && !hasConfiguredKey) {
+      return [{ key: '', source: 'none', label: 'default' }]
+    }
     const pinned = current.activeAccount.trim()
     const slots = slotsOf(current)
     if (pinned !== '') {

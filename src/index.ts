@@ -36,6 +36,7 @@ export type { UsageReport, UsageResult, UsageWindow } from './usage.ts'
 export { normalizeBalance, normalizeUsage, createUsageReader } from './usage.ts'
 export { classifyResponseError } from './errors.ts'
 export { clearCatalogCache, describeModel, effectiveModel } from './catalog.ts'
+export { clearModelProbeCache, modelProbeCacheInfo, probeModel } from './model-probe.ts'
 
 /**
  * Register the `ollama-cloud` route against the dsh `llm` service. Requests

@@ -260,6 +260,8 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
   if ('apiKeyEnv' in patch) {
     if (patch.apiKeyEnv === null || patch.apiKeyEnv === undefined) {
       set('apiKeyEnv', undefined)
+    } else if (typeof patch.apiKeyEnv === 'string' && patch.apiKeyEnv.trim() === '') {
+      set('apiKeyEnv', '')
     } else {
       const ref = normalizeCredentialRef(patch.apiKeyEnv)
       if (ref === undefined) throw new Error('invalid credential reference')

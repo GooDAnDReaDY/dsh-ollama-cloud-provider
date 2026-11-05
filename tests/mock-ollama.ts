@@ -34,7 +34,7 @@ const SHOW = {
     'gptoss.context_length': 131072,
     'general.parameter_count': 120_000_000_000,
   },
-  capabilities: ['completion', 'tools', 'thinking'],
+  capabilities: ['completion', 'tools', 'thinking', 'vision'],
 }
 
 async function bodyOf(req: IncomingMessage): Promise<string> {
@@ -84,6 +84,9 @@ export async function startMockOllama(options: MockOllamaOptions = {}): Promise<
         return
       case 'GET /api/tags':
         json(res, 200, TAGS)
+        return
+      case 'GET /v1/models':
+        json(res, 200, { data: [{ id: 'gpt-oss:120b' }, { id: 'llama3.2:3b' }] })
         return
       case 'POST /api/show':
         json(res, 200, { ...SHOW, model: (body as { model?: string } | undefined)?.model ?? 'gpt-oss:120b' })

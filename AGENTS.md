@@ -13,7 +13,8 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.17 is verified on the production Web host and Desktop
-  (DSH 0.2.1-rc.4); 0.1.16 is the previous release.
+  (DSH 0.2.1-rc.4); 0.1.18 adds local/self-hosted no-key mode and `/api/show`
+  probe caching.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
