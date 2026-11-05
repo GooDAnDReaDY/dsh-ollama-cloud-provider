@@ -7,8 +7,8 @@ key pool, quota/usage cards, analytics, settings page, and service status.
 
 ## Status
 
-Active. 0.1.23 is verified on the production Web host and Desktop;
-0.1.24 adds per-model capability overrides and the override editor.
+Active. 0.1.24 is verified on the production Web host and Desktop;
+0.1.23 is the previous release.
 
 ## Entry Points
 
