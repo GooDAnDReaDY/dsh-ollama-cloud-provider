@@ -7,8 +7,8 @@ key pool, quota/usage cards, analytics, settings page, and service status.
 
 ## Status
 
-Active. 0.1.18 is verified on the production Web host and Desktop;
-0.1.19 adds native generation defaults and thinking-ladder normalization.
+Active. 0.1.19 is verified on the production Web host and Desktop;
+0.1.18 is the previous release.
 
 ## Entry Points
 
