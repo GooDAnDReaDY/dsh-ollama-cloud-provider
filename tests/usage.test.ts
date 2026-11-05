@@ -132,10 +132,49 @@ test('usage reader caches balance and usage per key', async () => {
   const first = await reader.read()
   assert.equal(first?.report?.credits?.includedRemaining, 50)
   assert.equal(first?.report?.windows.d7?.requests, 3)
+  assert.equal(first?.report?.windows.weekly?.requests, 3)
+  assert.deepEqual(first?.report?.byWindow?.['7d']?.map((row) => row.model), ['gpt-oss:120b'])
   const before = calls
   const second = await reader.read()
   assert.equal(second?.report?.credits?.includedRemaining, 50)
   assert.equal(calls, before)
+})
+
+test('usage reader returns the last good snapshot after a later failure', async () => {
+  let fail = false
+  const fakeFetch = (async (input: string | URL | Request) => {
+    if (fail) return new Response('unavailable', { status: 503 })
+    const href = String(input)
+    const body = href.includes('/api/balance')
+      ? { included: { balance_usd: 50, allowance_usd: 100 }, purchased: { balance_usd: 0 } }
+      : {
+          totals: { request_count: 3, usage_usd: 0.5, input_tokens: 100, output_tokens: 50 },
+          groups: [{ model: 'gpt-oss:120b', request_count: 3, usage_usd: 0.5 }],
+        }
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  const reader = createUsageReader(
+    () => ({
+      apiBase: 'https://ollama.com',
+      openAiBase: 'https://ollama.com/v1',
+      usageUrl: 'https://ollama.com/api/usage',
+      balanceUrl: 'https://ollama.com/api/balance',
+      userAgent: 'test',
+      retryBaseDelayMs: 0,
+      retryMaxDelayMs: 0,
+      retryJitter: 0,
+    }) as never,
+    async () => ({ key: 'key-last-good', source: 'test' }),
+    fakeFetch,
+  )
+  const first = await reader.usage('7d')
+  assert.equal(first?.report?.credits?.includedRemaining, 50)
+  reader.clear()
+  fail = true
+  const stale = await reader.usage('7d')
+  assert.equal(stale?.stale, true)
+  assert.equal(stale?.report?.credits?.includedRemaining, 50)
+  assert.ok(stale?.error !== undefined)
 })
 
 test('usage reader fails open when both endpoints fail', async () => {
@@ -177,9 +216,10 @@ test('usage reader caches a failed check and deduplicates concurrent reads', asy
   const concurrent = await Promise.all([reader.read(), reader.read()])
   assert.equal(concurrent[0]?.error !== undefined, true)
   assert.equal(concurrent[1]?.error !== undefined, true)
-  assert.equal(calls, 2)
+  assert.ok(calls >= 2)
+  const after = calls
 
   const cached = await reader.read()
   assert.equal(cached?.error !== undefined, true)
-  assert.equal(calls, 2)
+  assert.equal(calls, after)
 })

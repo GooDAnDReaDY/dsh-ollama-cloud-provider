@@ -103,17 +103,17 @@ npm pack
 Установка опубликованного пакета из npm:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.26
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.27
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.26
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.27
 ```
 
 Либо установка из упакованного tarball:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.26.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.27.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.26.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.27.tgz
 ```
 
 После установки перезапустите dsh (или DSH Desktop) и выберите **Ollama Cloud** в списке моделей.

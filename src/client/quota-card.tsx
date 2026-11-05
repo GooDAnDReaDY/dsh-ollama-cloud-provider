@@ -132,7 +132,7 @@ function QuotaCardBody(props: {
   const name = plan === '' ? t('quotaCardName') : `${t('quotaCardName')} · ${plan}`
   const detail = bars
     .map((entry) => `${entry.labelKey === undefined ? entry.label : t(entry.labelKey)}: ${entry.remainingPercent.toFixed(0)}% ${t('remaining')}`)
-    .join(' · ')
+    .join(' · ') + (state?.usage?.stale === true ? ` · ${t('lastGoodUsage')}` : '')
 
   return (
     <button
@@ -212,6 +212,7 @@ export function QuotaPanel(props: { t: (key: string) => string; close?: () => vo
   const bars = quotaBars(activeReport)
   const rows = windowRows(activeReport)
   const activeAccount = state?.accounts.find((account) => account.active)
+  const stale = usage?.stale === true || state?.usage?.stale === true
 
   const refresh = (): void => {
     setBusy(true)
@@ -258,6 +259,7 @@ export function QuotaPanel(props: { t: (key: string) => string; close?: () => vo
           ) : null}
         </div>
         {usage?.error === undefined ? null : <p className="ocl-hint">{t('usageError')}: {usage.error}</p>}
+        {stale ? <p className="ocl-notice">{t('lastGoodUsage')}</p> : null}
         <UsageBars bars={bars} t={t} />
         {rows.length === 0 ? null : (
           <div className="ocl-table-scroll">
