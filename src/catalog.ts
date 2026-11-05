@@ -8,6 +8,7 @@ import {
 import { GENERATED_MODELS, type OllamaCloudModelMeta } from './models.generated.ts'
 import { clearModelProbeCache, isLocalEndpoint, probeModel } from './model-probe.ts'
 import { formatPrice, priceFor } from './pricing.ts'
+import { normalizeThinking } from './reasoning.ts'
 import { modelsUrlFor, tagsUrlFor } from './routing.ts'
 
 const CATALOG_TTL_MS = 10 * 60 * 1000
@@ -104,6 +105,12 @@ function metaFromLive(entry: LiveModel, caps: Set<string> | undefined): OllamaCl
   const modalities = strings(entry.input_modalities)
   const image = modalities.includes('image')
     || (base?.input.includes('image') === true && modalities.length === 0)
+  const normalized = normalizeThinking(
+    id,
+    levels.length > 0 ? levels : (base?.reasoning ?? []),
+    toggle || base?.reasoningToggle === true,
+    str(entry.default_reasoning_level) ?? base?.defaultReasoning,
+  )
   return {
     id,
     name: str(entry.display_name) ?? id,
@@ -114,14 +121,14 @@ function metaFromLive(entry: LiveModel, caps: Set<string> | undefined): OllamaCl
       ?? DEFAULT_CONTEXT_WINDOW,
     maxTokens: base?.maxTokens ?? DEFAULT_MAX_TOKENS,
     input: image ? ['text', 'image'] : ['text'],
-    reasoning: levels.length > 0 ? levels : (toggle ? ['off', 'high'] : (base?.reasoning ?? [])),
-    reasoningToggle: toggle || (base?.reasoningToggle === true && levels.length === 0),
+    reasoning: normalized.reasoning,
+    reasoningToggle: toggle || base?.reasoningToggle === true,
     tools: caps?.has('tools') === true || base?.tools === true || base === undefined,
     free: base?.free === true,
     available: entry.supported_in_api !== false && entry.visibility !== 'hide',
-    ...(str(entry.default_reasoning_level) === undefined
-      ? (base?.defaultReasoning === undefined ? {} : { defaultReasoning: base.defaultReasoning })
-      : { defaultReasoning: str(entry.default_reasoning_level) as string }),
+    ...(normalized.defaultReasoning === undefined
+      ? {}
+      : { defaultReasoning: normalized.defaultReasoning }),
     cost: base?.cost ?? { input: 0, output: 0, cacheRead: 0 },
   }
 }
@@ -129,6 +136,12 @@ function metaFromLive(entry: LiveModel, caps: Set<string> | undefined): OllamaCl
 function metaFromProbe(id: string, probe: Awaited<ReturnType<typeof probeModel>>): OllamaCloudModelMeta | undefined {
   if (probe === undefined) return undefined
   const base = GENERATED_MODELS[id]
+  const normalized = normalizeThinking(
+    id,
+    probe.reasoning.length > 0 ? probe.reasoning : (base?.reasoning ?? []),
+    probe.reasoningToggle || base?.reasoningToggle === true,
+    base?.defaultReasoning,
+  )
   return {
     id,
     name: base?.name ?? id,
@@ -136,12 +149,12 @@ function metaFromProbe(id: string, probe: Awaited<ReturnType<typeof probeModel>>
     contextWindow: probe.contextWindow ?? base?.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
     maxTokens: base?.maxTokens ?? DEFAULT_MAX_TOKENS,
     input: [...probe.input],
-    reasoning: probe.reasoning.length > 0 ? [...probe.reasoning] : (base?.reasoning ?? []),
+    reasoning: normalized.reasoning,
     reasoningToggle: probe.reasoningToggle || base?.reasoningToggle === true,
     tools: probe.tools || base?.tools === true,
     free: base?.free === true,
     available: probe.available,
-    ...(base?.defaultReasoning === undefined ? {} : { defaultReasoning: base.defaultReasoning }),
+    ...(normalized.defaultReasoning === undefined ? {} : { defaultReasoning: normalized.defaultReasoning }),
     cost: base?.cost ?? { input: 0, output: 0, cacheRead: 0 },
   }
 }

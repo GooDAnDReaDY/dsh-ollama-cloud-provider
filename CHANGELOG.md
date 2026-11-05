@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.19 — 2026-11-05
+
+- Added configurable native generation defaults: temperature, top_k, top_p,
+  min_p, seed, repeat_penalty, repeat_last_n, num_ctx, keep_alive and stop.
+  Request options override config; Ollama-only fields are not sent to the
+  OpenAI transport. Added settings fields for all values.
+- Normalized thinking ladders: boolean switches become off/high, level lists
+  are ordered and deduplicated, and known families get a default effort
+  (GLM-5.x/Kimi K3 max, Kimi K2/DeepSeek V4/MiniMax M3 high, GPT-OSS medium,
+  Nemotron low) only when that level is offered.
+- Added generation/reasoning tests; 112/112 tests.
+
 ## 0.1.18 — 2026-11-05
 
 - Added local/self-hosted Ollama mode: an explicit empty `apiKeyEnv` means no

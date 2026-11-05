@@ -17,6 +17,16 @@ export interface PublicConfig {
   contextWindow: number | null
   contextWindowOverrides: Readonly<Record<string, number>>
   maxOutputTokens: number | null
+  temperature: number | null
+  topK: number | null
+  topP: number | null
+  minP: number | null
+  seed: number | null
+  repeatPenalty: number | null
+  repeatLastN: number | null
+  numCtx: number | null
+  keepAlive: string
+  stop: readonly string[]
   accounts: ReadonlyArray<{ label: string; apiKeyEnv: string }>
   modelAccountRules: ReadonlyArray<{ pattern: string; account: string }>
   stickySession: boolean

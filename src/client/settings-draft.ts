@@ -11,6 +11,16 @@ export interface Draft {
   streamIdleTimeoutMs: string
   maxOutputTokens: string
   contextWindow: string
+  temperature: string
+  topK: string
+  topP: string
+  minP: string
+  seed: string
+  repeatPenalty: string
+  repeatLastN: string
+  numCtx: string
+  keepAlive: string
+  stop: string
   showSidebarQuota: boolean
   planLabel: string
   activeAccount: string
@@ -21,6 +31,10 @@ export interface Draft {
   filterModelsByPlan: boolean
   showAll: boolean
   modelTransports: Record<string, TransportId | ''>
+}
+
+function textOf(value: number | null | undefined): string {
+  return value === null || value === undefined ? '' : String(value)
 }
 
 export function draftOf(state: HostState): Draft {
@@ -34,8 +48,18 @@ export function draftOf(state: HostState): Draft {
     transport: state.config.transport,
     requestTimeoutMs: String(state.config.requestTimeoutMs),
     streamIdleTimeoutMs: String(state.config.streamIdleTimeoutMs),
-    maxOutputTokens: state.config.maxOutputTokens === null ? '' : String(state.config.maxOutputTokens),
-    contextWindow: state.config.contextWindow === null ? '' : String(state.config.contextWindow),
+    maxOutputTokens: textOf(state.config.maxOutputTokens),
+    contextWindow: textOf(state.config.contextWindow),
+    temperature: textOf(state.config.temperature),
+    topK: textOf(state.config.topK),
+    topP: textOf(state.config.topP),
+    minP: textOf(state.config.minP),
+    seed: textOf(state.config.seed),
+    repeatPenalty: textOf(state.config.repeatPenalty),
+    repeatLastN: textOf(state.config.repeatLastN),
+    numCtx: textOf(state.config.numCtx),
+    keepAlive: state.config.keepAlive ?? '',
+    stop: (state.config.stop ?? []).join(', '),
     showSidebarQuota: state.config.showSidebarQuota,
     planLabel: state.config.planLabel,
     activeAccount: state.config.activeAccount,
@@ -57,6 +81,20 @@ export function numberOrNull(text: string): number | null {
   return value
 }
 
+function boundedNumber(text: string, min: number, max: number, integer: boolean): number | null {
+  const trimmed = text.trim()
+  if (trimmed === '') return null
+  const value = Number(trimmed)
+  if (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
+    throw new Error(`Invalid number: ${text}`)
+  }
+  return value
+}
+
+function stopList(text: string): string[] {
+  return text.split(/[\n,]/).map((entry) => entry.trim()).filter((entry) => entry !== '')
+}
+
 export function patchOf(draft: Draft): Record<string, unknown> {
   return {
     apiKeyEnv: draft.apiKeyEnv.trim(),
@@ -69,6 +107,16 @@ export function patchOf(draft: Draft): Record<string, unknown> {
     streamIdleTimeoutMs: numberOrNull(draft.streamIdleTimeoutMs) ?? 300000,
     maxOutputTokens: numberOrNull(draft.maxOutputTokens),
     contextWindow: numberOrNull(draft.contextWindow),
+    temperature: boundedNumber(draft.temperature, 0, 2, false),
+    topK: boundedNumber(draft.topK, 1, 1_000_000, true),
+    topP: boundedNumber(draft.topP, 0, 1, false),
+    minP: boundedNumber(draft.minP, 0, 1, false),
+    seed: boundedNumber(draft.seed, 0, 4_294_967_295, true),
+    repeatPenalty: boundedNumber(draft.repeatPenalty, 0, 2, false),
+    repeatLastN: boundedNumber(draft.repeatLastN, -1, 1_000_000, true),
+    numCtx: boundedNumber(draft.numCtx, 1, 10_000_000, true),
+    keepAlive: draft.keepAlive.trim(),
+    stop: stopList(draft.stop),
     showSidebarQuota: draft.showSidebarQuota,
     planLabel: draft.planLabel.trim(),
     activeAccount: draft.activeAccount.trim(),

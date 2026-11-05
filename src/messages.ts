@@ -184,10 +184,19 @@ export function buildNativeBody(
     options.reasoningEffort === undefined ? undefined : String(options.reasoningEffort),
     model,
   )
+  const temperature = options.temperature ?? config.temperature
+  const stop = options.stop ?? config.stop
   const nativeOptions: Record<string, unknown> = {
-    ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(config.topK === undefined ? {} : { top_k: config.topK }),
+    ...(config.topP === undefined ? {} : { top_p: config.topP }),
+    ...(config.minP === undefined ? {} : { min_p: config.minP }),
+    ...(config.seed === undefined ? {} : { seed: config.seed }),
+    ...(config.repeatPenalty === undefined ? {} : { repeat_penalty: config.repeatPenalty }),
+    ...(config.repeatLastN === undefined ? {} : { repeat_last_n: config.repeatLastN }),
+    ...(config.numCtx === undefined ? {} : { num_ctx: config.numCtx }),
     ...(maxTokens === undefined || maxTokens <= 0 ? {} : { num_predict: maxTokens }),
-    ...(options.stop === undefined || options.stop.length === 0 ? {} : { stop: options.stop }),
+    ...(stop === undefined || stop.length === 0 ? {} : { stop }),
   }
 
   return {
@@ -196,6 +205,7 @@ export function buildNativeBody(
     stream: true,
     ...(tools === undefined ? {} : { tools }),
     ...(think === undefined ? {} : { think }),
+    ...(config.keepAlive === undefined ? {} : { keep_alive: config.keepAlive }),
     ...(Object.keys(nativeOptions).length === 0 ? {} : { options: nativeOptions }),
   }
 }
@@ -289,6 +299,8 @@ export function buildChatBody(
   const reasoning = effort === undefined || effort === ''
     ? undefined
     : effort === 'off' ? 'none' : effort
+  const temperature = options.temperature ?? config.temperature
+  const stop = options.stop ?? config.stop
 
   return {
     model: options.model,
@@ -296,9 +308,11 @@ export function buildChatBody(
     stream: true,
     stream_options: { include_usage: true },
     ...(tools === undefined ? {} : { tools, tool_choice: 'auto' }),
-    ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(config.topP === undefined ? {} : { top_p: config.topP }),
+    ...(config.seed === undefined ? {} : { seed: config.seed }),
     ...(maxTokens === undefined || maxTokens <= 0 ? {} : { max_tokens: maxTokens }),
     ...(reasoning === undefined ? {} : { reasoning_effort: reasoning }),
-    ...(options.stop === undefined || options.stop.length === 0 ? {} : { stop: options.stop }),
+    ...(stop === undefined || stop.length === 0 ? {} : { stop }),
   }
 }

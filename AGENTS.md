@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.18 is verified on the production Web host and Desktop;
-  0.1.17 is the previous release.
+  0.1.19 adds native generation defaults and thinking-ladder normalization.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
