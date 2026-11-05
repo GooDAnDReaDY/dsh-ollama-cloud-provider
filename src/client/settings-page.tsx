@@ -21,20 +21,31 @@ import { draftOf, mergeLoadedDraft, patchOf, safeSame, type Draft } from './sett
 import { LocalModelsCard } from './local-models-card.tsx'
 import { CONFIG_CHANGED_EVENT } from './events.ts'
 import { accountMark, Field } from './settings-widgets.tsx'
+import { groupModels, reorderIds } from './model-groups.ts'
 import { PluginUpdateCard } from './update-card.tsx'
 import { UsageBars } from './usage-bars.tsx'
 
-function ModelEntry(props: {
+export function ModelEntry(props: {
   model: ModelRow
   visible: boolean
   transport: TransportId | ''
   onVisible: (visible: boolean) => void
   onTransport: (transport: TransportId | '') => void
+  onDragStart?: () => void
+  onDrop?: () => void
+  dragging?: boolean
   t: (key: string) => string
 }): ReactNode {
-  const { model, visible, transport, onVisible, onTransport, t } = props
+  const { model, visible, transport, onVisible, onTransport, onDragStart, onDrop, dragging, t } = props
   return (
-    <div className="ocl-model">
+    <div
+      className={`ocl-model${dragging === true ? ' ocl-dragging' : ''}`}
+      draggable={onDragStart !== undefined}
+      onDragStart={onDragStart}
+      onDragOver={(event) => { if (onDrop !== undefined) event.preventDefault() }}
+      onDrop={onDrop}
+    >
+      <span className="ocl-drag-handle" title={t('dragOrder')} aria-hidden="true">⋮⋮</span>
       <input type="checkbox" checked={visible} onChange={(event) => onVisible(event.target.checked)} />
       <span className="ocl-model-name" title={`${model.name} · ${model.description}`}>
         {model.id}
@@ -81,6 +92,8 @@ export function OllamaCloudSettingsPage(props: {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [keyDraft, setKeyDraft] = useState('')
   const [accountKeys, setAccountKeys] = useState<Record<string, string>>({})
   const [testModel, setTestModel] = useState('gpt-oss:120b')
@@ -183,6 +196,45 @@ export function OllamaCloudSettingsPage(props: {
   const activeAccount = state.accounts.find((account) => account.active)
   const filtered = state.models.filter((model) => search.trim() === ''
     || model.id.toLowerCase().includes(search.trim().toLowerCase()))
+  const groups = groupModels(filtered, t('contextGroup'))
+  const modelIds = state.models.map((model) => model.id)
+
+  const moveModel = (from: string, to: string): void => {
+    if (from === to) return
+    update({ modelOrder: reorderIds(draft.modelOrder, modelIds, from, to) })
+  }
+
+  const toggleGroup = (key: string): void => {
+    setCollapsedGroups((current) => ({ ...current, [key]: current[key] !== true }))
+  }
+
+  const addManualModel = (): void => {
+    update({
+      manualModels: [...draft.manualModels, {
+        id: '',
+        enabled: true,
+        name: '',
+        contextWindow: '',
+        maxTokens: '',
+        image: false,
+        thinking: false,
+        reasoningEfforts: '',
+        defaultReasoning: '',
+        tools: true,
+      }],
+    })
+  }
+
+  const updateManual = (index: number, patch: Partial<Draft['manualModels'][number]>): void => {
+    update({
+      manualModels: draft.manualModels.map((model, position) =>
+        position === index ? { ...model, ...patch } : model),
+    })
+  }
+
+  const removeManual = (index: number): void => {
+    update({ manualModels: draft.manualModels.filter((_model, position) => position !== index) })
+  }
 
   const toggleModel = (id: string, visible: boolean): void => {
     const current = new Set(draft.visibleModels)
@@ -578,23 +630,66 @@ export function OllamaCloudSettingsPage(props: {
         <div className="ocl-models">
           {filtered.length === 0
             ? <p className="ocl-hint">{t('modelsEmpty')}</p>
-            : filtered.map((model) => (
-                <ModelEntry
-                  key={model.id}
-                  model={model}
-                  visible={draft.showAll || draft.visibleModels.includes(model.id)}
-                  transport={draft.modelTransports[model.id] ?? ''}
-                  onVisible={(visible) => toggleModel(model.id, visible)}
-                  onTransport={(transport) => {
-                    const next = { ...draft.modelTransports }
-                    if (transport === '') delete next[model.id]
-                    else next[model.id] = transport
-                    update({ modelTransports: next })
-                  }}
-                  t={t}
-                />
+            : groups.map((group) => (
+                <div key={group.key} className="ocl-model-group">
+                  <button
+                    type="button"
+                    className="ocl-model-group-head"
+                    onClick={() => toggleGroup(group.key)}
+                  >
+                    <span>{collapsedGroups[group.key] === true ? '▸' : '▾'} {group.label}</span>
+                    <span className="ocl-badge">{group.models.length}</span>
+                  </button>
+                  {collapsedGroups[group.key] === true ? null : group.models.map((model) => (
+                    <ModelEntry
+                      key={model.id}
+                      model={model}
+                      visible={draft.showAll || draft.visibleModels.includes(model.id)}
+                      transport={draft.modelTransports[model.id] ?? ''}
+                      dragging={dragId === model.id}
+                      onDragStart={() => setDragId(model.id)}
+                      onDrop={() => {
+                        if (dragId !== null) moveModel(dragId, model.id)
+                        setDragId(null)
+                      }}
+                      onVisible={(visible) => toggleModel(model.id, visible)}
+                      onTransport={(transport) => {
+                        const next = { ...draft.modelTransports }
+                        if (transport === '') delete next[model.id]
+                        else next[model.id] = transport
+                        update({ modelTransports: next })
+                      }}
+                      t={t}
+                    />
+                  ))}
+                </div>
               ))}
         </div>
+      </section>
+
+      <section className="ocl-card">
+        <h3 className="ocl-card-title">
+          {t('manualModels')}
+          <button type="button" className="ocl-button" onClick={addManualModel}>{t('addManualModel')}</button>
+        </h3>
+        <p className="ocl-hint">{t('manualModelsHint')}</p>
+        {draft.manualModels.map((model, index) => (
+          <div className="ocl-model-section" key={`${model.id}-${index}`}>
+            <div className="ocl-grid">
+              <Field label={t('modelId')} value={model.id} onChange={(value) => updateManual(index, { id: value })} />
+              <Field label={t('modelName')} value={model.name} onChange={(value) => updateManual(index, { name: value })} />
+              <Field label={t('contextWindow')} type="number" value={model.contextWindow} onChange={(value) => updateManual(index, { contextWindow: value })} />
+              <Field label={t('maxTokens')} type="number" value={model.maxTokens} onChange={(value) => updateManual(index, { maxTokens: value })} />
+              <Field label={t('reasoningEfforts')} hint={t('manualEffortsHint')} value={model.reasoningEfforts} onChange={(value) => updateManual(index, { reasoningEfforts: value })} />
+              <Field label={t('defaultReasoning')} value={model.defaultReasoning} onChange={(value) => updateManual(index, { defaultReasoning: value })} />
+            </div>
+            <label className="ocl-row"><input type="checkbox" checked={model.enabled} onChange={(event) => updateManual(index, { enabled: event.target.checked })} /><span>{t('enabled')}</span></label>
+            <label className="ocl-row"><input type="checkbox" checked={model.image} onChange={(event) => updateManual(index, { image: event.target.checked })} /><span>{t('vision')}</span></label>
+            <label className="ocl-row"><input type="checkbox" checked={model.thinking} onChange={(event) => updateManual(index, { thinking: event.target.checked })} /><span>{t('reasoning')}</span></label>
+            <label className="ocl-row"><input type="checkbox" checked={model.tools} onChange={(event) => updateManual(index, { tools: event.target.checked })} /><span>{t('tools')}</span></label>
+            <button type="button" className="ocl-button ocl-button-danger" onClick={() => removeManual(index)}>{t('removeManualModel')}</button>
+          </div>
+        ))}
       </section>
 
       {state !== null && (

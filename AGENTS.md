@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.22 is verified on the production Web host and Desktop;
-  0.1.21 is the previous release.
+  0.1.23 adds richer model groups, drag order and manual catalog overrides.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -48,6 +48,7 @@ stop and ask the owner before changing anything.
 - `src/routes.ts` — host HTTP routes and write-route guards.
 - `src/web.ts` — Ollama web search/fetch providers for `ctx.web`.
 - `src/client/` — settings page, quota card/panel, analytics, heatmap.
+- `src/client/model-groups.ts` — context groups and drag-order helper.
 - `src/settings.ts`, `src/config.ts`, `src/keys.ts` — configuration and
   credential handling.
 - `tests/` — unit and integration tests using `node:test`.

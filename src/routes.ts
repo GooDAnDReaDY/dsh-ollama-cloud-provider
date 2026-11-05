@@ -35,6 +35,7 @@ import {
   cleanAccounts,
   cleanBooleanRecord,
   cleanModelAccountRules,
+  cleanManualModels,
   cleanNumberRecord,
   cleanPrices,
   cleanStringArray,
@@ -289,6 +290,8 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
   if ('visibleModels' in patch) set('visibleModels', cleanStringArray(patch.visibleModels))
   if ('showAllModels' in patch) set('showAllModels', patch.showAllModels === true)
   if ('modelVisibility' in patch) set('modelVisibility', cleanBooleanRecord(patch.modelVisibility))
+  if ('manualModels' in patch) set('manualModels', cleanManualModels(patch.manualModels))
+  if ('modelOrder' in patch) set('modelOrder', cleanStringArray(patch.modelOrder))
   if ('filterModelsByPlan' in patch) set('filterModelsByPlan', patch.filterModelsByPlan === true)
   if ('contextWindow' in patch) set('contextWindow', patch.contextWindow)
   if ('contextWindowOverrides' in patch) {

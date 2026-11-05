@@ -14,6 +14,8 @@ export interface PublicConfig {
   visibleModels: readonly string[]
   showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
+  manualModels: ManualModel[]
+  modelOrder: readonly string[]
   filterModelsByPlan: boolean
   contextWindow: number | null
   contextWindowOverrides: Readonly<Record<string, number>>
@@ -49,6 +51,19 @@ export interface RoutingTraceRow {
   fallback: boolean
   ok: boolean
   error?: string
+}
+
+export interface ManualModel {
+  id: string
+  enabled?: boolean
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+  image?: boolean
+  thinking?: boolean
+  reasoningEfforts?: string[]
+  defaultReasoning?: string
+  tools?: boolean
 }
 
 export interface ModelRow {

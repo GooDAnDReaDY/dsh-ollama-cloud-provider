@@ -2,6 +2,7 @@ import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_GENERATE_MAX_TOKENS,
   DEFAULT_MAX_TOKENS,
+  type ManualModel,
   type ResolvedConfig,
   type TransportId,
 } from './config.ts'
@@ -356,12 +357,29 @@ export interface EffectiveModel extends OllamaCloudModelMeta {
   readonly transport: TransportId
 }
 
+export function manualModelFor(id: string, config: ResolvedConfig): ManualModel | undefined {
+  return config.manualModels.find((entry) => entry.id === id)
+}
+
 export function effectiveModel(id: string, config: ResolvedConfig): EffectiveModel {
   const meta = baseMeta(id, config.apiBase)
+  const manual = manualModelFor(id, config)
   return {
     ...meta,
+    name: manual?.name ?? meta.name,
     transport: config.modelTransports[id] ?? config.transport,
-    contextWindow: config.contextWindowOverrides[id] ?? config.contextWindow ?? meta.contextWindow,
+    contextWindow: config.contextWindowOverrides[id] ?? manual?.contextWindow ?? config.contextWindow ?? meta.contextWindow,
+    maxTokens: manual?.maxTokens ?? meta.maxTokens,
+    input: manual?.image === true
+      ? ['text', 'image']
+      : manual?.image === false ? ['text'] : meta.input,
+    reasoning: manual?.reasoningEfforts ?? meta.reasoning,
+    reasoningToggle: manual?.thinking ?? meta.reasoningToggle,
+    ...((manual?.defaultReasoning ?? meta.defaultReasoning) === undefined
+      ? {}
+      : { defaultReasoning: manual?.defaultReasoning ?? meta.defaultReasoning }),
+    tools: manual?.tools ?? meta.tools,
+    available: manual?.enabled === false ? false : meta.available,
   }
 }
 
@@ -381,8 +399,10 @@ export function modelVisible(id: string, config: ResolvedConfig): boolean {
 }
 
 export function modelAvailable(id: string, config: ResolvedConfig): boolean {
+  const manual = manualModelFor(id, config)
+  if (manual?.enabled === false) return false
   if (!config.filterModelsByPlan) return true
-  return baseMeta(id, config.apiBase).available !== false
+  return effectiveModel(id, config).available !== false
 }
 
 export function sortForPicker(
@@ -390,9 +410,20 @@ export function sortForPicker(
   config: ResolvedConfig,
   unfiltered = false,
 ): string[] {
+  const order = new Map([
+    ...config.modelOrder.map((id, index) => [id, index] as const),
+    ...config.visibleModels.map((id, index) => [id, config.modelOrder.length + index] as const),
+  ])
   return ids
     .filter((id) => unfiltered || (modelVisible(id, config) && modelAvailable(id, config)))
     .sort((left, right) => {
+      const leftOrder = order.get(left)
+      const rightOrder = order.get(right)
+      if (leftOrder !== undefined || rightOrder !== undefined) {
+        if (leftOrder === undefined) return 1
+        if (rightOrder === undefined) return -1
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder
+      }
       const a = effectiveModel(left, config)
       const b = effectiveModel(right, config)
       if (a.free !== b.free) return a.free ? -1 : 1
