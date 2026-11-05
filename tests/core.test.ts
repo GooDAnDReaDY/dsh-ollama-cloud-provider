@@ -6,7 +6,7 @@ import test from 'node:test'
 
 import { CONTEXT_WINDOW_EXCEEDED_CODE, type GenerateOptions } from '@deepseek-ai/dsh-llm'
 
-import { clearCatalogCache, effectiveModel, modelVisible, refreshCatalog, sortForPicker } from '../src/catalog.ts'
+import { clearCatalogCache, effectiveModel, modelAvailable, modelVisible, refreshCatalog, sortForPicker } from '../src/catalog.ts'
 import { DEFAULT_API_BASE, DEFAULT_OPENAI_BASE, resolveConfig } from '../src/config.ts'
 import { classifyResponseError } from '../src/errors.ts'
 import { buildChatBody, buildNativeBody, buildNativeMessages } from '../src/messages.ts'
@@ -362,6 +362,52 @@ test('generation defaults merge into native and OpenAI bodies with request prece
   assert.deepEqual(openai.stop, ['END'])
   assert.equal('top_k' in openai, false)
   assert.equal('keep_alive' in openai, false)
+})
+
+test('manual catalog entries merge over discovery and can be disabled', () => {
+  const manual = resolveConfig({
+    apiKey: 'k',
+    showAllModels: true,
+    modelOrder: ['manual:new', 'gpt-oss:120b'],
+    manualModels: [{
+      id: 'manual:new',
+      name: 'Manual New',
+      contextWindow: 64_000,
+      maxTokens: 8_192,
+      image: true,
+      thinking: true,
+      defaultReasoning: 'high',
+      tools: false,
+    }, {
+      id: 'manual:off',
+      enabled: false,
+    }, {
+      id: '../bad',
+      enabled: true,
+    }],
+  })
+  const meta = effectiveModel('manual:new', manual)
+  assert.equal(meta.name, 'Manual New')
+  assert.equal(meta.contextWindow, 64000)
+  assert.equal(meta.maxTokens, 8192)
+  assert.deepEqual(meta.input, ['text', 'image'])
+  assert.deepEqual(meta.reasoning, ['off', 'high'])
+  assert.equal(meta.defaultReasoning, 'high')
+  assert.equal(meta.tools, false)
+  assert.equal(manual.manualModels.length, 2)
+  assert.equal(modelAvailable('manual:off', manual), false)
+  assert.deepEqual(sortForPicker(['gpt-oss:120b', 'manual:off', 'manual:new'], manual), ['manual:new', 'gpt-oss:120b'])
+})
+
+test('manual thinking=false clears inherited reasoning', () => {
+  const config = resolveConfig({
+    apiKey: 'k',
+    manualModels: [{ id: 'gpt-oss:120b', thinking: false, tools: true }],
+  })
+  const meta = effectiveModel('gpt-oss:120b', config)
+  assert.deepEqual(meta.reasoning, [])
+  assert.equal(meta.reasoningToggle, false)
+  assert.equal(meta.tools, true)
 })
 
 test('pricing resolves exact ids, base tags and off-peak rates', () => {

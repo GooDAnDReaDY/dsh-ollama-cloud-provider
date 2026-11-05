@@ -6,7 +6,7 @@ export const DEFAULT_API_BASE = 'https://ollama.com'
 export const DEFAULT_OPENAI_BASE = 'https://ollama.com/v1'
 export const DEFAULT_USAGE_URL = 'https://ollama.com/api/usage'
 export const DEFAULT_BALANCE_URL = 'https://ollama.com/api/balance'
-export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.22'
+export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.23'
 export const DEFAULT_CONTEXT_WINDOW = 131_072
 export const DEFAULT_MAX_TOKENS = 32_768
 export const DEFAULT_GENERATE_MAX_TOKENS = 131_072
@@ -34,6 +34,19 @@ export interface ModelPriceOverride {
  * Plugin configuration. Every field except the literal `apiKey` is volatile:
  * the harness projects settings forms from schema fields carrying that marker.
  */
+export interface ManualModel {
+  id: string
+  enabled?: boolean
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+  image?: boolean
+  thinking?: boolean
+  reasoningEfforts?: string[]
+  defaultReasoning?: string
+  tools?: boolean
+}
+
 export interface Config {
   /** Credential reference resolved per request; defaults to `OLLAMA_API_KEY`. */
   apiKeyEnv?: string
@@ -63,6 +76,10 @@ export interface Config {
   showAllModels?: boolean
   /** Per-model visibility overrides; wins over `visibleModels`. */
   modelVisibility?: Record<string, boolean>
+  /** Manual catalog entries and overrides; merged over live discovery. */
+  manualModels?: ManualModel[]
+  /** Stable picker order; ids not listed follow by name. */
+  modelOrder?: string[]
   /** Hide models the cloud marks unsupported in the API; defaults to true. */
   filterModelsByPlan?: boolean
   /** Global context-window override. */
@@ -124,6 +141,19 @@ export const Config: z<Config> = z.object({
   visibleModels: markVolatile(z.array(z.string()).default([])),
   showAllModels: markVolatile(z.boolean()),
   modelVisibility: markVolatile(z.dict(z.boolean()).default({})),
+  manualModels: markVolatile(z.array(z.object({
+    id: z.string(),
+    enabled: z.boolean().default(true),
+    name: z.string(),
+    contextWindow: z.number().min(1).max(10_000_000).step(1),
+    maxTokens: z.number().min(1).max(10_000_000).step(1),
+    image: z.boolean(),
+    thinking: z.boolean(),
+    reasoningEfforts: z.array(z.string()),
+    defaultReasoning: z.string(),
+    tools: z.boolean(),
+  })).default([])),
+  modelOrder: markVolatile(z.array(z.string()).default([])),
   filterModelsByPlan: markVolatile(z.boolean().default(true)),
   contextWindow: markVolatile(z.number().min(1).max(10_000_000).step(1)),
   contextWindowOverrides: markVolatile(z.dict(z.number().min(1).max(10_000_000).step(1)).default({})),
@@ -176,6 +206,8 @@ export interface ResolvedConfig {
   visibleModels: readonly string[]
   showAllModels: boolean
   modelVisibility: Readonly<Record<string, boolean>>
+  manualModels: readonly ManualModel[]
+  modelOrder: readonly string[]
   filterModelsByPlan: boolean
   contextWindow?: number
   contextWindowOverrides: Readonly<Record<string, number>>
@@ -236,6 +268,43 @@ function nonEmptyStrings(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined
   const out = value.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
   return out.length === 0 ? undefined : out
+}
+
+function manualModelList(value: unknown): ManualModel[] {
+  if (!Array.isArray(value)) return []
+  const out: ManualModel[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
+    const record = entry as Record<string, unknown>
+    const id = typeof record.id === 'string' ? record.id.trim() : ''
+    if (id === '' || id.includes('..') || !/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(id)) continue
+    const name = typeof record.name === 'string' ? record.name.trim() : ''
+    const contextWindow = integerInRange(record.contextWindow, 1, 10_000_000)
+    const maxTokens = integerInRange(record.maxTokens, 1, 10_000_000)
+    const efforts = Array.isArray(record.reasoningEfforts)
+      ? record.reasoningEfforts.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+      : undefined
+    const thinking = typeof record.thinking === 'boolean' ? record.thinking : undefined
+    const normalizedEfforts = thinking === true && (efforts === undefined || efforts.length === 0)
+      ? ['off', 'high']
+      : thinking === false ? [] : efforts
+    const defaultReasoning = typeof record.defaultReasoning === 'string' && record.defaultReasoning.trim() !== ''
+      ? record.defaultReasoning.trim()
+      : undefined
+    out.push({
+      id,
+      enabled: record.enabled !== false,
+      ...(name === '' ? {} : { name }),
+      ...(contextWindow === undefined ? {} : { contextWindow }),
+      ...(maxTokens === undefined ? {} : { maxTokens }),
+      ...(typeof record.image === 'boolean' ? { image: record.image } : {}),
+      ...(thinking === undefined ? {} : { thinking }),
+      ...(normalizedEfforts === undefined ? {} : { reasoningEfforts: normalizedEfforts }),
+      ...(defaultReasoning === undefined ? {} : { defaultReasoning }),
+      ...(typeof record.tools === 'boolean' ? { tools: record.tools } : {}),
+    })
+  }
+  return out
 }
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -342,6 +411,10 @@ export function resolveConfig(config: Config): ResolvedConfig {
       ? true
       : config.showAllModels === false ? false : visibleModels.length === 0,
     modelVisibility: booleanRecord(config.modelVisibility),
+    manualModels: manualModelList(config.manualModels),
+    modelOrder: Array.isArray(config.modelOrder)
+      ? config.modelOrder.filter((id): id is string => typeof id === 'string' && id !== '')
+      : [],
     filterModelsByPlan: config.filterModelsByPlan !== false,
     ...(typeof config.contextWindow === 'number'
       && Number.isInteger(config.contextWindow)

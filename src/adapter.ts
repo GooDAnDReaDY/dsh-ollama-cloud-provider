@@ -139,7 +139,8 @@ export class OllamaCloudAdapter extends LlmAdapter {
     opts?: { unfiltered?: boolean },
   ): Promise<readonly LlmModelInfo[]> {
     const config = this.deps.config()
-    const ids = await refreshCatalog(config, this.fetchImpl)
+    const discovered = await refreshCatalog(config, this.fetchImpl)
+    const ids = [...new Set([...discovered, ...config.manualModels.map((model) => model.id)])]
     return sortForPicker(ids, config, opts?.unfiltered === true).map((id) => {
       const model = effectiveModel(id, config)
       return {

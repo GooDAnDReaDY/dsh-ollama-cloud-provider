@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.23 — 2026-11-05
+
+- Richer model catalog rows grouped by effective context, collapsible groups,
+  drag reorder persisted as `modelOrder`, and context labels/badges.
+- Added manual catalog entries/overrides with id, display name, context,
+  max output, vision, thinking, reasoning efforts/default and tools. Entries
+  merge over live discovery; disabled entries are hidden from the picker and
+  invalid ids are rejected.
+- Added model grouping/reorder/render tests and manual merge tests; 128/128.
+
 ## 0.1.22 — 2026-11-05
 
 - Added `/ollama-context` with 4k/8k/16k/32k/64k/128k presets, custom token

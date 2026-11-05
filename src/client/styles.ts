@@ -75,7 +75,11 @@ export const CSS = `
 .ocl-bar-fill-warn { background: var(--ocl-warning); opacity: 1; }
 .ocl-bar-fill-bad { background: var(--ocl-danger); opacity: 1; }
 .ocl-models { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow: auto; padding-right: 4px; }
-.ocl-model { display: grid; grid-template-columns: 22px minmax(0,1fr) 120px; gap: 8px; align-items: center; font-size: 12px; padding: 3px 0; }
+.ocl-model { display: grid; grid-template-columns: 16px 22px minmax(0,1fr) 120px; gap: 8px; align-items: center; font-size: 12px; padding: 3px 0; }
+.ocl-drag-handle { cursor: grab; color: var(--ocl-text-secondary); user-select: none; }
+.ocl-dragging { opacity: 0.5; }
+.ocl-model-group { display: flex; flex-direction: column; gap: 2px; }
+.ocl-model-group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 4px 0; border: 0; background: none; color: var(--ocl-text-secondary); font-size: 11px; font-weight: 650; cursor: pointer; text-align: left; }
 .ocl-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ocl-model-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; color: var(--ocl-text-secondary); font-size: 11px; }
 .ocl-model-legend > span { display: inline-flex; align-items: center; gap: 5px; }

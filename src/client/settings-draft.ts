@@ -1,5 +1,18 @@
 import type { HostState, TransportId } from './api.ts'
 
+export interface ManualModelDraft {
+  id: string
+  enabled: boolean
+  name: string
+  contextWindow: string
+  maxTokens: string
+  image: boolean
+  thinking: boolean
+  reasoningEfforts: string
+  defaultReasoning: string
+  tools: boolean
+}
+
 export interface Draft {
   apiKeyEnv: string
   apiBase: string
@@ -32,6 +45,9 @@ export interface Draft {
   stickySession: boolean
   visibleModels: string[]
   filterModelsByPlan: boolean
+  modelVisibility: Record<string, boolean>
+  manualModels: ManualModelDraft[]
+  modelOrder: string[]
   showAll: boolean
   modelTransports: Record<string, TransportId | ''>
 }
@@ -74,6 +90,20 @@ export function draftOf(state: HostState): Draft {
     stickySession: state.config.stickySession,
     visibleModels: state.config.showAllModels ? allIds : [...state.config.visibleModels],
     filterModelsByPlan: state.config.filterModelsByPlan,
+    modelVisibility: { ...state.config.modelVisibility },
+    manualModels: (state.config.manualModels ?? []).map((model) => ({
+      id: model.id,
+      enabled: model.enabled !== false,
+      name: model.name ?? '',
+      contextWindow: model.contextWindow === undefined ? '' : String(model.contextWindow),
+      maxTokens: model.maxTokens === undefined ? '' : String(model.maxTokens),
+      image: model.image === true,
+      thinking: model.thinking === true,
+      reasoningEfforts: (model.reasoningEfforts ?? []).join(', '),
+      defaultReasoning: model.defaultReasoning ?? '',
+      tools: model.tools === true,
+    })),
+    modelOrder: [...(state.config.modelOrder ?? [])],
     showAll: state.config.showAllModels,
     modelTransports: { ...state.config.modelTransports },
   }
@@ -139,6 +169,24 @@ export function patchOf(draft: Draft): Record<string, unknown> {
     visibleModels: draft.showAll ? [] : draft.visibleModels,
     showAllModels: draft.showAll,
     filterModelsByPlan: draft.filterModelsByPlan,
+    modelVisibility: draft.modelVisibility,
+    manualModels: draft.manualModels
+      .filter((model) => model.id.trim() !== '')
+      .map((model) => ({
+        id: model.id.trim(),
+        enabled: model.enabled,
+        ...(model.name.trim() === '' ? {} : { name: model.name.trim() }),
+        ...(numberOrNull(model.contextWindow) === null ? {} : { contextWindow: numberOrNull(model.contextWindow) }),
+        ...(numberOrNull(model.maxTokens) === null ? {} : { maxTokens: numberOrNull(model.maxTokens) }),
+        image: model.image,
+        thinking: model.thinking,
+        ...(stopList(model.reasoningEfforts).length === 0
+          ? {}
+          : { reasoningEfforts: stopList(model.reasoningEfforts) }),
+        ...(model.defaultReasoning.trim() === '' ? {} : { defaultReasoning: model.defaultReasoning.trim() }),
+        tools: model.tools,
+      })),
+    modelOrder: draft.modelOrder.filter((id) => id !== ''),
     modelTransports: Object.fromEntries(
       Object.entries(draft.modelTransports).filter(([, value]) => value !== ''),
     ),
