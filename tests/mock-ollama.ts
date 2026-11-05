@@ -20,12 +20,43 @@ export interface MockOllamaOptions {
   readonly apiKey?: string
   readonly missingModels?: readonly string[]
   readonly failShow?: readonly string[]
+  readonly pullError?: string
+  readonly removeError?: string
 }
 
 const TAGS = {
   models: [
-    { name: 'gpt-oss:120b', model: 'gpt-oss:120b', capabilities: ['completion', 'tools', 'thinking'] },
-    { name: 'llama3.2:3b', model: 'llama3.2:3b', capabilities: ['completion'] },
+    {
+      name: 'gpt-oss:120b',
+      model: 'gpt-oss:120b',
+      size: 4 * 1024 * 1024 * 1024,
+      digest: 'sha256:gpt',
+      modified_at: '2026-01-01T00:00:00Z',
+      capabilities: ['completion', 'tools', 'thinking'],
+      details: { family: 'gpt-oss', parameter_size: '120B', quantization_level: 'Q4_K_M' },
+    },
+    {
+      name: 'llama3.2:3b',
+      model: 'llama3.2:3b',
+      size: 2 * 1024 * 1024 * 1024,
+      digest: 'sha256:llama',
+      modified_at: '2026-01-02T00:00:00Z',
+      capabilities: ['completion'],
+      details: { family: 'llama', parameter_size: '3B', quantization_level: 'Q4_0' },
+    },
+  ],
+}
+
+const PS = {
+  models: [
+    {
+      name: 'gpt-oss:120b',
+      model: 'gpt-oss:120b',
+      size: 4 * 1024 * 1024 * 1024,
+      size_vram: 3 * 1024 * 1024 * 1024,
+      digest: 'sha256:gpt',
+      expires_at: '2026-01-01T00:05:00Z',
+    },
   ],
 }
 
@@ -64,7 +95,9 @@ export async function startMockOllama(options: MockOllamaOptions = {}): Promise<
   const requiredKey = options.apiKey ?? 'test-key'
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
-    const text = req.method === 'POST' ? await bodyOf(req) : ''
+    const text = req.method === 'POST' || req.method === 'DELETE' || req.method === 'PUT'
+      ? await bodyOf(req)
+      : ''
     let body: unknown
     try {
       body = text === '' ? undefined : JSON.parse(text) as unknown
@@ -86,6 +119,27 @@ export async function startMockOllama(options: MockOllamaOptions = {}): Promise<
         return
       case 'GET /api/tags':
         json(res, 200, TAGS)
+        return
+      case 'GET /api/ps':
+        json(res, 200, PS)
+        return
+      case 'POST /api/pull': {
+        const model = (body as { model?: string } | undefined)?.model ?? 'gpt-oss:120b'
+        res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8' })
+        if (options.pullError !== undefined) {
+          res.write(`${JSON.stringify({ error: options.pullError })}\n`)
+          res.end()
+          return
+        }
+        res.write(`${JSON.stringify({ status: 'pulling manifest' })}\n`)
+        res.write(`${JSON.stringify({ status: 'downloading', digest: 'sha256:gpt', total: 100, completed: 50 })}\n`)
+        res.write(`${JSON.stringify({ status: 'success', model })}\n`)
+        res.end()
+        return
+      }
+      case 'DELETE /api/delete':
+        if (options.removeError !== undefined) json(res, 500, { error: options.removeError })
+        else json(res, 200, {})
         return
       case 'GET /v1/models':
         json(res, 200, { data: [{ id: 'gpt-oss:120b' }, { id: 'llama3.2:3b' }] })

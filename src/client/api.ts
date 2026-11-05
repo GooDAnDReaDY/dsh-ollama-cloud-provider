@@ -165,6 +165,122 @@ export function refreshModels(): Promise<HostState> {
   return call<HostState>('/dsh-ollama/models/refresh', { method: 'POST', body: '{}' })
 }
 
+export interface LocalModelDetails {
+  family?: string
+  parameterSize?: string
+  quantization?: string
+}
+
+export interface LocalModelInfo {
+  name: string
+  size: number
+  digest?: string
+  modifiedAt?: string
+  details?: LocalModelDetails
+}
+
+export interface RunningModelInfo {
+  name: string
+  size: number
+  sizeVram: number
+  digest?: string
+  expiresAt?: string
+}
+
+export interface LocalInventory {
+  models: LocalModelInfo[]
+  running: RunningModelInfo[]
+  diskBytes: number
+  runningBytes: number
+}
+
+export interface PullProgress {
+  status: string
+  digest?: string
+  completed?: number
+  total?: number
+  done?: boolean
+  error?: string
+}
+
+export interface LocalShow {
+  name: string
+  modifiedAt?: string
+  details?: LocalModelDetails
+  capabilities: string[]
+  parameters?: string
+}
+
+export function fetchLocalModels(): Promise<LocalInventory> {
+  return call<LocalInventory>('/dsh-ollama/local/models')
+}
+
+export function fetchLocalShow(model: string): Promise<LocalShow> {
+  return call<LocalShow>(`/dsh-ollama/local/show?model=${encodeURIComponent(model)}`)
+}
+
+export async function pullLocalModel(
+  model: string,
+  onProgress: (progress: PullProgress) => void,
+): Promise<PullProgress> {
+  const response = await fetch('/dsh-ollama/local/pull', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { accept: 'application/x-ndjson', 'content-type': 'application/json' },
+    body: JSON.stringify({ model }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string }
+    throw new Error(body.error ?? `HTTP ${response.status}`)
+  }
+  if (response.body === null) throw new Error('empty pull stream')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let last: PullProgress = { status: 'starting' }
+  const consume = (line: string): void => {
+    if (line.trim() === '') return
+    let event: PullProgress
+    try {
+      event = JSON.parse(line) as PullProgress
+    } catch {
+      return
+    }
+    if (typeof event.error === 'string' && event.error !== '') throw new Error(event.error)
+    if (typeof event.status === 'string') last = event
+    onProgress(event)
+  }
+  for (;;) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) consume(line)
+    if (done) break
+  }
+  if (buffer.trim() !== '') consume(buffer)
+  return last
+}
+
+export function removeLocalModel(model: string): Promise<{ ok: true; model: string }> {
+  return call('/dsh-ollama/local/remove', {
+    method: 'POST',
+    body: JSON.stringify({ model, confirm: true }),
+  })
+}
+
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let index = 0
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024
+    index += 1
+  }
+  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`
+}
+
 export function saveConfig(patch: Record<string, unknown>): Promise<{ ok: true }> {
   return call('/dsh-ollama/config', { method: 'POST', body: JSON.stringify({ patch }) })
 }
