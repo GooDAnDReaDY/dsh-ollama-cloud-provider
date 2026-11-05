@@ -12,6 +12,15 @@ import { clearModelProbeCache, isLocalEndpoint, modelProbeCacheInfo, probeModel 
 import { createUsageReader } from '../src/usage.ts'
 import { startMockOllama } from './mock-ollama.ts'
 
+const localHome = await mkdtemp(join(tmpdir(), 'dsh-ollama-local-home-'))
+const previousHome = process.env.DSH_HOME
+process.env.DSH_HOME = localHome
+test.after(async () => {
+  if (previousHome === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = previousHome
+  await rm(localHome, { recursive: true, force: true })
+})
+
 test('explicit empty apiKeyEnv means no authentication', async () => {
   const config = resolveConfig({ apiKeyEnv: '' })
   assert.equal(config.apiKeyEnv, '')
@@ -81,6 +90,31 @@ test('local catalog enriches models through /api/show and caches probes', async 
     assert.equal(mock.requests.filter((entry) => entry.path === '/api/show').length, firstCount + 1)
   } finally {
     await mock.close()
+  }
+})
+
+test('retires models whose show returns 404 and keeps transient show failures', async () => {
+  const missing = await startMockOllama({ missingModels: ['gpt-oss:120b'] })
+  try {
+    clearCatalogCache()
+    clearModelProbeCache()
+    const config = resolveConfig({ apiKeyEnv: '', apiBase: missing.url })
+    const ids = await refreshCatalog(config, fetch, true)
+    assert.equal(ids.includes('gpt-oss:120b'), false)
+    assert.equal(ids.includes('llama3.2:3b'), true)
+  } finally {
+    await missing.close()
+  }
+
+  const flaky = await startMockOllama({ failShow: ['gpt-oss:120b'] })
+  try {
+    clearCatalogCache()
+    clearModelProbeCache()
+    const config = resolveConfig({ apiKeyEnv: '', apiBase: flaky.url })
+    const ids = await refreshCatalog(config, fetch, true)
+    assert.equal(ids.includes('gpt-oss:120b'), true)
+  } finally {
+    await flaky.close()
   }
 })
 

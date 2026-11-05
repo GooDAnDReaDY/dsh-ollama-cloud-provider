@@ -27,6 +27,8 @@ export interface PublicConfig {
   numCtx: number | null
   keepAlive: string
   stop: readonly string[]
+  autoRefresh: boolean
+  refreshMinutes: number
   accounts: ReadonlyArray<{ label: string; apiKeyEnv: string }>
   modelAccountRules: ReadonlyArray<{ pattern: string; account: string }>
   stickySession: boolean
@@ -65,6 +67,8 @@ export function publicConfig(config: ResolvedConfig): PublicConfig {
     numCtx: config.numCtx ?? null,
     keepAlive: config.keepAlive ?? '',
     stop: config.stop ?? [],
+    autoRefresh: config.autoRefresh,
+    refreshMinutes: config.refreshMinutes,
     accounts: config.accounts.map((account) => ({
       label: typeof account.label === 'string' ? account.label : '',
       apiKeyEnv: typeof account.apiKeyEnv === 'string' ? account.apiKeyEnv : '',

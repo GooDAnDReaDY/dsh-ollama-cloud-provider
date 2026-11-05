@@ -27,6 +27,8 @@ export interface PublicConfig {
   numCtx: number | null
   keepAlive: string
   stop: readonly string[]
+  autoRefresh: boolean
+  refreshMinutes: number
   accounts: ReadonlyArray<{ label: string; apiKeyEnv: string }>
   modelAccountRules: ReadonlyArray<{ pattern: string; account: string }>
   stickySession: boolean

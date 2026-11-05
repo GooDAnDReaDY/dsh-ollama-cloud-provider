@@ -8,7 +8,7 @@ key pool, quota/usage cards, analytics, settings page, and service status.
 ## Status
 
 Active. 0.1.19 is verified on the production Web host and Desktop;
-0.1.18 is the previous release.
+0.1.20 adds persistent catalog cache, refresh controls and retirement.
 
 ## Entry Points
 

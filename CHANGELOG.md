@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.20 — 2026-11-05
+
+- Persisted the catalog snapshot under `$DSH_HOME/cache/dsh-ollama-cloud/`
+  with atomic temp+rename writes, schema/endpoint validation, and corrupt-file
+  recovery. Offline starts serve the last snapshot immediately.
+- Added `autoRefresh` and `refreshMinutes` controls: mount refresh, periodic
+  forced refresh, and a settings UI; turning auto-refresh off leaves the cache
+  untouched.
+- Retired models explicitly missing from `/api/show` (404/410), while
+  transient show failures keep the previous model.
+- Added cache, offline, retirement and settings tests; 115/115 tests.
+
 ## 0.1.19 — 2026-11-05
 
 - Added configurable native generation defaults: temperature, top_k, top_p,
