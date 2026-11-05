@@ -66,16 +66,22 @@ function probeOf(body: unknown): ModelProbe | undefined {
   }
 }
 
+export interface ModelProbeOutcome {
+  readonly probe?: ModelProbe
+  /** The endpoint explicitly retired the model (404/410). */
+  readonly missing: boolean
+}
+
 /** Probe one local model via `/api/show`, caching successful answers for five minutes. */
-export async function probeModel(
+export async function probeModelOutcome(
   config: ResolvedConfig,
   model: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<ModelProbe | undefined> {
-  if (!isLocalEndpoint(config)) return undefined
+): Promise<ModelProbeOutcome> {
+  if (!isLocalEndpoint(config)) return { missing: false }
   const key = keyOf(config, model)
   const hit = cache.get(key)
-  if (hit !== undefined && Date.now() - hit.at < PROBE_TTL_MS) return hit.value
+  if (hit !== undefined && Date.now() - hit.at < PROBE_TTL_MS) return { probe: hit.value, missing: false }
   try {
     const response = await fetchImpl(`${rootFor(config)}/api/show`, {
       method: 'POST',
@@ -87,14 +93,23 @@ export async function probeModel(
       body: JSON.stringify({ model }),
       signal: AbortSignal.timeout(10_000),
     })
-    if (!response.ok) return undefined
+    if (response.status === 404 || response.status === 410) return { missing: true }
+    if (!response.ok) return { missing: false }
     const value = probeOf(await response.json())
-    if (value === undefined) return undefined
+    if (value === undefined) return { missing: false }
     cache.set(key, { at: Date.now(), value })
-    return value
+    return { probe: value, missing: false }
   } catch {
-    return undefined
+    return { missing: false }
   }
+}
+
+export async function probeModel(
+  config: ResolvedConfig,
+  model: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ModelProbe | undefined> {
+  return (await probeModelOutcome(config, model, fetchImpl)).probe
 }
 
 /** Clear all probe entries, or only entries for one endpoint. */

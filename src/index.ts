@@ -7,6 +7,7 @@ import type {} from '@deepseek-ai/dsh-web'
 
 import { OllamaCloudAdapter } from './adapter.ts'
 import { setBestEffortLogger } from './best-effort.ts'
+import { refreshCatalog } from './catalog.ts'
 import { applyCommands } from './commands.ts'
 import { Config, NS, resolveConfig, unwrapVolatileConfig } from './config.ts'
 import { createKeyPool } from './credentials.ts'
@@ -67,6 +68,30 @@ export function apply(ctx: Context, config: Config): void {
   ctx.llm.registerAdapter([PROVIDER], adapter)
   logger.info(`registered provider: ${PROVIDER}`)
   ctx.effect(() => () => { void flushRequestLog() }, 'dsh-ollama-cloud-provider: flush request log')
+
+  ctx.effect(() => {
+    const initial = current()
+    const warm = initial.autoRefresh
+      ? setTimeout(() => {
+          const config = current()
+          if (config.autoRefresh) void refreshCatalog(config, fetch).catch(() => {})
+        }, 1_000)
+      : undefined
+    warm?.unref?.()
+    const intervalMs = Math.max(1, initial.refreshMinutes) * 60_000
+    const timer = initial.autoRefresh && initial.refreshMinutes > 0
+      ? setInterval(() => {
+          const config = current()
+          if (!config.autoRefresh || config.refreshMinutes <= 0) return
+          void refreshCatalog(config, fetch, true).catch(() => {})
+        }, intervalMs)
+      : undefined
+    timer?.unref?.()
+    return () => {
+      if (warm !== undefined) clearTimeout(warm)
+      if (timer !== undefined) clearInterval(timer)
+    }
+  }, 'dsh-ollama-cloud-provider: catalog refresh scheduler')
 
   // The plugin ships its own UI; declaring that keeps SettingsForms from
   // publishing an auto-generated page for this entry.

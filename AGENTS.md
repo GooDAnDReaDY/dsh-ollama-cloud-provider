@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.19 is verified on the production Web host and Desktop;
-  0.1.18 is the previous release.
+  0.1.20 adds persistent catalog cache, refresh controls and retirement.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -41,6 +41,7 @@ stop and ask the owner before changing anything.
 - `src/transports/native.ts` — default Ollama `/api/chat` NDJSON transport.
 - `src/transports/openai-chat.ts` — optional OpenAI-compatible SSE transport.
 - `src/catalog.ts` — model catalog and stale-while-revalidate refresh.
+- `src/catalog-cache.ts` — atomic persistent catalog snapshot.
 - `src/routes.ts` — host HTTP routes and write-route guards.
 - `src/web.ts` — Ollama web search/fetch providers for `ctx.web`.
 - `src/client/` — settings page, quota card/panel, analytics, heatmap.

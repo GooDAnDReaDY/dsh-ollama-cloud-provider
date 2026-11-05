@@ -6,7 +6,7 @@ export const DEFAULT_API_BASE = 'https://ollama.com'
 export const DEFAULT_OPENAI_BASE = 'https://ollama.com/v1'
 export const DEFAULT_USAGE_URL = 'https://ollama.com/api/usage'
 export const DEFAULT_BALANCE_URL = 'https://ollama.com/api/balance'
-export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.19'
+export const DEFAULT_USER_AGENT = 'dsh-ollama-cloud-provider/0.1.20'
 export const DEFAULT_CONTEXT_WINDOW = 131_072
 export const DEFAULT_MAX_TOKENS = 32_768
 export const DEFAULT_GENERATE_MAX_TOKENS = 131_072
@@ -80,6 +80,10 @@ export interface Config {
   numCtx?: number
   keepAlive?: string
   stop?: string[]
+  /** Refresh the model catalog at mount and on an interval. */
+  autoRefresh?: boolean
+  /** Catalog refresh interval in minutes; 0 = mount only. */
+  refreshMinutes?: number
   /** Extra accounts for rotation. */
   accounts?: AccountConfig[]
   /** Preferred account per model glob; others remain fallbacks. */
@@ -131,6 +135,8 @@ export const Config: z<Config> = z.object({
   numCtx: markVolatile(z.number().min(1).max(10_000_000).step(1)),
   keepAlive: markVolatile(z.string()),
   stop: markVolatile(z.array(z.string())),
+  autoRefresh: markVolatile(z.boolean().default(true)),
+  refreshMinutes: markVolatile(z.number().min(0).max(10_080).step(1).default(1440)),
   accounts: markVolatile(z.array(z.object({
     label: z.string(),
     apiKeyEnv: z.string().role('credential-ref'),
@@ -180,6 +186,8 @@ export interface ResolvedConfig {
   numCtx?: number
   keepAlive?: string
   stop?: readonly string[]
+  autoRefresh: boolean
+  refreshMinutes: number
   accounts: readonly AccountConfig[]
   modelAccountRules: readonly ModelAccountRule[]
   stickySession: boolean
@@ -346,6 +354,13 @@ export function resolveConfig(config: Config): ResolvedConfig {
     ...(numCtx === undefined ? {} : { numCtx }),
     ...(typeof config.keepAlive === 'string' && config.keepAlive.trim() !== '' ? { keepAlive: config.keepAlive.trim() } : {}),
     ...(stop === undefined ? {} : { stop }),
+    autoRefresh: config.autoRefresh !== false,
+    refreshMinutes: typeof config.refreshMinutes === 'number'
+      && Number.isInteger(config.refreshMinutes)
+      && config.refreshMinutes >= 0
+      && config.refreshMinutes <= 10_080
+      ? config.refreshMinutes
+      : 1440,
     accounts: Array.isArray(config.accounts) ? config.accounts : [],
     modelAccountRules: ruleList(config.modelAccountRules),
     stickySession: config.stickySession !== false,

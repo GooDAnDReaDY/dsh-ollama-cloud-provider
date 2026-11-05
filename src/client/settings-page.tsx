@@ -611,6 +611,16 @@ export function OllamaCloudSettingsPage(props: {
           <Field label={t('keepAlive')} hint={t('keepAliveHint')} value={draft.keepAlive} onChange={(value) => update({ keepAlive: value })} />
           <Field label={t('stop')} hint={t('stopHint')} value={draft.stop} onChange={(value) => update({ stop: value })} />
         </div>
+        <label className="ocl-row">
+          <input
+            type="checkbox"
+            checked={draft.autoRefresh}
+            onChange={(event) => update({ autoRefresh: event.target.checked })}
+          />
+          <span>{t('autoRefresh')}</span>
+        </label>
+        <Field label={t('refreshMinutes')} type="number" value={draft.refreshMinutes} onChange={(value) => update({ refreshMinutes: value })} />
+        <p className="ocl-hint">{t('autoRefreshHint')}</p>
       </section>
 
       <section className="ocl-card">

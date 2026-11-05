@@ -18,6 +18,8 @@ export interface MockOllamaOptions {
   readonly port?: number
   readonly requireAuth?: boolean
   readonly apiKey?: string
+  readonly missingModels?: readonly string[]
+  readonly failShow?: readonly string[]
 }
 
 const TAGS = {
@@ -88,9 +90,19 @@ export async function startMockOllama(options: MockOllamaOptions = {}): Promise<
       case 'GET /v1/models':
         json(res, 200, { data: [{ id: 'gpt-oss:120b' }, { id: 'llama3.2:3b' }] })
         return
-      case 'POST /api/show':
-        json(res, 200, { ...SHOW, model: (body as { model?: string } | undefined)?.model ?? 'gpt-oss:120b' })
+      case 'POST /api/show': {
+        const model = (body as { model?: string } | undefined)?.model ?? 'gpt-oss:120b'
+        if (options.missingModels?.includes(model) === true) {
+          json(res, 404, { error: 'model not found' })
+          return
+        }
+        if (options.failShow?.includes(model) === true) {
+          json(res, 503, { error: 'temporary' })
+          return
+        }
+        json(res, 200, { ...SHOW, model })
         return
+      }
       case 'POST /api/chat':
         chatStream(res, (body as { model?: string } | undefined)?.model ?? 'gpt-oss:120b')
         return

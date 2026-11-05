@@ -295,6 +295,8 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
   if ('numCtx' in patch) set('numCtx', patch.numCtx)
   if ('keepAlive' in patch) set('keepAlive', patch.keepAlive)
   if ('stop' in patch) set('stop', cleanStringArray(patch.stop))
+  if ('autoRefresh' in patch) set('autoRefresh', patch.autoRefresh === true)
+  if ('refreshMinutes' in patch) set('refreshMinutes', patch.refreshMinutes)
   if ('accounts' in patch) {
     const accounts = cleanAccounts(patch.accounts)
     for (const account of accounts) {

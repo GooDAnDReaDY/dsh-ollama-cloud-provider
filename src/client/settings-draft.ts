@@ -21,6 +21,8 @@ export interface Draft {
   numCtx: string
   keepAlive: string
   stop: string
+  autoRefresh: boolean
+  refreshMinutes: string
   showSidebarQuota: boolean
   planLabel: string
   activeAccount: string
@@ -60,6 +62,8 @@ export function draftOf(state: HostState): Draft {
     numCtx: textOf(state.config.numCtx),
     keepAlive: state.config.keepAlive ?? '',
     stop: (state.config.stop ?? []).join(', '),
+    autoRefresh: state.config.autoRefresh !== false,
+    refreshMinutes: String(state.config.refreshMinutes ?? 1440),
     showSidebarQuota: state.config.showSidebarQuota,
     planLabel: state.config.planLabel,
     activeAccount: state.config.activeAccount,
@@ -117,6 +121,8 @@ export function patchOf(draft: Draft): Record<string, unknown> {
     numCtx: boundedNumber(draft.numCtx, 1, 10_000_000, true),
     keepAlive: draft.keepAlive.trim(),
     stop: stopList(draft.stop),
+    autoRefresh: draft.autoRefresh,
+    refreshMinutes: boundedNumber(draft.refreshMinutes, 0, 10_080, true) ?? 1440,
     showSidebarQuota: draft.showSidebarQuota,
     planLabel: draft.planLabel.trim(),
     activeAccount: draft.activeAccount.trim(),

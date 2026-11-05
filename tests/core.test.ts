@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import { CONTEXT_WINDOW_EXCEEDED_CODE, type GenerateOptions } from '@deepseek-ai/dsh-llm'
@@ -9,6 +12,15 @@ import { classifyResponseError } from '../src/errors.ts'
 import { buildChatBody, buildNativeBody, buildNativeMessages } from '../src/messages.ts'
 import { estimateCost, priceFor } from '../src/pricing.ts'
 
+const coreHome = await mkdtemp(join(tmpdir(), 'dsh-ollama-core-home-'))
+const previousHome = process.env.DSH_HOME
+process.env.DSH_HOME = coreHome
+test.after(async () => {
+  if (previousHome === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = previousHome
+  await rm(coreHome, { recursive: true, force: true })
+})
+
 const config = resolveConfig({ apiKey: 'test-key' })
 
 test('resolved config carries Ollama defaults', () => {
@@ -17,6 +29,8 @@ test('resolved config carries Ollama defaults', () => {
   assert.equal(config.transport, 'native')
   assert.equal(config.apiKeyEnv, 'OLLAMA_API_KEY')
   assert.equal(config.maxOutputTokens, undefined)
+  assert.equal(config.autoRefresh, true)
+  assert.equal(config.refreshMinutes, 1440)
   const zero = resolveConfig({ maxOutputTokens: 0, transport: 'openai-chat' })
   assert.equal(zero.maxOutputTokens, 0)
   assert.equal(zero.transport, 'openai-chat')
