@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.25 is verified on the production Web host and Desktop;
-  0.1.24 is the previous release.
+  0.1.26 adds retry/backoff and URL/error sanitization.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -46,6 +46,8 @@ stop and ask the owner before changing anything.
 - `src/discovery.ts` — side-effect-free draft endpoint discovery.
 - `src/context-override.ts` — session-scoped native `num_ctx` overrides.
 - `src/attempt.ts` — one abort/timeout budget per attempt.
+- `src/retry.ts` — bounded pre-response backoff policy.
+- `src/sanitize.ts` — URL/error redaction for logs and public state.
 - `src/routes.ts` — host HTTP routes and write-route guards.
 - `src/web.ts` — Ollama web search/fetch providers for `ctx.web`.
 - `src/client/` — settings page, quota card/panel, analytics, heatmap.

@@ -18,6 +18,7 @@ import {
   showLocalModel,
 } from './local-models.ts'
 import { isLocalEndpoint } from './model-probe.ts'
+import { safeErrorMessage } from './sanitize.ts'
 import {
   clearContextOverride,
   describeContext,
@@ -121,7 +122,7 @@ async function modelsText(deps: CommandDeps): Promise<string> {
       return `- ${model.id} · ${tags.join(' · ')}`
     }).join('\n')
   } catch (error) {
-    return `Models unavailable: ${error instanceof Error ? error.message : String(error)}`
+    return `Models unavailable: ${safeErrorMessage(error)}`
   }
 }
 
@@ -153,7 +154,7 @@ async function testText(deps: CommandDeps, model: string): Promise<{ ok: boolean
   } catch (error) {
     return {
       ok: false,
-      text: `${model}: failed — ${error instanceof Error ? error.message : String(error)}`,
+      text: `${model}: failed — ${safeErrorMessage(error)}`,
     }
   }
 }
@@ -293,7 +294,7 @@ export function applyCommands(ctx: Context, deps: CommandDeps): void {
             }
             return { kind: 'error', text: `Unknown local action "${action}". Use models, ps, show, pull, or remove.` }
           } catch (error) {
-            return { kind: 'error', text: error instanceof Error ? error.message : 'local command failed' }
+            return { kind: 'error', text: safeErrorMessage(error, 'local command failed') }
           }
         }
         default:

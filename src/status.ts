@@ -1,4 +1,5 @@
 import type { ResolvedConfig } from './config.ts'
+import { safeErrorMessage } from './sanitize.ts'
 import { tagsUrlFor } from './routing.ts'
 
 export interface ServiceStatus {
@@ -45,7 +46,7 @@ export async function probeService(
       checkedAt: new Date().toISOString(),
       error: controller.signal.aborted
         ? 'timeout'
-        : error instanceof Error ? error.message : String(error),
+        : safeErrorMessage(error),
     }
   } finally {
     clearTimeout(timer)

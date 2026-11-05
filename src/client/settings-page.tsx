@@ -791,6 +791,10 @@ export function OllamaCloudSettingsPage(props: {
           <Field label={t('requestTimeoutMs')} type="number" value={draft.requestTimeoutMs} onChange={(value) => update({ requestTimeoutMs: value })} />
           <Field label={t('streamIdleTimeoutMs')} type="number" value={draft.streamIdleTimeoutMs} onChange={(value) => update({ streamIdleTimeoutMs: value })} />
           <Field label={t('attemptTimeoutMs')} hint={t('attemptTimeoutHint')} type="number" value={draft.attemptTimeoutMs} onChange={(value) => update({ attemptTimeoutMs: value })} />
+          <Field label={t('retryMaxRetries')} type="number" value={draft.retryMaxRetries} onChange={(value) => update({ retryMaxRetries: value })} />
+          <Field label={t('retryBaseDelayMs')} type="number" value={draft.retryBaseDelayMs} onChange={(value) => update({ retryBaseDelayMs: value })} />
+          <Field label={t('retryMaxDelayMs')} type="number" value={draft.retryMaxDelayMs} onChange={(value) => update({ retryMaxDelayMs: value })} />
+          <Field label={t('retryJitter')} type="number" value={draft.retryJitter} onChange={(value) => update({ retryJitter: value })} />
           <Field label={t('maxOutputTokens')} type="number" value={draft.maxOutputTokens} onChange={(value) => update({ maxOutputTokens: value })} />
           <Field label={t('contextWindow')} type="number" value={draft.contextWindow} onChange={(value) => update({ contextWindow: value })} />
           <Field label={t('planLabel')} hint={t('planLabelHint')} value={draft.planLabel} onChange={(value) => update({ planLabel: value })} />

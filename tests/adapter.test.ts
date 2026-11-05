@@ -37,6 +37,30 @@ const options: GenerateOptions = {
   messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
 }
 
+test('retries a pre-response 503 with a fresh request', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) return new Response('{"error":"temporary"}', { status: 503 })
+    return ndjson(['{"message":{"role":"assistant","content":"ok"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({
+      apiKey: 'k',
+      retryMaxRetries: 1,
+      retryBaseDelayMs: 0,
+      retryMaxDelayMs: 0,
+      retryJitter: 0,
+    }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  assert.equal(calls, 2)
+  assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'ok'))
+})
+
 test('session context override reaches the native request body', async () => {
   let body: { options?: { num_ctx?: number } } | undefined
   const fetchImpl = (async (_url: string, init?: RequestInit) => {

@@ -1,5 +1,7 @@
 const DISCOVERY_TIMEOUT_MS = 15_000
 
+import { sanitizeUrl } from './sanitize.ts'
+
 export interface DiscoveryResult {
   readonly base: string
   readonly models: readonly string[]
@@ -27,7 +29,7 @@ function normalizeBase(raw: string): string {
   if (url.username !== '' || url.password !== '') {
     throw new DiscoveryError('endpoint URL must not contain credentials')
   }
-  return value
+  return sanitizeUrl(value)
 }
 
 function isLoopback(url: string): boolean {
