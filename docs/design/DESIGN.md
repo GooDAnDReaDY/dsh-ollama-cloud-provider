@@ -3,12 +3,12 @@
 ## Product / Purpose
 - Назначение: нативный LLM-провайдер Ollama Cloud для DeepSeek Harness (DSH).
 - Аудитория: пользователи DSH Desktop/Web/TUI, у которых есть ключ Ollama Cloud.
-- Статус: 0.1.16 опубликован и проверен на production Web/Desktop (DSH 0.2.1-rc.4); добавлен диапазон DSH 0.2.2. Источник версии: `package.json`; история: `CHANGELOG.md`.
+- Статус: 0.1.16 опубликован и проверен на production Web/Desktop; 0.1.17 добавляет web search/fetch providers. Источник версии: `package.json`; история: `CHANGELOG.md`.
 
 ## User Surfaces
 - Web/UI: settings-страница, карточка квоты в сайдбаре, центральная панель с расходом, аналитикой и heatmap.
 - DSH UI / settings / slots: `settings.section` (id `ollama`, order 20) — так же, как в референсных плагинах opencode и commandcode; `main` (key `ollama-panel`), `sidebar.footer.action` (id `ollama-quota`).
-- API: host-маршруты `/dsh-ollama/state|health|analytics|usage|balance|config|key|key/clear|refresh|models/refresh|test|update`.
+- API: host-маршруты `/dsh-ollama/state|health|analytics|usage|balance|config|key|key/clear|refresh|models/refresh|test|update`; web providers `ollama-cloud` через `ctx.web` (search/fetch).
 - CLI: команда `/ollama`; TUI-секция настроек.
 - Документация: README.md, README.ru.md, README.zh.md, DESIGN.md, CHANGELOG.md.
 

@@ -13,7 +13,7 @@ stop and ask the owner before changing anything.
   page, and service status.
 - Users: DSH Desktop, DSH Web, and TUI users with an Ollama Cloud key.
 - Status: active. 0.1.16 is verified on the production Web host and Desktop
-  (DSH 0.2.1-rc.4); it adds the DSH 0.2.2 compatibility range.
+  (DSH 0.2.1-rc.4); 0.1.17 adds Ollama web search/fetch providers.
 - DEV checkout: the repository root; work happens only in a Git worktree.
 
 ## Package Policy
@@ -42,6 +42,7 @@ stop and ask the owner before changing anything.
 - `src/transports/openai-chat.ts` — optional OpenAI-compatible SSE transport.
 - `src/catalog.ts` — model catalog and stale-while-revalidate refresh.
 - `src/routes.ts` — host HTTP routes and write-route guards.
+- `src/web.ts` — Ollama web search/fetch providers for `ctx.web`.
 - `src/client/` — settings page, quota card/panel, analytics, heatmap.
 - `src/settings.ts`, `src/config.ts`, `src/keys.ts` — configuration and
   credential handling.
