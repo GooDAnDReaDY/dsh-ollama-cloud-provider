@@ -18,7 +18,8 @@ export function setBestEffortLogger(logger: BestEffortLogger | undefined): void 
 export function bestEffortFailed(label: string, error: unknown): void {
   try {
     sink?.debug?.(`${label}: ${redactText(error instanceof Error ? error.message : String(error))}`)
-  } catch {
+  } catch (caught) {
     // Logging must never break the caller.
+    void caught
   }
 }

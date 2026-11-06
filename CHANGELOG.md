@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.32 — 2026-11-06
+
+- Reliability: handled already-aborted signal check in adapter test mock to prevent hanging promises under load (#102).
+- Diagnostics: routed catalog snapshot cleanup and TUI registration errors through `bestEffortFailed` (#103).
+- Accessibility: added `aria-expanded` and CSS-rotated chevron indicator to collapsible model groups (#104).
+
 ## 0.1.31 — 2026-11-06
 
 - Robustness: wrapped ndjson streaming chunk and tail JSON parsing in try/catch

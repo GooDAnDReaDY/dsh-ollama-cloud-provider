@@ -79,6 +79,9 @@ export const CSS = `
 .ocl-drag-handle { cursor: grab; color: var(--ocl-text-secondary); user-select: none; }
 .ocl-dragging { opacity: 0.5; }
 .ocl-model-group { display: flex; flex-direction: column; gap: 2px; }
+.ocl-group-title { display: inline-flex; align-items: center; gap: 6px; }
+.ocl-chevron { display: inline-block; transition: transform 0.15s ease; font-size: 10px; line-height: 1; }
+.ocl-chevron-collapsed { transform: rotate(-90deg); }
 .ocl-model-group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 4px 0; border: 0; background: none; color: var(--ocl-text-secondary); font-size: 11px; font-weight: 650; cursor: pointer; text-align: left; }
 .ocl-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ocl-model-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; color: var(--ocl-text-secondary); font-size: 11px; }
