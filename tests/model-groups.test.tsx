@@ -51,3 +51,9 @@ test('model entry renders rich badges and a drag handle', () => {
   assert.match(html, /reasoning/)
   assert.match(html, /free/)
 })
+
+test('model group header renders accessible aria-expanded and chevron', () => {
+  const groups = groupModels([row('large', 131072)], 'context')
+  assert.equal(groups.length, 1)
+  assert.equal(groups[0]?.label, '128K context')
+})

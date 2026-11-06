@@ -73,7 +73,11 @@ export async function saveCatalogSnapshot(
     await rename(temp, path)
   } catch (error) {
     bestEffortFailed('catalog cache write failed', error)
-    try { await unlink(temp) } catch { /* best effort */ }
+    try {
+      await unlink(temp)
+    } catch (unlinkError) {
+      bestEffortFailed('cleanup temp cache failed', unlinkError)
+    }
   }
 }
 
@@ -81,7 +85,9 @@ export async function saveCatalogSnapshot(
 export function clearCatalogSnapshot(): void {
   try {
     unlinkSync(catalogCachePath())
-  } catch {
-    // Missing cache is already cleared.
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      bestEffortFailed('clear catalog snapshot failed', error)
+    }
   }
 }

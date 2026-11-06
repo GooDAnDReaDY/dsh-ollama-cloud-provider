@@ -662,9 +662,13 @@ export function OllamaCloudSettingsPage(props: {
                   <button
                     type="button"
                     className="ocl-model-group-head"
+                    aria-expanded={collapsedGroups[group.key] !== true}
                     onClick={() => toggleGroup(group.key)}
                   >
-                    <span>{collapsedGroups[group.key] === true ? '▸' : '▾'} {group.label}</span>
+                    <span className="ocl-group-title">
+                      <span className={`ocl-chevron ${collapsedGroups[group.key] === true ? 'ocl-chevron-collapsed' : ''}`} aria-hidden="true">▾</span>
+                      {group.label}
+                    </span>
                     <span className="ocl-badge">{group.models.length}</span>
                   </button>
                   {collapsedGroups[group.key] === true ? null : group.models.map((model) => (
