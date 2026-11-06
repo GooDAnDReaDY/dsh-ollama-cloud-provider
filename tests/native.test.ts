@@ -194,3 +194,11 @@ test('rejects EOF before done:true after a tool call', async () => {
     /ended before done:true/i,
   )
 })
+
+test('skips malformed non-JSON lines gracefully', async () => {
+  const chunks = await collect([
+    'malformed-non-json-line',
+    '{"message":{"content":"ok"},"done":true,"done_reason":"stop"}',
+  ])
+  assert.ok(chunks.some((chunk: any) => chunk.type === 'text-delta' && chunk.text === 'ok'))
+})

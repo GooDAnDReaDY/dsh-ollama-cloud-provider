@@ -1,5 +1,7 @@
 import { LlmError } from '@deepseek-ai/dsh-llm'
 
+import { bestEffortFailed } from '../best-effort.ts'
+
 async function readWithIdleTimeout(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   idleTimeoutMs: number,
@@ -58,7 +60,13 @@ export async function* ndjsonObjects(
         const line = buffer.slice(0, boundary).trim()
         buffer = buffer.slice(boundary + 1)
         if (line === '') continue
-        const parsed = JSON.parse(line) as unknown
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(line)
+        } catch (error) {
+          bestEffortFailed('ndjson line parse failed', error)
+          continue
+        }
         if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
           yield parsed as Record<string, unknown>
         }
@@ -66,7 +74,12 @@ export async function* ndjsonObjects(
     }
     const tail = buffer.trim()
     if (tail !== '') {
-      const parsed = JSON.parse(tail) as unknown
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(tail)
+      } catch (error) {
+        bestEffortFailed('ndjson tail parse failed', error)
+      }
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
         yield parsed as Record<string, unknown>
       }
