@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.31 — 2026-11-06
+
+- Robustness: wrapped ndjson streaming chunk and tail JSON parsing in try/catch
+  to safely discard or report corrupted chunks without aborting the connection abruptly (#97).
+- Route Security: restricted `readOnly` check in route handlers to non-GET methods only
+  (`req.method !== 'GET'`), avoiding premature rejects on idempotent read probes (#98).
+- Deterministic Tests: enforced `--test-concurrency=1` in `package.json` test runner
+  to ensure deterministic test order and prevent timer/teardown races under Node 24 (#99).
+- UI Defaults: explicitly verified and locked invariant that all on-screen UI badges and
+  widgets (specifically `showSidebarQuota`) remain disabled by default (`false`) and must
+  be explicitly enabled by user in settings (#100).
+
 ## 0.1.30 — 2026-11-05
 
 - Security: credential writes now accept only the configured default/account

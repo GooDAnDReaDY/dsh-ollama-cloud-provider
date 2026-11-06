@@ -491,7 +491,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
     disposers.push(web.register({ kind: 'exact', path, handler }))
   }
   const readOnly = (req: IncomingMessage, res: ServerResponse): boolean => {
-    if (req.method !== 'GET' && req.method !== 'POST') {
+    if (req.method !== 'GET') {
       json(res, 405, { error: 'GET required' })
       return false
     }
