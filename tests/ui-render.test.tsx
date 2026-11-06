@@ -4,6 +4,7 @@ import test from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
+import { QuotaCard } from '../src/client/quota-card.tsx'
 import { UsageBars } from '../src/client/usage-bars.tsx'
 import { quotaBars } from '../src/quota-model.ts'
 
@@ -26,4 +27,9 @@ test('quota bars render localized labels in the Chinese UI', () => {
   assert.match(html, /包含额度/)
   assert.ok(!html.includes('Included credits'))
   assert.match(html, /已购买/)
+})
+
+test('sidebar quota card renders null when disabled by default', () => {
+  const html = renderToStaticMarkup(<QuotaCard t={(key) => key} />)
+  assert.equal(html, '')
 })
