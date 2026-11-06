@@ -87,7 +87,11 @@ test('session context override reaches the native request body', async () => {
 
 test('per-attempt timeout aborts a stalled chat attempt', async () => {
   const fetchImpl = (async (_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-    init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+    if (init?.signal?.aborted) {
+      reject(new DOMException('aborted', 'AbortError'))
+    } else {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+    }
   })) as typeof fetch
   const adapter = new OllamaCloudAdapter({
     config: () => resolveConfig({ apiKey: 'k', attemptTimeoutMs: 10, requestTimeoutMs: 5000 }),

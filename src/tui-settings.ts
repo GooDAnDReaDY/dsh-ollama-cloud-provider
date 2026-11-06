@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { bestEffortFailed } from './best-effort.ts'
 
 /** Minimal structural copy of the dsh-TUI settings seam. */
 export type TuiSettingsFieldKind = 'text' | 'number' | 'boolean' | 'select'
@@ -243,8 +244,9 @@ export function applyOllamaTuiSettings(
     remove?.()
     try {
       remove = service.register(buildOllamaTuiSection(deps))
-    } catch {
+    } catch (error) {
       remove = undefined
+      bestEffortFailed('tui section registration failed', error)
     }
   }
 
