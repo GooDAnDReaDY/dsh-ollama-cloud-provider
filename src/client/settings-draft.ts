@@ -219,7 +219,13 @@ export function patchOf(draft: Draft): Record<string, unknown> {
     visibleModels: draft.showAll ? [] : draft.visibleModels,
     showAllModels: draft.showAll,
     filterModelsByPlan: draft.filterModelsByPlan,
-    modelVisibility: draft.modelVisibility,
+    modelVisibility: draft.showAll
+      ? draft.modelVisibility
+      : Object.fromEntries(
+          Object.entries(draft.modelVisibility).filter(
+            ([id, val]) => val === false || draft.visibleModels.includes(id),
+          ),
+        ),
     manualModels: draft.manualModels
       .filter((model) => model.id.trim() !== '')
       .map((model) => ({

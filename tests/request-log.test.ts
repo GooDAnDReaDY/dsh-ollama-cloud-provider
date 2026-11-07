@@ -36,7 +36,7 @@ test('keeps concurrent requests that share a timestamp', async () => {
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previous
-    await rm(home, { recursive: true, force: true })
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
   }
 })
 
@@ -59,7 +59,7 @@ test('aggregates requests per account', async () => {
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previous
-    await rm(home, { recursive: true, force: true })
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
   }
 })
 
@@ -89,7 +89,7 @@ test('aggregates per-account errors and latency', async () => {
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previous
-    await rm(home, { recursive: true, force: true })
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
   }
 })
 
@@ -137,6 +137,6 @@ test('records requests and builds a local weekday/hour heatmap', async () => {
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previous
-    await rm(home, { recursive: true, force: true })
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
   }
 })

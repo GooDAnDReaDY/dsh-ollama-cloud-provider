@@ -33,3 +33,26 @@ test('sidebar quota card renders null when disabled by default', () => {
   const html = renderToStaticMarkup(<QuotaCard t={(key) => key} />)
   assert.equal(html, '')
 })
+
+import { RequestHeatmapView } from '../src/client/heatmap.tsx'
+import { dictionaries } from '../src/client/locales.ts'
+
+test('heatmap renders localized weekday labels in Chinese UI (#55)', () => {
+  const tZh = (key: string) => dictionaries.zh[key as keyof typeof dictionaries.zh] ?? key
+  const html = renderToStaticMarkup(
+    <RequestHeatmapView
+      heatmap={{
+        total: 10,
+        grid: Array.from({ length: 7 }, () => Array(24).fill(0)),
+        hours: Array(24).fill(0),
+        models: [],
+        accounts: [],
+      }}
+      t={tZh}
+    />,
+  )
+  assert.match(html, /周一/)
+  assert.match(html, /周日/)
+  assert.ok(!html.includes('>Mon<'))
+  assert.ok(!html.includes('>Sun<'))
+})

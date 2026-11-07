@@ -100,7 +100,7 @@ export function localVerificationOrigin(req: Pick<IncomingMessage, 'socket'>): s
   return `${secure ? 'https' : 'http'}://127.0.0.1:${port}`
 }
 
-async function defaultVerifyHost(req: IncomingMessage): Promise<boolean> {
+export async function defaultVerifyHost(req: IncomingMessage): Promise<boolean> {
   const localOrigin = localVerificationOrigin(req)
   const cookie = req.headers.cookie
   if (localOrigin === undefined || cookie === undefined || cookie === '') return false
@@ -114,18 +114,23 @@ async function defaultVerifyHost(req: IncomingMessage): Promise<boolean> {
     })
     await response.body?.cancel()
     if (response.status >= 300 && response.status < 400) return false
-    if (response.status === 404) {
-      // DSH uses 404 after auth for an otherwise unknown route. Confirm that the
-      // route is actually auth-protected: a public host also answers 404.
-      const anonymous = await fetch(`${localOrigin}/api/version`, {
-        headers: { accept: 'application/json' },
-        redirect: 'manual',
-        signal: AbortSignal.timeout(2_500),
-      })
-      await anonymous.body?.cancel()
-      return anonymous.status === 401 || anonymous.status === 403
+    if (response.status === 401 || response.status === 403 || response.status >= 500) return false
+
+    // Anonymous control probe: confirm that the endpoint is actually auth-protected.
+    // Both 200 (auth success) and 404 (route absent behind auth) require the anonymous probe
+    // to fail with 401 or 403. If a public or synthetic host returns 200 or 404 to anyone,
+    // a forged cookie cannot be verified and must fail closed.
+    const anonymous = await fetch(`${localOrigin}/api/version`, {
+      headers: { accept: 'application/json' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(2_500),
+    })
+    await anonymous.body?.cancel()
+    if (anonymous.status !== 401 && anonymous.status !== 403) {
+      return false
     }
-    return response.status < 500 && response.status !== 401 && response.status !== 403
+
+    return (response.status >= 200 && response.status < 300) || response.status === 404
   } catch {
     return false
   }

@@ -265,9 +265,11 @@ export function OllamaCloudSettingsPage(props: {
 
   const toggleModel = (id: string, visible: boolean): void => {
     const current = new Set(draft.visibleModels)
+    const nextVisibility = { ...draft.modelVisibility }
     if (visible) current.add(id)
     else current.delete(id)
-    update({ visibleModels: [...current], showAll: false })
+    delete nextVisibility[id]
+    update({ visibleModels: [...current], showAll: false, modelVisibility: nextVisibility })
   }
 
   return (
@@ -630,6 +632,13 @@ export function OllamaCloudSettingsPage(props: {
           >
             {t('showAll')}
           </button>
+          <button
+            type="button"
+            className="ocl-button"
+            onClick={() => update({ showAll: false, visibleModels: [], modelVisibility: {} })}
+          >
+            {t('hideAll')}
+          </button>
         </h3>
         <p className="ocl-hint">{t('modelsHint')}</p>
         <label className="ocl-row">
@@ -675,7 +684,7 @@ export function OllamaCloudSettingsPage(props: {
                     <ModelEntry
                       key={model.id}
                       model={model}
-                      visible={draft.showAll || draft.visibleModels.includes(model.id)}
+                      visible={draft.modelVisibility[model.id] ?? (draft.showAll || draft.visibleModels.includes(model.id))}
                       transport={draft.modelTransports[model.id] ?? ''}
                       dragging={dragId === model.id}
                       onDragStart={() => setDragId(model.id)}
