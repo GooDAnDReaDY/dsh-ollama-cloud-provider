@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.34 — 2026-11-07
+
+- Security: patched transient zod memory exhaustion vulnerability (GHSA-mrhx-c7xc-m3w5) in dependencies via package overrides, achieving 0 audit vulnerabilities (#108).
+- Component Testing: added automated test coverage for interactive state loading, failure reporting, and unmounting of `OllamaProviderCard` (#109).
+
 ## 0.1.33 — 2026-11-07
 
 - Security: closed fake-cookie verification bypass on write routes (`/config`, `/key`) and sensitive read routes (`/state`, `/analytics`, `/usage`, `/balance`) by requiring an anonymous control probe to fail with 401 or 403, failing closed against public or synthetic hosts (#42, #56).

@@ -25,6 +25,7 @@ import type { HostState, UpdateStatus } from '../src/client/api.ts'
 import { dictionaries } from '../src/client/locales.ts'
 import { draftOf, patchOf } from '../src/client/settings-draft.ts'
 import { PluginUpdateCardView } from '../src/client/update-card.tsx'
+import { OllamaProviderCardView } from '../src/client/provider-card.tsx'
 
 function createContainer(): { div: HTMLElement; root: ReturnType<typeof createRoot> } {
   const div = win.document.createElement('div')
@@ -32,6 +33,40 @@ function createContainer(): { div: HTMLElement; root: ReturnType<typeof createRo
   const root = createRoot(div as never)
   return { div: div as unknown as HTMLElement, root }
 }
+
+const sampleState: HostState = {
+  key: { configured: true, writable: true },
+  config: {
+    apiKeyEnv: 'OLLAMA_API_KEY',
+    apiBase: 'https://ollama.com',
+    openAiBase: 'https://ollama.com/v1',
+    usageUrl: 'https://ollama.com/api/usage',
+    balanceUrl: 'https://ollama.com/api/balance',
+    transport: 'native',
+    modelTransports: {},
+    requestTimeoutMs: 300000,
+    streamIdleTimeoutMs: 300000,
+    visibleModels: ['model-1', 'model-2'],
+    showAllModels: false,
+    modelVisibility: {},
+    filterModelsByPlan: true,
+    contextWindow: null,
+    contextWindowOverrides: {},
+    maxOutputTokens: null,
+    accounts: [],
+    modelAccountRules: [],
+    stickySession: true,
+    activeAccount: '',
+    showSidebarQuota: false,
+    planLabel: '',
+    priceOverrides: {},
+    userAgent: 'test',
+  },
+  models: [
+    { id: 'model-1', name: 'Model 1', description: '', transport: 'native', contextWindow: 1, maxTokens: 1, free: true, cost: { input: 0, output: 0, cacheRead: 0 }, available: true, input: ['text'], reasoning: [], defaultReasoning: null, tools: true, visible: true },
+    { id: 'model-2', name: 'Model 2', description: '', transport: 'native', contextWindow: 1, maxTokens: 1, free: true, cost: { input: 0, output: 0, cacheRead: 0 }, available: true, input: ['text'], reasoning: [], defaultReasoning: null, tools: true, visible: true },
+  ],
+} as never
 
 test('UI action: mounting, interactive language switching and unmounting (#61)', async () => {
   const { div, root } = createContainer()
@@ -113,8 +148,8 @@ test('UI action: updater card actions (retry and update) and unmounting (#61)', 
 
   const status: UpdateStatus = {
     packageName: '@goodandready/dsh-ollama-cloud-provider',
-    currentVersion: '0.1.32',
-    latestVersion: '0.1.33',
+    currentVersion: '0.1.34',
+    latestVersion: '0.1.35',
     latestCheckFailed: true,
     updateAvailable: true,
     profileName: 'web',
@@ -186,38 +221,7 @@ test('UI action: updater card actions (retry and update) and unmounting (#61)', 
 test('UI action: draft mutation, model selection toggle, hide all, and save (#61, #63)', async () => {
   const { div, root } = createContainer()
 
-  const sampleState: HostState = {
-    config: {
-      apiKeyEnv: 'OLLAMA_API_KEY',
-      apiBase: 'https://ollama.com',
-      openAiBase: 'https://ollama.com/v1',
-      usageUrl: 'https://ollama.com/api/usage',
-      balanceUrl: 'https://ollama.com/api/balance',
-      transport: 'native',
-      modelTransports: {},
-      requestTimeoutMs: 300000,
-      streamIdleTimeoutMs: 300000,
-      visibleModels: ['model-1', 'model-2'],
-      showAllModels: false,
-      modelVisibility: {},
-      filterModelsByPlan: true,
-      contextWindow: null,
-      contextWindowOverrides: {},
-      maxOutputTokens: null,
-      accounts: [],
-      modelAccountRules: [],
-      stickySession: true,
-      activeAccount: '',
-      showSidebarQuota: false,
-      planLabel: '',
-      priceOverrides: {},
-      userAgent: 'test',
-    },
-    models: [
-      { id: 'model-1', name: 'Model 1', description: '', transport: 'native', contextWindow: 1, maxTokens: 1, free: true, cost: { input: 0, output: 0, cacheRead: 0 }, available: true, input: ['text'], reasoning: [], defaultReasoning: null, tools: true, visible: true },
-      { id: 'model-2', name: 'Model 2', description: '', transport: 'native', contextWindow: 1, maxTokens: 1, free: true, cost: { input: 0, output: 0, cacheRead: 0 }, available: true, input: ['text'], reasoning: [], defaultReasoning: null, tools: true, visible: true },
-    ],
-  } as never
+// sampleState used from module scope
 
   let savedPatch: ReturnType<typeof patchOf> | null = null
 
@@ -288,6 +292,68 @@ test('UI action: draft mutation, model selection toggle, hide all, and save (#61
   assert.deepEqual(savedPatch.visibleModels, [])
   assert.equal(savedPatch.showAllModels, false)
   assert.deepEqual(savedPatch.modelVisibility, {})
+
+  // Clean unmount
+  await act(async () => {
+    root.unmount()
+  })
+  assert.equal(div.innerHTML, '')
+})
+
+test('UI action: OllamaProviderCardView interactive states, model counts, and unmounting (#109)', async () => {
+  const { div, root } = createContainer()
+
+  function CardHarness() {
+    const [state, setState] = useState<HostState | null>(null)
+    const [error, setError] = useState<string | null>(null)
+
+    return (
+      <div>
+        <button
+          id="load-state-btn"
+          type="button"
+          onClick={() => {
+            setError(null)
+            setState(sampleState)
+          }}
+        >
+          Load
+        </button>
+        <button
+          id="fail-state-btn"
+          type="button"
+          onClick={() => {
+            setState(null)
+            setError('network failure')
+          }}
+        >
+          Fail
+        </button>
+        <OllamaProviderCardView t={(k) => k} state={state} error={error} />
+      </div>
+    )
+  }
+
+  await act(async () => {
+    root.render(<CardHarness />)
+  })
+
+  // Initially state is null -> loading badge
+  assert.ok(div.textContent?.includes('loading'))
+
+  // Trigger load state
+  const loadBtn = div.querySelector('#load-state-btn') as HTMLButtonElement
+  await act(async () => {
+    loadBtn.dispatchEvent(new win.Event('click', { bubbles: true }))
+  })
+  assert.ok(div.textContent?.includes('models: 2'))
+
+  // Trigger fail state
+  const failBtn = div.querySelector('#fail-state-btn') as HTMLButtonElement
+  await act(async () => {
+    failBtn.dispatchEvent(new win.Event('click', { bubbles: true }))
+  })
+  assert.ok(div.textContent?.includes('network failure'))
 
   // Clean unmount
   await act(async () => {
