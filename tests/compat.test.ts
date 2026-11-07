@@ -10,7 +10,7 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
   devDependencies: Record<string, string>
 }
 
-const range = '0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0'
+const range = '0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0'
 
 test('compatibility declarations use the same-channel range', () => {
   assert.equal(pkg.dsh.compatibility.dsh, range)
