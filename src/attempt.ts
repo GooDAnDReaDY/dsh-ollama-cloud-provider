@@ -33,7 +33,6 @@ export function createAttemptBudget(timeoutMs: number | undefined, caller?: Abor
         controller.abort()
       }, timeoutMs)
     : undefined
-  timer?.unref?.()
   budget.dispose = () => {
     if (timer !== undefined) clearTimeout(timer)
     caller?.removeEventListener('abort', onAbort)

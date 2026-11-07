@@ -165,14 +165,14 @@ export function UsageAnalyticsView(props: {
         <Kpi
           label={t('successRate')}
           value={summary.successRate === null ? '—' : `${Math.round(summary.successRate)}%`}
-          title="Recorded session steps; failed attempts are not exposed by the local projection."
+          title={t('successRateTooltip')}
         />
         <Kpi label={t('input')} value={compact(summary.inputTokens)} />
         <Kpi label={t('output')} value={compact(summary.outputTokens)} />
         <Kpi
           label={t('reasoning')}
           value={summary.reasoningTokens === null ? '—' : compact(summary.reasoningTokens)}
-          title="Reasoning tokens are not exposed by the local session projection."
+          title={t('reasoningTooltip')}
         />
         <Kpi label={t('cacheRead')} value={compact(summary.cacheReadTokens)} />
         <Kpi label={t('cacheWrite')} value={compact(summary.cacheWriteTokens)} />
@@ -181,7 +181,7 @@ export function UsageAnalyticsView(props: {
         <Kpi
           label={t('errors')}
           value={summary.errors === null ? '—' : String(summary.errors)}
-          title="The local projection does not expose failed attempts."
+          title={t('errorsTooltip')}
         />
       </div>
 

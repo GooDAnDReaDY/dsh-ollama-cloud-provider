@@ -18,7 +18,7 @@ process.env.DSH_HOME = coreHome
 test.after(async () => {
   if (previousHome === undefined) delete process.env.DSH_HOME
   else process.env.DSH_HOME = previousHome
-  await rm(coreHome, { recursive: true, force: true })
+  await rm(coreHome, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
 })
 
 const config = resolveConfig({ apiKey: 'test-key' })

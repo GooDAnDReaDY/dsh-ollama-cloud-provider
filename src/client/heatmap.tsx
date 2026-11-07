@@ -2,7 +2,11 @@ import { Fragment, type ReactNode, useState } from 'react'
 
 import type { RequestHeatmap } from './api.ts'
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAY_KEYS = ['dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat', 'daySun'] as const
+function dayLabel(day: number, t: (key: string) => string): string {
+  const key = DAY_KEYS[day]
+  return key !== undefined ? t(key) : ''
+}
 
 function cellColor(value: number, max: number): string {
   if (value === 0 || max <= 0) return 'color-mix(in srgb, var(--ocl-text-tertiary) 10%, transparent)'
@@ -125,13 +129,13 @@ export function RequestHeatmapView(props: {
           ))}
           {view.grid.map((row, day) => (
             <Fragment key={`d${day}`}>
-              <span className="ocl-heat-day">{DAYS[day] ?? ''}</span>
+              <span className="ocl-heat-day">{dayLabel(day, t)}</span>
               {row.map((value, hour) => (
                 <span
                   key={`c${day}-${hour}`}
                   className="ocl-heat-cell"
                   style={{ background: cellColor(value, max) }}
-                  title={`${DAYS[day] ?? ''} ${pad(hour)}:00 — ${value}`}
+                  title={`${dayLabel(day, t)} ${pad(hour)}:00 — ${value}`}
                 />
               ))}
             </Fragment>

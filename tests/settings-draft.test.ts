@@ -73,3 +73,29 @@ test('a key refresh preserves a dirty draft while a save replaces it', () => {
   assert.equal(mergeLoadedDraft(current, next, true), current)
   assert.equal(mergeLoadedDraft(current, next, false), next)
 })
+
+test('patchOf prunes positive modelVisibility overrides when model is hidden', () => {
+  const draft = draftOf(state({
+    visibleModels: ['a'],
+    showAllModels: false,
+    modelVisibility: { a: true, b: true, c: false },
+  }))
+  const patch = patchOf(draft)
+  assert.deepEqual(patch.visibleModels, ['a'])
+  assert.equal(patch.showAllModels, false)
+  // b was not in visibleModels and draft.showAll is false -> b: true must be pruned!
+  // c: false is an explicit hide override, preserved.
+  assert.deepEqual(patch.modelVisibility, { a: true, c: false })
+})
+
+test('patchOf with zero visible models clears positive modelVisibility overrides (#63)', () => {
+  const draft = draftOf(state({
+    visibleModels: [],
+    showAllModels: false,
+    modelVisibility: { a: true, b: true },
+  }))
+  const patch = patchOf(draft)
+  assert.deepEqual(patch.visibleModels, [])
+  assert.equal(patch.showAllModels, false)
+  assert.deepEqual(patch.modelVisibility, {})
+})

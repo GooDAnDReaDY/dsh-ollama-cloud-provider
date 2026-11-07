@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.33 — 2026-11-07
+
+- Security: closed fake-cookie verification bypass on write routes (`/config`, `/key`) and sensitive read routes (`/state`, `/analytics`, `/usage`, `/balance`) by requiring an anonymous control probe to fail with 401 or 403, failing closed against public or synthetic hosts (#42, #56).
+- Localization: localized weekday labels in request heatmap and tooltips/KPI descriptions in usage analytics across English and Chinese interfaces (#55).
+- Model Visibility: fixed zero-model selection to persist `showAllModels: false` and clear positive overrides, added "Hide all" UI action, and pruned stale `modelVisibility` overrides (#63).
+- Test Hygiene: replaced forbidden `rm(..., { recursive: true, force: true })` calls across all unit tests with safe non-force directory cleanup and graceful ENOENT handling (#106).
+- Automated UI Coverage: added automated component action and interaction test suite covering settings loading/saving, updater retry/update flows, language switching, and clean unmounting (#61).
+
 ## 0.1.32 — 2026-11-06
 
 - Reliability: handled already-aborted signal check in adapter test mock to prevent hanging promises under load (#102).
