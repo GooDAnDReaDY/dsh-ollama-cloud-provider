@@ -108,6 +108,12 @@ graph LR
 - **TUI settings section** for terminal profiles.
 - **One-click plugin update** in Settings → Ollama Cloud.
 
+## Requirements
+
+- **DeepSeek Harness**: \0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0\ (desktop and web profiles).
+- **Node.js**: \>=22.0.0\.
+- **Ollama Cloud Account**: one or more active API keys from Ollama Cloud or a compatible proxy endpoint.
+
 ## Install
 
 Build and pack first:
