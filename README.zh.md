@@ -89,6 +89,12 @@ graph LR
 - **`/ollama` 快捷指令**：快速查询状态、额度、余额、账号列表与执行联通性测试。
 - **一键热更新**：在 DSH 设置页直接检测 npm 最新版本并快速安装更新。
 
+## Requirements / 系统要求
+
+- **DeepSeek Harness**: \0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0\（桌面版与 Web 配置文件）。
+- **Node.js**: \>=22.0.0\。
+- **Ollama Cloud 账户**: 一个或多个有效的 Ollama Cloud API Key 或兼容的代理端点。
+
 ## 安装指南
 
 从源码构建与打包：
@@ -102,17 +108,17 @@ npm pack
 从 npm 安装已发布版本：
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.33
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.34
 # DSH 桌面端：
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.33
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.34
 ```
 
 或通过打包文件安装：
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.33.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.34.tgz
 # DSH 桌面端：
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.33.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.34.tgz
 ```
 
 安装完成后重启 dsh 或 DSH 桌面端，在模型列表中选择 **Ollama Cloud** 即可。

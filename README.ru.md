@@ -90,6 +90,12 @@ graph LR
 - **Интеграция с терминалом (TUI)**: специальная секция настроек в терминальном режиме.
 - **One-Click обновление плагина**: прямая проверка npm registry и кнопка обновления в Web UI.
 
+## Requirements / Требования
+
+- **DeepSeek Harness**: \0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0\ (профили desktop и web).
+- **Node.js**: \>=22.0.0\.
+- **Аккаунт Ollama Cloud**: один или несколько действующих API-ключей Ollama Cloud или совместимого прокси.
+
 ## Установка
 
 Сборка и упаковка из исходного кода:
@@ -103,17 +109,17 @@ npm pack
 Установка опубликованного пакета из npm:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.33
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.34
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.33
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.34
 ```
 
 Либо установка из упакованного tarball:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.33.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.34.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.33.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.34.tgz
 ```
 
 После установки перезапустите dsh (или DSH Desktop) и выберите **Ollama Cloud** в списке моделей.

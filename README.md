@@ -108,6 +108,12 @@ graph LR
 - **TUI settings section** for terminal profiles.
 - **One-click plugin update** in Settings → Ollama Cloud.
 
+## Requirements
+
+- **DeepSeek Harness**: \0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0\ (desktop and web profiles).
+- **Node.js**: \>=22.0.0\.
+- **Ollama Cloud Account**: one or more active API keys from Ollama Cloud or a compatible proxy endpoint.
+
 ## Install
 
 Build and pack first:
@@ -121,17 +127,17 @@ npm pack
 Install the published package:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.33
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.34
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.33
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.34
 ```
 
 Or install the packed tarball into a profile:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.33.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.34.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.33.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.34.tgz
 ```
 
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
