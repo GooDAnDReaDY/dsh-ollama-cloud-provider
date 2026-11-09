@@ -9,3 +9,9 @@ coverage/
 .DS_Store
 .commandcode/
 .worktrees/
+
+# Internal files not published to mirrors (#118)
+AGENTS.md
+index.md
+.gitea/
+docs/

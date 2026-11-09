@@ -39,8 +39,8 @@ function text(value: unknown): string {
 }
 
 function finishReasonOf(raw: string, hasToolCalls: boolean): FinishReason {
-  if (hasToolCalls) return { kind: 'tool-calls' }
   if (raw === 'length') return { kind: 'max-tokens' }
+  if (hasToolCalls) return { kind: 'tool-calls' }
   return { kind: 'stop' }
 }
 

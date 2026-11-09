@@ -1,8 +1,8 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import {
@@ -89,6 +89,19 @@ function storagePath(file: string): string {
 function effortName(id: string): string {
   if (id === 'off' || id === 'none') return 'Off'
   return id.charAt(0).toUpperCase() + id.slice(1)
+}
+
+async function atomicWriteFile(filePath: string, data: string): Promise<void> {
+  const dir = dirname(filePath)
+  await mkdir(dir, { recursive: true })
+  const tmp = join(dir, `.${basename(filePath)}.${randomUUID()}.tmp`)
+  try {
+    await writeFile(tmp, data, 'utf8')
+    await rename(tmp, filePath)
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => {})
+    throw error
+  }
 }
 
 export class OllamaCloudAdapter extends LlmAdapter {
@@ -385,10 +398,39 @@ export class OllamaCloudAdapter extends LlmAdapter {
       }
     }
 
-    const finalError = lastError ?? new LlmError(
-      'llm-ollama-cloud: every configured account is cooling down after provider rejections',
-      'RATE_LIMIT',
-    )
+    const cooldownEntries = rawKeys
+      .map((entry) => this.cooldowns.get(this.keyId(entry.key)))
+      .filter((entry): entry is { until: number; reason: string } => entry !== undefined && entry.until > Date.now())
+
+    let finalError = lastError
+    if (finalError === undefined) {
+      if (cooldownEntries.length > 0) {
+        const minUntil = Math.min(...cooldownEntries.map((e) => e.until))
+        const remainingMinutes = Math.max(1, Math.ceil((minUntil - Date.now()) / 60_000))
+        const reasons = new Set(cooldownEntries.map((e) => e.reason))
+        if (reasons.has('invalid-credential') && reasons.size === 1) {
+          finalError = new LlmError(
+            `llm-ollama-cloud: every configured account is cooling down due to invalid credentials (retry in ${remainingMinutes}m)`,
+            'INVALID_CREDENTIAL',
+          )
+        } else if (reasons.has('quota') && !reasons.has('rate-limit')) {
+          finalError = new LlmError(
+            `llm-ollama-cloud: every configured account is cooling down due to quota limits (retry in ${remainingMinutes}m)`,
+            'QUOTA',
+          )
+        } else {
+          finalError = new LlmError(
+            `llm-ollama-cloud: every configured account is cooling down after provider rejections (retry in ${remainingMinutes}m)`,
+            'RATE_LIMIT',
+          )
+        }
+      } else {
+        finalError = new LlmError(
+          'llm-ollama-cloud: every configured account is cooling down after provider rejections',
+          'RATE_LIMIT',
+        )
+      }
+    }
     if (!loggedAny) {
       record(options.provider, options.model, options.purpose, lastAccount, reason, {
         at: runStartedAt,
@@ -476,8 +518,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
     const payload = JSON.stringify({ sticky: Object.fromEntries(this.sticky) })
     this.stickyWrites = this.stickyWrites
       .then(async () => {
-        await mkdir(dirname(this.stickyPath), { recursive: true })
-        await writeFile(this.stickyPath, payload, 'utf8')
+        await atomicWriteFile(this.stickyPath, payload)
       })
       .catch(() => {})
   }
@@ -633,6 +674,13 @@ export class OllamaCloudAdapter extends LlmAdapter {
     await this.cooldownWrites
   }
 
+  /** Manually clear all active account and model cooldowns. */
+  clearCooldowns(): void {
+    this.cooldowns.clear()
+    this.modelCooldowns.clear()
+    this.persistCooldowns()
+  }
+
   private loadCooldowns(): void {
     try {
       const parsed = JSON.parse(readFileSync(this.cooldownPath, 'utf8')) as { cooldowns?: unknown }
@@ -669,8 +717,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
     const payload = JSON.stringify({ cooldowns: Object.fromEntries(this.cooldowns) })
     this.cooldownWrites = this.cooldownWrites
       .then(async () => {
-        await mkdir(dirname(this.cooldownPath), { recursive: true })
-        await writeFile(this.cooldownPath, payload, 'utf8')
+        await atomicWriteFile(this.cooldownPath, payload)
       })
       .catch(() => {})
   }
@@ -683,7 +730,9 @@ export class OllamaCloudAdapter extends LlmAdapter {
       delayMs = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 10 * 60 * 1000
       reason = 'quota'
     } else if (status === 401 || status === 403) {
-      delayMs = 24 * 60 * 60 * 1000
+      // 5 minutes (not 24h) so transient proxy, credential refresh, or local Ollama errors
+      // do not permanently disable the provider for an entire day.
+      delayMs = 5 * 60 * 1000
       reason = 'invalid-credential'
     } else if (status === 429) {
       const seconds = Number(headers?.get('retry-after') ?? Number.NaN)

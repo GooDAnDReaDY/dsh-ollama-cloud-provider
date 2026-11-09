@@ -9,6 +9,7 @@ import {
   fetchState,
   refreshModels,
   refreshState,
+  resetCooldowns,
   saveConfig,
   saveKey,
   testConnection,
@@ -164,6 +165,16 @@ export function OllamaCloudSettingsPage(props: {
       setError(caught instanceof Error ? caught.message : t('failed'))
     }
   }, [t])
+
+  const handleResetCooldowns = useCallback(async () => {
+    try {
+      await resetCooldowns()
+      setNotice(t('cooldownsReset'))
+      await refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t('failed'))
+    }
+  }, [refresh, t])
 
   const reloadModels = useCallback(async () => {
     try {
@@ -555,6 +566,9 @@ export function OllamaCloudSettingsPage(props: {
           </button>
           <button type="button" className="ocl-button" onClick={() => { void refresh() }}>
             {t('checkAllAccounts')}
+          </button>
+          <button type="button" className="ocl-button" onClick={() => { void handleResetCooldowns() }}>
+            {t('resetCooldowns')}
           </button>
           <span className="ocl-badge">{t('activeAccount')}: {draft.activeAccount === '' ? t('auto') : draft.activeAccount}</span>
           <button type="button" className="ocl-button" onClick={() => update({ activeAccount: '' })}>

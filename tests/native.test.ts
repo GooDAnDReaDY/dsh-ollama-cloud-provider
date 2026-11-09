@@ -128,6 +128,26 @@ test('parses tool calls with object arguments', async () => {
   assert.deepEqual(chunks[3], { type: 'finish', reason: { kind: 'tool-calls' } })
 })
 
+test('done_reason=length reports max-tokens even when tool calls are present', async () => {
+  const chunks = await collect([
+    '{"message":{"tool_calls":[{"function":{"name":"read","arguments":{"path":"a.txt"}}}]},"done":true,"done_reason":"length"}',
+  ]) as Array<Record<string, unknown>>
+  assert.deepEqual(chunks[0], { type: 'block-start', index: 0, blockType: 'tool-call' })
+  assert.deepEqual(chunks[1], {
+    type: 'tool-call-delta',
+    index: 0,
+    id: 'call_0',
+    name: 'read',
+    argumentsDelta: '{"path":"a.txt"}',
+  })
+  assert.deepEqual(chunks[2], {
+    type: 'block-end',
+    index: 0,
+    block: { type: 'tool-call', id: 'call_0', name: 'read', arguments: '{"path":"a.txt"}' },
+  })
+  assert.deepEqual(chunks[3], { type: 'finish', reason: { kind: 'max-tokens' } })
+})
+
 test('rejects an in-band quota error', async () => {
   await rejectsWithin(
     () => collect(['{"error":"quota exceeded"}']),

@@ -21,6 +21,7 @@ import { NS, type Config, type ResolvedConfig } from './config.ts'
 import type { KeyPool } from './credentials.ts'
 import { discoverModels } from './discovery.ts'
 import { priceFor } from './pricing.ts'
+import { authorityHostname, isLocalHostname } from './local-host.ts'
 import { PROVIDER } from './provider-ids.ts'
 import type { RequestHeatmap } from './request-log.ts'
 import { publicConfig } from './routes-public.ts'
@@ -175,6 +176,11 @@ function allowedOrigin(req: IncomingMessage): boolean {
  * while the socket reaches loopback. Write endpoints accept only a literal
  * loopback Host.
  */
+function trustedHost(req: IncomingMessage): boolean {
+  const hostname = authorityHostname(req.headers.host)
+  return hostname !== undefined && isLocalHostname(hostname)
+}
+
 function loopbackHost(req: IncomingMessage): boolean {
   const host = req.headers.host
   if (host === undefined || host === '') return false
@@ -499,6 +505,10 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
       json(res, 405, { error: 'GET required' })
       return false
     }
+    if (!trustedHost(req)) {
+      json(res, 403, { error: 'non-local Host refused' })
+      return false
+    }
     if (!allowedOrigin(req)) {
       json(res, 403, { error: 'cross-origin request refused' })
       return false
@@ -587,6 +597,12 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
     } catch (error) {
       json(res, 500, { error: error instanceof Error ? error.message : 'balance failed' })
     }
+  })
+
+  route('/dsh-ollama/cooldowns/reset', async (req, res) => {
+    if (!(await requirePost(req, res, verifyHost))) return
+    deps.adapter.clearCooldowns?.()
+    json(res, 200, { ok: true })
   })
 
   route('/dsh-ollama/config', async (req, res) => {

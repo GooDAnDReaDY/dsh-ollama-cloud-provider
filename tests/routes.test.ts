@@ -464,6 +464,11 @@ test('sensitive reads require an authenticated host session', async () => {
   await health({ method: 'GET', headers: { host: '127.0.0.1:3080' } }, publicHealth)
   assert.equal(publicHealth.statusCode, 200)
 
+  const rebindingHealth = fakeRes()
+  await health({ method: 'GET', headers: { host: 'evil.example:3080' } }, rebindingHealth)
+  assert.equal(rebindingHealth.statusCode, 403)
+  assert.match(rebindingHealth.body(), /non-local Host refused/)
+
   const crossOriginReferer = fakeRes()
   await health({ method: 'GET', headers: { host: '127.0.0.1:3080', referer: 'http://evil.example/page' } }, crossOriginReferer)
   assert.equal(crossOriginReferer.statusCode, 403)
@@ -529,4 +534,40 @@ test('default Desktop verifier accepts only a host-verified cookie', async () =>
   } finally {
     await new Promise<void>((resolve) => api.close(() => resolve()))
   }
+})
+
+test('cooldowns reset route invokes clearCooldowns and returns 200', async () => {
+  const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
+  let cleared = false
+  const ctx = {
+    get: () => undefined,
+    effect: (fn: () => () => void) => { fn(); return () => {} },
+  } as never
+  const web = {
+    register: ({ path, handler }: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }) => {
+      routes.set(path, handler)
+      return () => {}
+    },
+  } as never
+  applyRoutes(ctx, web, {
+    config: () => resolveConfig({}),
+    adapter: {
+      accountHealth: () => undefined,
+      clearCooldowns: () => { cleared = true },
+      routingTrace: () => [],
+    } as never,
+    pool: { resolveAll: async () => [] } as never,
+    usage: { read: async () => null, usage: async () => null } as never,
+    verifyDesktop: async () => true,
+    verifyHost: async () => true,
+  })
+
+  const reset = routes.get('/dsh-ollama/cooldowns/reset')
+  assert.ok(reset !== undefined)
+
+  const res = fakeRes()
+  await reset(postJson({}), res)
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(JSON.parse(res.body()), { ok: true })
+  assert.equal(cleared, true)
 })

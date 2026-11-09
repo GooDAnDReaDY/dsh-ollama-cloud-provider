@@ -390,3 +390,62 @@ test('an account-wide quota still cools the key', async () => {
   assert.equal(calls, 2)
   assert.equal(adapter.accountHealth('first')?.reason, 'quota')
 })
+
+test('401/403 cools for 5 minutes and surfaces INVALID_CREDENTIAL when all accounts cool', async () => {
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'unauthorized' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'single-bad', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  // First attempt marks account as cooling
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {}
+  })
+  const health = adapter.accountHealth('single-bad')
+  assert.ok(health !== undefined)
+  assert.equal(health.reason, 'invalid-credential')
+  const cooldownDuration = health.coolingUntil - Date.now()
+  assert.ok(cooldownDuration > 4 * 60 * 1000 && cooldownDuration <= 5 * 60 * 1000)
+
+  // Second attempt finds all accounts cooling down and reports INVALID_CREDENTIAL with retry time
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {}
+  }, (err: unknown) => {
+    assert.ok(err instanceof Error)
+    assert.equal((err as { code?: string }).code, 'INVALID_CREDENTIAL')
+    assert.match(err.message, /invalid credentials \(retry in \d+m\)/)
+    return true
+  })
+})
+
+test('clearCooldowns resets in-memory health and writes empty cooldown state atomically', async () => {
+  const p = paths()
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'unauthorized' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'bad-key', source: 'test' }),
+    fetchImpl,
+    ...p,
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {}
+  })
+  await adapter.flushCooldowns()
+  assert.ok(adapter.accountHealth('bad-key') !== undefined)
+
+  adapter.clearCooldowns()
+  assert.equal(adapter.accountHealth('bad-key'), undefined)
+  await adapter.flushCooldowns()
+
+  const raw = await import('node:fs/promises').then((fs) => fs.readFile(p.cooldownPath, 'utf8'))
+  const parsed = JSON.parse(raw) as { cooldowns?: Record<string, unknown> }
+  assert.deepEqual(parsed.cooldowns, {})
+})

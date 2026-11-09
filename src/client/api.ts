@@ -216,6 +216,10 @@ export function discoverModels(apiBase: string, apiKey: string): Promise<Discove
   })
 }
 
+export function resetCooldowns(): Promise<{ ok: true }> {
+  return call('/dsh-ollama/cooldowns/reset', { method: 'POST', body: '{}' })
+}
+
 export function saveConfig(patch: Record<string, unknown>): Promise<{ ok: true }> {
   return call('/dsh-ollama/config', { method: 'POST', body: JSON.stringify({ patch }) })
 }
