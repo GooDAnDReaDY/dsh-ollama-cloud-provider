@@ -30,7 +30,7 @@ test('apply registers the provider, the adapter and the expected seams', () => {
 
   apply(ctx, { apiKeyEnv: 'OLLAMA_API_KEY' })
 
-  assert.equal(name, 'llm-ollama-cloud')
+  assert.equal(name, '@goodandready/dsh-ollama-cloud-provider')
   assert.deepEqual(inject, ['llm'])
   assert.ok(Config !== undefined)
 

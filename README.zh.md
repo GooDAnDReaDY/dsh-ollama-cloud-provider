@@ -155,6 +155,10 @@ dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud
 
 密钥可在官方后台生成：<https://ollama.com/settings/keys>。云端网关仅接受 `Authorization: Bearer` 请求头。
 
+### 多账号轮换与冷却重置
+
+多账号在首字输出前自动轮换。鉴权失败（401/403）进入 5 分钟冷却期，配额错误遵循 Retry-After 响应头。可在设置页中通过「重置冷却」按钮或调用 `POST /dsh-ollama/cooldowns/reset` 随时清除冷却状态。
+
 ### 模型到账号路由规则
 
 ```yaml

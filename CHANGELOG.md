@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.36 — 2026-11-09
+
+- Resilience: shortened 401/403 credential rejection cooldown from 24 hours to 5 minutes, added explicit reset endpoint (`POST /dsh-ollama/cooldowns/reset`) and "Reset cooldowns" UI action in settings page, and surfaced exact remaining wait time and root cause (`INVALID_CREDENTIAL`, `QUOTA`, `RATE_LIMIT`) when all keys are cooling (#117).
+- Security & Hygiene: untracked internal agent instructions (`AGENTS.md`), project metadata (`index.md`), Gitea templates (`.gitea/`), and internal design/audit documentation (`docs/`) from git mirror trees and added them to `.gitignore`, preventing public leakage to external mirrors (#118).
+- Security: added `trustedHost` check to `readOnly` route validation, rejecting DNS rebinding attacks on `/dsh-ollama/health` and `/dsh-ollama/status` when non-local `Host` headers are supplied (#119).
+- Protocol Conformance: prioritized token exhaustion `done_reason === 'length'` (`max-tokens`) over partial in-band tool call markers in native transport streaming (`src/transports/native.ts`) (#120).
+- State Persistence: replaced direct file writes with atomic file write (`atomicWriteFile` using temp file + `rename`) for `cooldowns.json` and `sticky.json` to prevent file corruption on unexpected crashes (#121).
+- Plugin Identifier: updated Cordis plugin export `name` in `src/index.ts` to match the canonical package name `@goodandready/dsh-ollama-cloud-provider` (#122).
+- Worktree & Branch Hygiene: pruned 20 merged stale worktrees and 26 merged local branches to eliminate ~1.4 GB repository bloat while preserving active and uncommitted branches (#123).
+
 ## 0.1.35 — 2026-11-09
 
 - Security: enforce host authentication check (`verifyHost`) across all loopback write routes (`/config`, `/key`), closing unauthenticated mutation bypass on non-desktop browser requests (#111).

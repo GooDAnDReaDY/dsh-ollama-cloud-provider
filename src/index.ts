@@ -19,7 +19,7 @@ import { applyOllamaTuiSettings } from './tui-settings.ts'
 import { createUsageReader } from './usage.ts'
 import { OllamaWebFetchProvider, OllamaWebSearchProvider } from './web.ts'
 
-export const name = 'llm-ollama-cloud'
+export const name = '@goodandready/dsh-ollama-cloud-provider'
 export const inject = ['llm']
 
 export { Config, resolveConfig }

@@ -183,7 +183,7 @@ Create a key at <https://ollama.com/settings/keys>. Keys do not expire; `x-api-k
 
 Add a second account in **Settings → Ollama Cloud → Accounts**: give it a name and a credential reference (for example `OLLAMA_API_KEY_2`), paste its key, then Save. The default account always serves first unless `activeAccount` pins another one.
 
-Rotation happens **before any content is streamed**. When the serving key is rejected with an invalid credential, a rate limit or an exhausted quota, the adapter marks that key and retries the same request with the next usable account. A request that already started streaming is not replayed. Cooldowns are stored in `~/.dsh/storages/dsh-ollama/cooldowns.json` keyed by a SHA-256 fingerprint — raw keys are never written.
+Rotation happens **before any content is streamed**. When the serving key is rejected with an invalid credential, a rate limit or an exhausted quota, the adapter marks that key and retries the same request with the next usable account. A request that already started streaming is not replayed. Cooldowns are stored in `~/.dsh/storages/dsh-ollama/cooldowns.json` keyed by a SHA-256 fingerprint — raw keys are never written. Authentication rejections (401/403) cool keys for 5 minutes instead of locking them for a day, and quota rejections follow provider Retry-After headers. Cooldowns can be cleared at any time via the **Reset cooldowns** button in the Accounts card or by sending `POST /dsh-ollama/cooldowns/reset`.
 
 ### Model → account rules
 
@@ -210,7 +210,7 @@ Open **Settings → Ollama Cloud**:
 
 - **Key** — status, paste a key, clear it, run **Test connection** against a chosen model. The probe disables thinking so the reply is visible.
 - **Balance and usage** — credit bar or legacy windows, spend windows, warning at 80 % and exhausted at 95 %.
-- **Accounts** — extra keys, per-account spend, pin, remove, set a key.
+- **Accounts** — extra keys, per-account spend, pin, remove, set a key, reset cooldowns.
 - **Model → account rules** — glob rules.
 - **Routing** — sticky session per conversation.
 - **Models** — search, refresh the live catalog, hide models, override the wire transport per model, see price, context and capabilities.
