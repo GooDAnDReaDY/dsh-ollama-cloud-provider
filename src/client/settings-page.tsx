@@ -49,7 +49,7 @@ export function ModelEntry(props: {
       onDrop={onDrop}
     >
       <span className="ocl-drag-handle" title={t('dragOrder')} aria-hidden="true">⋮⋮</span>
-      <input type="checkbox" checked={visible} onChange={(event) => onVisible(event.target.checked)} />
+      <input type="checkbox" checked={visible} aria-label={`${model.id} ${t('visibility')}`} onChange={(event) => onVisible(event.target.checked)} />
       <span className="ocl-model-name" title={`${model.name} · ${model.description}`}>
         {model.id}
         {model.free ? <span className="ocl-badge" title={t('legendFree')}> {t('free')}</span> : null}
@@ -302,6 +302,7 @@ export function OllamaCloudSettingsPage(props: {
             className="ocl-input"
             type="password"
             placeholder={t('pasteKey')}
+            aria-label={t('pasteKey')}
             value={keyDraft}
             onChange={(event) => setKeyDraft(event.target.value)}
           />
@@ -442,6 +443,7 @@ export function OllamaCloudSettingsPage(props: {
                 <input
                   className="ocl-input"
                   placeholder={t('accountLabel')}
+                  aria-label={t('accountLabel')}
                   value={account.label}
                   onChange={(event) => {
                     const accounts = draft.accounts.map((entry, position) =>
@@ -452,6 +454,7 @@ export function OllamaCloudSettingsPage(props: {
                 <input
                   className="ocl-input"
                   placeholder={t('accountRef')}
+                  aria-label={t('accountRef')}
                   value={account.apiKeyEnv}
                   onChange={(event) => {
                     const accounts = draft.accounts.map((entry, position) =>
@@ -491,6 +494,7 @@ export function OllamaCloudSettingsPage(props: {
                   className="ocl-input"
                   type="password"
                   placeholder={t('pasteKey')}
+                  aria-label={`${t('pasteKey')} (${account.label})`}
                   value={accountKeys[account.label] ?? ''}
                   onChange={(event) => {
                     setAccountKeys((current) => ({ ...current, [account.label]: event.target.value }))
@@ -567,6 +571,7 @@ export function OllamaCloudSettingsPage(props: {
             <input
               className="ocl-input"
               placeholder={t('rulePattern')}
+              aria-label={t('rulePattern')}
               value={rule.pattern}
               onChange={(event) => {
                 const rules = draft.modelAccountRules.map((entry, position) =>
@@ -577,6 +582,7 @@ export function OllamaCloudSettingsPage(props: {
             <input
               className="ocl-input"
               placeholder={t('ruleAccount')}
+              aria-label={t('ruleAccount')}
               value={rule.account}
               onChange={(event) => {
                 const rules = draft.modelAccountRules.map((entry, position) =>
@@ -660,6 +666,7 @@ export function OllamaCloudSettingsPage(props: {
         <input
           className="ocl-input"
           placeholder={t('modelSearch')}
+          aria-label={t('modelSearch')}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />

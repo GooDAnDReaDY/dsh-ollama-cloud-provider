@@ -174,6 +174,13 @@ export class OllamaWebSearchProvider extends OllamaWebEndpoint implements WebSea
 
 export class OllamaWebFetchProvider extends OllamaWebEndpoint implements WebFetchProvider {
   async fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult> {
+    if (!URL.canParse(request.url)) {
+      throw new WebError('invalid web fetch URL', 'INVALID_URL')
+    }
+    const parsed = new URL(request.url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new WebError('only http: and https: protocols are supported for web fetch', 'UNSUPPORTED_PROTOCOL')
+    }
     const { status, body } = await postJson(this.options, '/api/web_fetch', { url: request.url }, signal)
     const decoded = decodeFetchResponse(body)
     return {

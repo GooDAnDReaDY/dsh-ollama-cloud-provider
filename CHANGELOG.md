@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.35 — 2026-11-09
+
+- Security: enforce host authentication check (`verifyHost`) across all loopback write routes (`/config`, `/key`), closing unauthenticated mutation bypass on non-desktop browser requests (#111).
+- Security: validate request `Referer` when `Origin` is omitted on GET endpoints to reject cross-origin ambient read requests (#112).
+- Security: validate URL scheme in `OllamaWebFetchProvider.fetch` to reject non-HTTP schemes (`file:`, `ftp:`) and malformed URLs with structured `WebError` (#115).
+- Localization: localized all 11 sampling and generation parameter labels and tokens header in the Chinese dictionary (`const zh`) (#113).
+- Accessibility: added explicit `aria-label` attributes to standalone form controls (model selection checkbox, API key inputs, account credentials, model routing rules, model search) in the settings UI for WCAG 2.1 SC 4.1.2 compliance (#114).
+
 ## 0.1.34 — 2026-11-07
 
 - Security: patched transient zod memory exhaustion vulnerability (GHSA-mrhx-c7xc-m3w5) in dependencies via package overrides, achieving 0 audit vulnerabilities (#108).
