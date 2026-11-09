@@ -7,7 +7,7 @@ key pool, quota/usage cards, analytics, settings page, and service status.
 
 ## Status
 
-Active. 0.1.34 is cloud-only and verified on the production Web host and Desktop;
+Active. 0.1.35 is cloud-only and verified on the production Web host and Desktop;
 0.1.31 is the previous release.
 
 ## Entry Points

@@ -155,10 +155,10 @@ function writeSourceError(req: IncomingMessage): string | undefined {
 }
 
 function allowedOrigin(req: IncomingMessage): boolean {
-  const origin = req.headers.origin
-  if (origin === undefined || origin === '') return true
+  const source = req.headers.origin ?? req.headers.referer
+  if (source === undefined || source === '') return true
   try {
-    const parsed = new URL(origin)
+    const parsed = new URL(source)
     const host = req.headers.host
     if (host !== undefined && parsed.host === host) return true
     return parsed.hostname === '127.0.0.1'
@@ -209,7 +209,7 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 async function requirePost(
   req: IncomingMessage,
   res: ServerResponse,
-  verifyDesktop: (req: IncomingMessage) => Promise<boolean>,
+  verifyHost: (req: IncomingMessage) => Promise<boolean>,
 ): Promise<boolean> {
   if (req.method !== 'POST') {
     json(res, 405, { error: 'POST required' })
@@ -225,17 +225,16 @@ async function requirePost(
     json(res, 403, { error: 'write endpoints are restricted to the local machine' })
     return false
   }
-  if (desktopShellRequest(req)) {
-    if (!(await verifyDesktop(req))) {
-      json(res, 403, { error: 'desktop authentication failed' })
-      return false
-    }
-  } else {
+  if (!desktopShellRequest(req)) {
     const sourceError = writeSourceError(req)
     if (sourceError !== undefined) {
       json(res, 403, { error: sourceError })
       return false
     }
+  }
+  if (!(await verifyHost(req))) {
+    json(res, 403, { error: 'authentication required' })
+    return false
   }
   const type = req.headers['content-type'] ?? ''
   if (!type.includes('application/json')) {

@@ -188,7 +188,7 @@ test('credential writes stay inside the plugin namespace', async () => {
   }
   const pool = { resolveAll: async () => [], resolve: async () => { throw new Error('missing') } }
   const usage = { read: async () => undefined, usage: async () => undefined, clear: () => {} }
-  applyRoutes(ctx, web, { config: () => config, adapter, pool, usage } as never)
+  applyRoutes(ctx, web, { config: () => config, adapter, pool, usage, verifyHost: async () => true } as never)
 
   const configRoute = routes.get('/dsh-ollama/config')
   const keyRoute = routes.get('/dsh-ollama/key')
@@ -303,8 +303,20 @@ test('write routes require a same-origin source and a loopback socket', async ()
       status: 403,
     },
     {
-      name: 'same-origin Origin passes the guard',
+      name: 'same-origin Origin without auth cookie is rejected',
       req: { headers: { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080', 'content-type': 'text/plain' } },
+      status: 403,
+    },
+    {
+      name: 'same-origin Origin with auth cookie passes the guard',
+      req: {
+        headers: {
+          host: '127.0.0.1:3080',
+          origin: 'http://127.0.0.1:3080',
+          cookie: 'dsh-auth-abc=v1.token',
+          'content-type': 'text/plain',
+        },
+      },
       status: 415,
     },
     {
@@ -367,8 +379,20 @@ test('write routes require a same-origin source and a loopback socket', async ()
       status: 403,
     },
     {
-      name: 'same-origin Referer passes the guard',
+      name: 'same-origin Referer without auth cookie is rejected',
       req: { headers: { host: '127.0.0.1:3080', referer: 'http://127.0.0.1:3080/settings', 'content-type': 'text/plain' } },
+      status: 403,
+    },
+    {
+      name: 'same-origin Referer with auth cookie passes the guard',
+      req: {
+        headers: {
+          host: '127.0.0.1:3080',
+          referer: 'http://127.0.0.1:3080/settings',
+          cookie: 'dsh-auth-abc=v1.token',
+          'content-type': 'text/plain',
+        },
+      },
       status: 415,
     },
   ]
@@ -439,6 +463,14 @@ test('sensitive reads require an authenticated host session', async () => {
   const publicHealth = fakeRes()
   await health({ method: 'GET', headers: { host: '127.0.0.1:3080' } }, publicHealth)
   assert.equal(publicHealth.statusCode, 200)
+
+  const crossOriginReferer = fakeRes()
+  await health({ method: 'GET', headers: { host: '127.0.0.1:3080', referer: 'http://evil.example/page' } }, crossOriginReferer)
+  assert.equal(crossOriginReferer.statusCode, 403)
+
+  const sameOriginReferer = fakeRes()
+  await health({ method: 'GET', headers: { host: '127.0.0.1:3080', referer: 'http://127.0.0.1:3080/settings' } }, sameOriginReferer)
+  assert.equal(sameOriginReferer.statusCode, 200)
 })
 
 test('default Desktop verifier accepts only a host-verified cookie', async () => {

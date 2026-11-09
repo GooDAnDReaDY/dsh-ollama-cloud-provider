@@ -48,6 +48,7 @@ test('model entry renders rich badges and a drag handle', () => {
   assert.match(html, /⋮⋮/)
   assert.match(html, /128K/)
   assert.match(html, /vision/)
+  assert.match(html, /aria-label="gpt-oss:120b visibility"/)
   assert.match(html, /reasoning/)
   assert.match(html, /free/)
 })

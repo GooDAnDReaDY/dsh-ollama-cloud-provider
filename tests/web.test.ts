@@ -116,3 +116,34 @@ test('web provider availability only checks the configured URL', () => {
   assert.equal(provider.available(), false)
   assert.equal(provider.id, 'ollama-cloud')
 })
+
+test('web fetch provider rejects non-HTTP URLs and unparseable URLs (#115)', async () => {
+  const provider = new OllamaWebFetchProvider({
+    baseURL: () => 'https://ollama.com',
+    resolveApiKey: async () => 'k',
+  })
+  await assert.rejects(
+    provider.fetch({ url: 'file:///etc/passwd' }),
+    (error: unknown) => {
+      assert.ok(error instanceof WebError)
+      assert.equal(error.code, 'UNSUPPORTED_PROTOCOL')
+      return true
+    },
+  )
+  await assert.rejects(
+    provider.fetch({ url: 'ftp://ftp.example/file.txt' }),
+    (error: unknown) => {
+      assert.ok(error instanceof WebError)
+      assert.equal(error.code, 'UNSUPPORTED_PROTOCOL')
+      return true
+    },
+  )
+  await assert.rejects(
+    provider.fetch({ url: 'not-a-valid-url' }),
+    (error: unknown) => {
+      assert.ok(error instanceof WebError)
+      assert.equal(error.code, 'INVALID_URL')
+      return true
+    },
+  )
+})

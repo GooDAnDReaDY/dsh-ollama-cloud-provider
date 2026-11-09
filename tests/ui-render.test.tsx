@@ -56,3 +56,19 @@ test('heatmap renders localized weekday labels in Chinese UI (#55)', () => {
   assert.ok(!html.includes('>Mon<'))
   assert.ok(!html.includes('>Sun<'))
 })
+
+
+test('Chinese dictionary translates generation and sampling parameters (#113)', () => {
+  const zh = dictionaries.zh
+  assert.equal(zh.tokens, 'Token 数')
+  assert.equal(zh.temperature, '采样温度 (Temperature)')
+  assert.equal(zh.topK, 'Top K 采样')
+  assert.equal(zh.topP, 'Top P 采样')
+  assert.equal(zh.minP, 'Min P 采样')
+  assert.equal(zh.seed, '随机种子 (Seed)')
+  assert.equal(zh.repeatPenalty, '重复惩罚 (Repeat penalty)')
+  assert.equal(zh.repeatLastN, '重复惩罚窗口 (Repeat last N)')
+  assert.equal(zh.numCtx, '上下文大小 (num_ctx)')
+  assert.equal(zh.keepAlive, '保活时间 (Keep-alive)')
+  assert.equal(zh.stop, '停止序列 (Stop sequences)')
+})
