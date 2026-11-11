@@ -1,3 +1,4 @@
+import { bestEffortFailed } from './best-effort.ts'
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_GENERATE_MAX_TOKENS,
@@ -283,7 +284,7 @@ function refreshInBackground(
   if (inflight.has(key)) return
   const epoch = generation
   const task = refreshNow(config, fetchImpl, key, true, epoch)
-    .catch(() => cache.get(key)?.ids ?? Object.keys(GENERATED_MODELS))
+    .catch((err: unknown) => { bestEffortFailed('catalog:fetchModels', err); return cache.get(key)?.ids ?? Object.keys(GENERATED_MODELS) })
     .finally(() => { inflight.delete(key) })
   inflight.set(key, task)
   void task

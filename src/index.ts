@@ -6,7 +6,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-web'
 
 import { OllamaCloudAdapter } from './adapter.ts'
-import { setBestEffortLogger } from './best-effort.ts'
+import { setBestEffortLogger, bestEffortFailed } from './best-effort.ts'
 import { refreshCatalog } from './catalog.ts'
 import { applyCommands } from './commands.ts'
 import { Config, NS, resolveConfig, unwrapVolatileConfig } from './config.ts'
@@ -45,7 +45,7 @@ export { clearCatalogCache, describeModel, effectiveModel } from './catalog.ts'
  */
 export function apply(ctx: Context, config: Config): void {
   const logger = ctx.logger('llm-ollama-cloud')
-  setBestEffortLogger({ debug: (message) => logger.debug(message) })
+  setBestEffortLogger({ debug: (message) => logger.debug(message), warn: (message) => logger.warn(message) })
   const current = () => resolveConfig(unwrapVolatileConfig(config))
   const keys = createKeyPool(ctx, current)
   const usage = createUsageReader(current, (provider) => keys.resolve(provider))
@@ -73,7 +73,7 @@ export function apply(ctx: Context, config: Config): void {
     const warm = initial.autoRefresh
       ? setTimeout(() => {
           const config = current()
-          if (config.autoRefresh) void refreshCatalog(config, fetch).catch(() => {})
+          if (config.autoRefresh) void refreshCatalog(config, fetch).catch((err: unknown) => bestEffortFailed('warmCatalog', err))
         }, 1_000)
       : undefined
     warm?.unref?.()
@@ -82,7 +82,7 @@ export function apply(ctx: Context, config: Config): void {
       ? setInterval(() => {
           const config = current()
           if (!config.autoRefresh || config.refreshMinutes <= 0) return
-          void refreshCatalog(config, fetch, true).catch(() => {})
+          void refreshCatalog(config, fetch, true).catch((err: unknown) => bestEffortFailed('refreshCatalog', err))
         }, intervalMs)
       : undefined
     timer?.unref?.()

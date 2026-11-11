@@ -99,7 +99,7 @@ async function atomicWriteFile(filePath: string, data: string): Promise<void> {
     await writeFile(tmp, data, 'utf8')
     await rename(tmp, filePath)
   } catch (error) {
-    await rm(tmp, { force: true }).catch(() => {})
+    await rm(tmp, { force: true }).catch((err: unknown) => bestEffortFailed('atomicWriteFile:rm-tmp', err))
     throw error
   }
 }
@@ -520,7 +520,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
       .then(async () => {
         await atomicWriteFile(this.stickyPath, payload)
       })
-      .catch(() => {})
+      .catch((err: unknown) => bestEffortFailed('persistSticky', err))
   }
 
   private pushTrace(entry: RoutingTraceEntry): void {
@@ -719,7 +719,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
       .then(async () => {
         await atomicWriteFile(this.cooldownPath, payload)
       })
-      .catch(() => {})
+      .catch((err: unknown) => bestEffortFailed('persistCooldowns', err))
   }
 
   private markCooldown(key: string, status: number, headers?: Headers, code?: string): void {

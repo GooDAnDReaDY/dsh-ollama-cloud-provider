@@ -1,3 +1,4 @@
+import { bestEffortFailed } from '../best-effort.ts'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 
 async function readWithIdleTimeout(
@@ -16,14 +17,14 @@ async function readWithIdleTimeout(
       action()
     }
     const timer = setTimeout(() => {
-      reader.cancel().catch(() => {})
+      reader.cancel().catch((err: unknown) => bestEffortFailed('sse:cancel', err))
       finish(() => reject(new LlmError(
         `Ollama Cloud stream went idle for ${idleTimeoutMs}ms`,
         'TIMEOUT',
       )))
     }, idleTimeoutMs)
     const onAbort = () => {
-      reader.cancel().catch(() => {})
+      reader.cancel().catch((err: unknown) => bestEffortFailed('sse:cancel', err))
       finish(() => reject(signal?.reason ?? new DOMException('aborted', 'AbortError')))
     }
     signal?.addEventListener('abort', onAbort, { once: true })

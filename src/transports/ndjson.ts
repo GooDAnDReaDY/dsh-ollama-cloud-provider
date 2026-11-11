@@ -18,7 +18,7 @@ async function readWithIdleTimeout(
       action()
     }
     const timer = setTimeout(() => {
-      reader.cancel().catch(() => {})
+      reader.cancel().catch((err: unknown) => bestEffortFailed('ndjson:cancel', err))
       finish(() => reject(new LlmError(
         `Ollama Cloud stream went idle for ${idleTimeoutMs}ms`,
         'TIMEOUT',
@@ -26,7 +26,7 @@ async function readWithIdleTimeout(
     }, idleTimeoutMs)
     timer.unref?.()
     const onAbort = () => {
-      reader.cancel().catch(() => {})
+      reader.cancel().catch((err: unknown) => bestEffortFailed('ndjson:cancel', err))
       finish(() => reject(signal?.reason ?? new DOMException('aborted', 'AbortError')))
     }
     signal?.addEventListener('abort', onAbort, { once: true })
