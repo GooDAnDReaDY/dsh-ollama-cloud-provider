@@ -8,8 +8,10 @@ import {
 
 import { classifyStreamError } from '../errors.ts'
 import { ndjsonObjects } from './ndjson.ts'
+import { uniqueToolCallId } from './tool-call-id.ts'
 
 interface NativeToolCall {
+  id?: unknown
   function?: { name?: unknown; arguments?: unknown }
 }
 
@@ -77,7 +79,7 @@ export async function* parseNativeStream(
   let textValue = ''
   let reasoningIndex: number | undefined
   let reasoningValue = ''
-  const toolBlocks: Array<{ index: number; id: string; name: string; arguments: string }> = []
+  const toolBlocks: Array<{ index: number; id: ToolCallId; name: string; arguments: string }> = []
   let sawContent = false
   let doneReason = 'stop'
 
@@ -115,14 +117,14 @@ export async function* parseNativeStream(
         ? rawArguments
         : JSON.stringify(rawArguments ?? {})
       const index = nextIndex++
-      const id = `call_${toolBlocks.length}`
+      const id = uniqueToolCallId(call.id)
       toolBlocks.push({ index, id, name, arguments: argumentsText })
       sawContent = true
       yield { type: 'block-start', index, blockType: 'tool-call' }
       yield {
         type: 'tool-call-delta',
         index,
-        id: ToolCallId(id),
+        id,
         ...(name === '' ? {} : { name }),
         argumentsDelta: argumentsText,
       }

@@ -94,3 +94,42 @@ test('normalizes CRLF split between chunks and splits UTF-8 safely', async () =>
   assert.equal(content, 'Привет 世界!')
   assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
 })
+
+test('openai-chat stream tool-call ids do not collide across responses when id is omitted (#2)', async () => {
+  const step1 = await collect([
+    '{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"read","arguments":"{}"}}]}}]}',
+    '{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+    '[DONE]',
+  ])
+  const step2 = await collect([
+    '{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"read","arguments":"{}"}}]}}]}',
+    '{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+    '[DONE]',
+  ])
+
+  const delta1 = step1.find((c) => c.type === 'tool-call-delta') as { id: string } | undefined
+  const delta2 = step2.find((c) => c.type === 'tool-call-delta') as { id: string } | undefined
+  assert.ok(delta1 !== undefined && delta2 !== undefined)
+  assert.match(delta1.id, /^call_[0-9a-f-]{36}$/)
+  assert.match(delta2.id, /^call_[0-9a-f-]{36}$/)
+  assert.notEqual(delta1.id, delta2.id, 'stream tool-call ids must not collide across steps')
+})
+
+test('openai-chat stream preserves upstream tool_call id and treats empty string as missing (#2)', async () => {
+  const preserved = await collect([
+    '{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_upstream_custom","function":{"name":"calc","arguments":"{}"}}]}}]}',
+    '{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+    '[DONE]',
+  ])
+  const deltaPreserved = preserved.find((c) => c.type === 'tool-call-delta') as { id: string } | undefined
+  assert.equal(deltaPreserved?.id, 'call_upstream_custom')
+
+  const emptyString = await collect([
+    '{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"","function":{"name":"calc","arguments":"{}"}}]}}]}',
+    '{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+    '[DONE]',
+  ])
+  const deltaEmpty = emptyString.find((c) => c.type === 'tool-call-delta') as { id: string } | undefined
+  assert.match(String(deltaEmpty?.id), /^call_[0-9a-f-]{36}$/)
+  assert.notEqual(deltaEmpty?.id, '')
+})

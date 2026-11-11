@@ -8,6 +8,7 @@ import {
 
 import { classifyStreamError } from '../errors.ts'
 import { sseData } from './sse.ts'
+import { uniqueToolCallId } from './tool-call-id.ts'
 
 interface ChatToolCallDelta {
   index?: number
@@ -100,7 +101,7 @@ export async function* parseChatStream(
   let reasoning = ''
   const toolCalls = new Map<number, {
     dshIndex: number
-    id: string
+    id: ToolCallId
     name: string
     args: string
     started: boolean
@@ -157,14 +158,14 @@ export async function* parseChatStream(
         if (entry === undefined) {
           entry = {
             dshIndex: nextIndex++,
-            id: toolCall.id ?? `call_${key}`,
+            id: uniqueToolCallId(toolCall.id),
             name: '',
             args: '',
             started: false,
           }
           toolCalls.set(key, entry)
         }
-        if (toolCall.id !== undefined && toolCall.id !== '') entry.id = toolCall.id
+        if (typeof toolCall.id === 'string' && toolCall.id.trim() !== '') entry.id = ToolCallId(toolCall.id.trim())
         if (toolCall.function?.name !== undefined && toolCall.function.name !== '') {
           entry.name = toolCall.function.name
         }
@@ -246,7 +247,7 @@ async function* parseCompletion(chunk: ChatChunk): AsyncIterable<StreamChunk> {
     sawContent = true
   }
   for (const call of message?.tool_calls ?? []) {
-    const id = ToolCallId(call.id ?? `call_${index}`)
+    const id = uniqueToolCallId(call.id)
     const name = call.function?.name ?? ''
     const args = call.function?.arguments ?? '{}'
     yield { type: 'block-start', index, blockType: 'tool-call' }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.37 — 2026-11-11
+
+- Session Integrity & Tool Calls: eliminated tool-call ID collisions across multiple steps and turns by minting globally unique UUID-based identifiers (`call_${randomUUID()}`) whenever Ollama Cloud omits `id` or returns an empty string, across both native and OpenAI-compatible transports (`src/transports/tool-call-id.ts`, `native.ts`, `openai-chat.ts`). Preserves upstream `call.id` when supplied by Ollama. Prevents session log corruption (`SessionFormatError: PTC dispatch repeats subCallId`) that previously caused multi-step conversations to silently disappear on DSH startup (GitHub #2, Gitea #125).
+
 ## 0.1.36 — 2026-11-09
 
 - Resilience: shortened 401/403 credential rejection cooldown from 24 hours to 5 minutes, added explicit reset endpoint (`POST /dsh-ollama/cooldowns/reset`) and "Reset cooldowns" UI action in settings page, and surfaced exact remaining wait time and root cause (`INVALID_CREDENTIAL`, `QUOTA`, `RATE_LIMIT`) when all keys are cooling (#117).
