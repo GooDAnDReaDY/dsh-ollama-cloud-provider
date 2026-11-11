@@ -1,3 +1,4 @@
+import { bestEffortFailed } from './best-effort.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-commands'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
@@ -157,7 +158,7 @@ async function statusText(deps: CommandDeps): Promise<string> {
     ? 'none'
     : config.modelAccountRules.map((rule) => `${rule.pattern} → ${rule.account}`).join(', ')
   const usage = await deps.usage.read()
-  const models = await deps.adapter.listModels(PROVIDER, { unfiltered: true }).catch(() => [])
+  const models = await deps.adapter.listModels(PROVIDER, { unfiltered: true }).catch((err: unknown) => { bestEffortFailed('commands:listModels', err); return [] })
   return [
     'Ollama Cloud provider',
     `Key: ${config.apiKeyEnv} · ${config.transport}`,

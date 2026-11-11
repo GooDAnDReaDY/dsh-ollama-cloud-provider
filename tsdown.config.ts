@@ -7,6 +7,7 @@ const lib = defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
+  unbundle: true,
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   deps: {
     neverBundle: [/^@deepseek-ai\//],

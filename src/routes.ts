@@ -385,7 +385,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
     }
   }
 
-  const resolved = await deps.pool.resolveAll(PROVIDER).catch(() => [])
+  const resolved = await deps.pool.resolveAll(PROVIDER).catch((err: unknown) => { bestEffortFailed('pool.resolveAll', err); return [] })
   if (!keyInfo.configured) keyInfo = { ...keyInfo, configured: resolved.length > 0 }
 
   const usageByKey = new Map<string, UsageValue>()
@@ -533,12 +533,18 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
     if (!readOnly(req, res)) return
     try {
       const config = deps.config()
-      const models = await deps.adapter.listModels(PROVIDER, { unfiltered: true }).catch(() => [])
+      let providerError: string | undefined
+      const models = await deps.adapter.listModels(PROVIDER, { unfiltered: true }).catch((err: unknown) => {
+        providerError = err instanceof Error ? err.message : String(err)
+        bestEffortFailed('health:listModels', err)
+        return []
+      })
       json(res, 200, {
-        ok: true,
+        ok: !providerError,
         providers: [PROVIDER],
         accounts: config.accounts.length + 1,
         models: models.length,
+        ...(providerError ? { providerError } : {}),
       })
     } catch (error) {
       json(res, 500, { error: error instanceof Error ? error.message : 'health failed' })

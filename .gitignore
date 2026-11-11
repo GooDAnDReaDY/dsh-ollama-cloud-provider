@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 lib/
 *.tgz
 .tmp/
@@ -10,8 +10,4 @@ coverage/
 .commandcode/
 .worktrees/
 
-# Internal files not published to mirrors (#118)
-AGENTS.md
-index.md
-.gitea/
-docs/
+dist/
