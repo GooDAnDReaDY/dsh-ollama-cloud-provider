@@ -93,6 +93,7 @@ graph LR
 
 - **Two wire transports** chosen per model: the native Ollama API (NDJSON) and the OpenAI-compatible gateway (SSE).
 - **Text, thinking, tool calls, images, usage and finish reasons** on both transports.
+- **Unique tool-call IDs** minted across steps and turns, preventing session log collisions when upstream omits an id.
 - **Live catalog** from `GET /v1/models`, enriched with capability flags from `GET /api/tags`.
 - **Accurate limits** for the dsh picker: context window, input modalities, reasoning levels and their default, tool support, and API visibility.
 - **Balance and usage** from the official `/api/balance` and `/api/usage` endpoints: included credits, purchased credits, 24-hour / 7-day / 30-day spend, and spend by model.

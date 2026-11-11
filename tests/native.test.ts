@@ -113,17 +113,15 @@ test('parses tool calls with object arguments', async () => {
     '{"message":{"tool_calls":[{"function":{"name":"read","arguments":{"path":"a.txt"}}}]},"done":true}',
   ]) as Array<Record<string, unknown>>
   assert.deepEqual(chunks[0], { type: 'block-start', index: 0, blockType: 'tool-call' })
-  assert.deepEqual(chunks[1], {
-    type: 'tool-call-delta',
-    index: 0,
-    id: 'call_0',
-    name: 'read',
-    argumentsDelta: '{"path":"a.txt"}',
-  })
+  assert.equal(chunks[1]?.type, 'tool-call-delta')
+  assert.equal(chunks[1]?.index, 0)
+  assert.equal(chunks[1]?.name, 'read')
+  assert.equal(chunks[1]?.argumentsDelta, '{"path":"a.txt"}')
+  assert.match(String(chunks[1]?.id), /^call_[0-9a-f-]{36}$/)
   assert.deepEqual(chunks[2], {
     type: 'block-end',
     index: 0,
-    block: { type: 'tool-call', id: 'call_0', name: 'read', arguments: '{"path":"a.txt"}' },
+    block: { type: 'tool-call', id: chunks[1]?.id, name: 'read', arguments: '{"path":"a.txt"}' },
   })
   assert.deepEqual(chunks[3], { type: 'finish', reason: { kind: 'tool-calls' } })
 })
@@ -133,19 +131,53 @@ test('done_reason=length reports max-tokens even when tool calls are present', a
     '{"message":{"tool_calls":[{"function":{"name":"read","arguments":{"path":"a.txt"}}}]},"done":true,"done_reason":"length"}',
   ]) as Array<Record<string, unknown>>
   assert.deepEqual(chunks[0], { type: 'block-start', index: 0, blockType: 'tool-call' })
-  assert.deepEqual(chunks[1], {
-    type: 'tool-call-delta',
-    index: 0,
-    id: 'call_0',
-    name: 'read',
-    argumentsDelta: '{"path":"a.txt"}',
-  })
+  assert.equal(chunks[1]?.type, 'tool-call-delta')
+  assert.equal(chunks[1]?.index, 0)
+  assert.equal(chunks[1]?.name, 'read')
+  assert.equal(chunks[1]?.argumentsDelta, '{"path":"a.txt"}')
+  assert.match(String(chunks[1]?.id), /^call_[0-9a-f-]{36}$/)
   assert.deepEqual(chunks[2], {
     type: 'block-end',
     index: 0,
-    block: { type: 'tool-call', id: 'call_0', name: 'read', arguments: '{"path":"a.txt"}' },
+    block: { type: 'tool-call', id: chunks[1]?.id, name: 'read', arguments: '{"path":"a.txt"}' },
   })
   assert.deepEqual(chunks[3], { type: 'finish', reason: { kind: 'max-tokens' } })
+})
+
+test('native stream preserves upstream tool_call id when provided (#2)', async () => {
+  const chunks = await collect([
+    '{"message":{"tool_calls":[{"id":"call_upstream_999","function":{"name":"read","arguments":{"path":"b.txt"}}}]},"done":true}',
+  ]) as Array<Record<string, unknown>>
+  assert.equal(chunks[1]?.id, 'call_upstream_999')
+  assert.deepEqual(chunks[2], {
+    type: 'block-end',
+    index: 0,
+    block: { type: 'tool-call', id: 'call_upstream_999', name: 'read', arguments: '{"path":"b.txt"}' },
+  })
+})
+
+test('native stream tool-call ids do not collide across steps/responses when id is omitted (#2)', async () => {
+  const step1 = await collect([
+    '{"message":{"tool_calls":[{"function":{"name":"read","arguments":{"path":"1.txt"}}}]},"done":true}',
+  ]) as Array<Record<string, unknown>>
+  const step2 = await collect([
+    '{"message":{"tool_calls":[{"function":{"name":"read","arguments":{"path":"2.txt"}}}]},"done":true}',
+  ]) as Array<Record<string, unknown>>
+
+  const id1 = step1[1]?.id
+  const id2 = step2[1]?.id
+  assert.ok(typeof id1 === 'string' && id1 !== '')
+  assert.ok(typeof id2 === 'string' && id2 !== '')
+  assert.notEqual(id1, id2, 'tool-call ids must not collide across steps')
+})
+
+test('native stream treats empty tool_call id as missing and mints unique id (#2)', async () => {
+  const chunks = await collect([
+    '{"message":{"tool_calls":[{"id":"","function":{"name":"read","arguments":{"path":"c.txt"}}}]},"done":true}',
+  ]) as Array<Record<string, unknown>>
+  const id = chunks[1]?.id
+  assert.match(String(id), /^call_[0-9a-f-]{36}$/)
+  assert.notEqual(id, '')
 })
 
 test('rejects an in-band quota error', async () => {
