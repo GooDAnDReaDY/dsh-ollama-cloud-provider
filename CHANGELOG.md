@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.38 — 2026-11-12
+
+- Architecture & Contracts: established canonical `docs/design/DESIGN.md` (following `project-design-contract`), `AGENTS.md`, `index.md`, `deploy.sh`, and `docs/deployment/DEPLOYMENT.md` (#127).
+- Artifact Guard & Packaging: implemented automated pack guard `scripts/pack-check.mjs` preventing root release tarballs and enforcing DSH Store file size limit (<256 KiB) as part of `npm run check` and `npm run release` (#128, #131).
+- Publication Boundary: established `.gitattributes` publication layer with `export-ignore` excluding internal documents, deployment scripts, plans, and `scripts/` from public exports while maintaining git tracking (#130).
+- Error Diagnostics & Health: replaced 10 unmonitored silent catches across adapter, catalog, index, routes, and transports with `bestEffortFailed` logging via `ctx.logger`; augmented `GET /dsh-ollama/health` with provider error surfacing (`ok: false` and `error` field) on discovery failures (#131).
+- Modularity: decomposed monolithic 6033-line `lib/index.js` into clean domain-separated modules (`routes.js`, `adapter.js`, `config.js`, etc.) with `tsdown` unbundling, reducing primary entry point to ~150 lines (#131).
+- Repository Hygiene: audited and pruned 12 stale and detached worktrees, documenting SHAs and ancestor relationships (#129).
+
 ## 0.1.37 — 2026-11-11
 
 - Session Integrity & Tool Calls: eliminated tool-call ID collisions across multiple steps and turns by minting globally unique UUID-based identifiers (`call_${randomUUID()}`) whenever Ollama Cloud omits `id` or returns an empty string, across both native and OpenAI-compatible transports (`src/transports/tool-call-id.ts`, `native.ts`, `openai-chat.ts`). Preserves upstream `call.id` when supplied by Ollama. Prevents session log corruption (`SessionFormatError: PTC dispatch repeats subCallId`) that previously caused multi-step conversations to silently disappear on DSH startup (GitHub #2, Gitea #125).
