@@ -5,7 +5,7 @@
 ## Назначение и текущий статус
 - **Назначение**: Cordis-плагин LLM-провайдера Ollama Cloud для DeepSeek Harness.
 - **Пакет**: `@goodandready/dsh-ollama-cloud-provider` (лицензия MIT).
-- **Текущий статус**: `active` (версия 0.1.37).
+- **Текущий статус**: `active` (версия 0.1.38).
 - **Размещение**:
   - DEV: `/mnt/external/Project/DEV/dhsplugins/dsh-ollama-cloud-provider`
   - Web Profile: `/home/vadim/.dsh/profiles/web`
