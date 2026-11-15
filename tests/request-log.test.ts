@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { appendFile, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { appendFile, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -134,6 +134,36 @@ test('records requests and builds a local weekday/hour heatmap', async () => {
     const compacted = await readFile(requestLogPath(), 'utf8')
     assert.equal(compacted.trim().split('\n').length, 2)
     assert.ok(requestLogPath().startsWith(home))
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
+  }
+})
+
+test('compacts atomically and leaves no temporary file (#142)', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-compact-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const at = new Date(2026, 0, 5, 14, 30).getTime()
+  try {
+    for (let index = 0; index < 60; index += 1) recordRequest('ollama-cloud', 'm', at + index)
+    await flushRequestLog()
+
+    const path = requestLogPath()
+    const size = (await stat(path)).size
+    const [, during] = await Promise.all([
+      compactRequestLog(Math.floor(size / 2), 10),
+      readFile(path, 'utf8'),
+    ])
+    assert.ok(during.trim() !== '')
+
+    const lines = (await readFile(path, 'utf8')).trim().split('\n')
+    assert.equal(lines.length, 10)
+    for (const line of lines) JSON.parse(line)
+
+    const entries = await readdir(join(home, 'storages', 'dsh-ollama'))
+    assert.deepEqual(entries.filter((name) => name.endsWith('.tmp')), [])
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previous

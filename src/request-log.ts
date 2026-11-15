@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -132,7 +132,16 @@ export async function compactRequestLog(
     const text = await readFile(path, 'utf8')
     const lines = text.split('\n').filter((line) => line !== '')
     if (lines.length <= keepLines) return
-    await writeFile(path, `${lines.slice(-keepLines).join('\n')}\n`, 'utf8')
+    const temporary = `${path}.tmp`
+    try {
+      await writeFile(temporary, `${lines.slice(-keepLines).join('\n')}\n`, 'utf8')
+      await rename(temporary, path)
+    } catch (error) {
+      await rm(temporary, { force: true }).catch((caught: unknown) => {
+        bestEffortFailed('request log compaction cleanup failed', caught)
+      })
+      throw error
+    }
   } catch (error) {
     // Best-effort: a failed compaction leaves the append-only log intact.
     bestEffortFailed('request log compaction failed', error)
