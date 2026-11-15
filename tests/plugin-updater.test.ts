@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { isNewerVersion, isTrustedUpdateRequest } from '../src/plugin-updater.ts'
+import { isNewerVersion, isTrustedReadRequest, isTrustedUpdateRequest } from '../src/plugin-updater.ts'
 
 test('compares release and prerelease versions', () => {
   assert.equal(isNewerVersion('0.5.0', '0.5.1'), true)
@@ -46,4 +46,18 @@ test('refuses a rebinding origin whose host only starts with 127 (#135)', () => 
     headers: rebinding,
     socket: { remoteAddress: '127.0.0.1.attacker.example' },
   }), false)
+})
+
+test('update status accepts only a local host and rejects rebinding (#137)', () => {
+  assert.equal(isTrustedReadRequest({ headers: { host: '127.0.0.1:3080' } }), true)
+  assert.equal(isTrustedReadRequest({ headers: { host: 'localhost:3080' } }), true)
+  assert.equal(isTrustedReadRequest({ headers: { host: 'evil.example:3080' } }), false)
+  assert.equal(isTrustedReadRequest({ headers: { host: '127.0.0.1.attacker.example:3080' } }), false)
+  assert.equal(isTrustedReadRequest({ headers: {} }), false)
+  assert.equal(isTrustedReadRequest({
+    headers: { host: '127.0.0.1:3080', origin: 'http://evil.example:3080' },
+  }), false)
+  assert.equal(isTrustedReadRequest({
+    headers: { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080' },
+  }), true)
 })

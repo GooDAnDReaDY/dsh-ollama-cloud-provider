@@ -52,3 +52,26 @@ export async function probeService(
     clearTimeout(timer)
   }
 }
+
+const STATUS_CACHE_MS = 10_000
+let cached: { key: string; at: number; value: ServiceStatus } | undefined
+
+export function clearStatusCache(): void {
+  cached = undefined
+}
+
+/** Cached probe: repeated UI polls must not fan out external requests. */
+export async function probeServiceCached(
+  config: ResolvedConfig,
+  fetchImpl: typeof fetch = fetch,
+  now: () => number = Date.now,
+): Promise<ServiceStatus> {
+  const key = tagsUrlFor(config)
+  const at = now()
+  if (cached !== undefined && cached.key === key && at - cached.at < STATUS_CACHE_MS) {
+    return cached.value
+  }
+  const value = await probeService(config, fetchImpl)
+  cached = { key, at, value }
+  return value
+}

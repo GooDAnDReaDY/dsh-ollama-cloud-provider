@@ -20,12 +20,14 @@ import {
 import { NS, type Config, type ResolvedConfig } from './config.ts'
 import type { KeyPool } from './credentials.ts'
 import { discoverModels } from './discovery.ts'
+import { checkEndpoint } from './endpoints.ts'
 import { priceFor } from './pricing.ts'
 import { authorityHostname, isLocalHostname } from './local-host.ts'
 import { PROVIDER } from './provider-ids.ts'
 import type { RequestHeatmap } from './request-log.ts'
+import { createRouteGuard } from './route-guard.ts'
 import { publicConfig } from './routes-public.ts'
-import { probeService } from './status.ts'
+import { clearStatusCache, probeService, probeServiceCached } from './status.ts'
 import {
   cleanAccounts,
   cleanBooleanRecord,
@@ -308,10 +310,17 @@ function configOps(patch: Record<string, unknown>): Array<{ op: 'set' | 'unset';
       set('apiKeyEnv', ref)
     }
   }
-  if ('apiBase' in patch) set('apiBase', patch.apiBase)
-  if ('openAiBase' in patch) set('openAiBase', patch.openAiBase)
-  if ('usageUrl' in patch) set('usageUrl', patch.usageUrl)
-  if ('balanceUrl' in patch) set('balanceUrl', patch.balanceUrl)
+  for (const field of ['apiBase', 'openAiBase', 'usageUrl', 'balanceUrl'] as const) {
+    if (!(field in patch)) continue
+    const raw = patch[field]
+    if (raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '')) {
+      set(field, undefined)
+      continue
+    }
+    const checked = checkEndpoint(field, raw)
+    if (!checked.ok) throw new Error(checked.error)
+    set(field, checked.value)
+  }
   if ('transport' in patch) set('transport', patch.transport)
   if ('modelTransports' in patch) set('modelTransports', cleanTransports(patch.modelTransports))
   if ('requestTimeoutMs' in patch) set('requestTimeoutMs', patch.requestTimeoutMs)
@@ -500,6 +509,10 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   const route = (path: string, handler: WebRoute['handler']): void => {
     disposers.push(web.register({ kind: 'exact', path, handler }))
   }
+  const refreshGuard = createRouteGuard(2_000)
+  const modelsGuard = createRouteGuard(2_000)
+  const discoverGuard = createRouteGuard(1_000)
+  const testGuard = createRouteGuard(2_000)
   const readOnly = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (req.method !== 'GET') {
       json(res, 405, { error: 'GET required' })
@@ -554,7 +567,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
   route('/dsh-ollama/status', async (req, res) => {
     if (!readOnly(req, res)) return
     try {
-      json(res, 200, await probeService(deps.config(), fetch))
+      json(res, 200, await probeServiceCached(deps.config(), fetch))
     } catch (error) {
       json(res, 200, {
         ok: false,
@@ -700,93 +713,131 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
 
   route('/dsh-ollama/refresh', async (req, res) => {
     if (!(await requirePost(req, res, verifyHost))) return
-    deps.usage.clear()
-    await refreshAndState(ctx, deps, res)
+    const gate = refreshGuard.begin()
+    if (gate !== 'ok') {
+      json(res, 429, { error: gate === 'busy' ? 'request already in progress' : 'rate limited; retry shortly' })
+      return
+    }
+    try {
+      clearStatusCache()
+      deps.usage.clear()
+      await refreshAndState(ctx, deps, res)
+    } finally {
+      refreshGuard.end()
+    }
   })
 
   route('/dsh-ollama/models/refresh', async (req, res) => {
     if (!(await requirePost(req, res, verifyHost))) return
-    clearCatalogCache()
-    deps.usage.clear()
-    try {
-      await refreshCatalog(deps.config(), fetch, true)
-    } catch (error) {
-      // The state call below reports the fallback catalog.
-      bestEffortFailed('catalog refresh failed', error)
+    const gate = modelsGuard.begin()
+    if (gate !== 'ok') {
+      json(res, 429, { error: gate === 'busy' ? 'request already in progress' : 'rate limited; retry shortly' })
+      return
     }
-    await refreshAndState(ctx, deps, res)
+    try {
+      clearCatalogCache()
+      clearStatusCache()
+      deps.usage.clear()
+      try {
+        await refreshCatalog(deps.config(), fetch, true)
+      } catch (error) {
+        // The state call below reports the fallback catalog.
+        bestEffortFailed('catalog refresh failed', error)
+      }
+      await refreshAndState(ctx, deps, res)
+    } finally {
+      modelsGuard.end()
+    }
   })
 
   route('/dsh-ollama/discover', async (req, res) => {
     if (!(await requirePost(req, res, verifyHost))) return
-    let body: Record<string, unknown>
-    try {
-      body = await readJson(req)
-    } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'invalid body' })
+    const gate = discoverGuard.begin()
+    if (gate !== 'ok') {
+      json(res, 429, { error: gate === 'busy' ? 'request already in progress' : 'rate limited; retry shortly' })
       return
     }
-    const apiBase = typeof body.apiBase === 'string' ? body.apiBase : ''
-    const apiKey = typeof body.apiKey === 'string' ? body.apiKey : ''
     try {
-      const result = await discoverModels(apiBase, apiKey, deps.discoveryFetch)
-      json(res, 200, result)
-    } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'discovery failed' })
+      let body: Record<string, unknown>
+      try {
+        body = await readJson(req)
+      } catch (error) {
+        json(res, 400, { error: error instanceof Error ? error.message : 'invalid body' })
+        return
+      }
+      const apiBase = typeof body.apiBase === 'string' ? body.apiBase : ''
+      const apiKey = typeof body.apiKey === 'string' ? body.apiKey : ''
+      try {
+        const result = await discoverModels(apiBase, apiKey, deps.discoveryFetch)
+        json(res, 200, result)
+      } catch (error) {
+        json(res, 400, { error: error instanceof Error ? error.message : 'discovery failed' })
+      }
+    } finally {
+      discoverGuard.end()
     }
   })
 
   route('/dsh-ollama/test', async (req, res) => {
     if (!(await requirePost(req, res, verifyHost))) return
-    let body: Record<string, unknown>
-    try {
-      body = await readJson(req)
-    } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'invalid body' })
+    const gate = testGuard.begin()
+    if (gate !== 'ok') {
+      json(res, 429, { error: gate === 'busy' ? 'request already in progress' : 'rate limited; retry shortly' })
       return
     }
-    const model = typeof body.model === 'string' && body.model !== '' ? body.model : 'gpt-oss:120b'
-    const started = Date.now()
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 60_000)
-    let text = ''
-    let finish: unknown
     try {
-      const options: GenerateOptions = {
-        provider: PROVIDER,
-        model,
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply with exactly: OK' }] }],
-        reasoningEffort: ReasoningEffortId('off'),
-        maxTokens: 64,
-        signal: controller.signal,
+      let body: Record<string, unknown>
+      try {
+        body = await readJson(req)
+      } catch (error) {
+        json(res, 400, { error: error instanceof Error ? error.message : 'invalid body' })
+        return
       }
-      let reasoning = ''
-      for await (const chunk of deps.adapter.stream(options)) {
-        if (chunk.type === 'text-delta') text += chunk.text
-        else if (chunk.type === 'reasoning-delta') reasoning += chunk.text
-        else if (chunk.type === 'finish') finish = chunk.reason
+      const model = typeof body.model === 'string' && body.model !== '' ? body.model : 'gpt-oss:120b'
+      const started = Date.now()
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 60_000)
+      let text = ''
+      let finish: unknown
+      try {
+        const options: GenerateOptions = {
+          provider: PROVIDER,
+          model,
+          messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply with exactly: OK' }] }],
+          reasoningEffort: ReasoningEffortId('off'),
+          maxTokens: 64,
+          signal: controller.signal,
+        }
+        let reasoning = ''
+        for await (const chunk of deps.adapter.stream(options)) {
+          if (chunk.type === 'text-delta') text += chunk.text
+          else if (chunk.type === 'reasoning-delta') reasoning += chunk.text
+          else if (chunk.type === 'finish') finish = chunk.reason
+        }
+        const reply = text === '' ? reasoning : text
+        json(res, 200, {
+          ok: true,
+          model,
+          provider: PROVIDER,
+          latencyMs: Date.now() - started,
+          text: reply.slice(0, 200),
+          finish,
+        })
+      } catch (error) {
+        json(res, 200, {
+          ok: false,
+          model,
+          provider: PROVIDER,
+          latencyMs: Date.now() - started,
+          error: controller.signal.aborted
+            ? 'timeout'
+            : error instanceof Error ? error.message : 'test failed',
+        })
+      } finally {
+        clearTimeout(timer)
       }
-      const reply = text === '' ? reasoning : text
-      json(res, 200, {
-        ok: true,
-        model,
-        provider: PROVIDER,
-        latencyMs: Date.now() - started,
-        text: reply.slice(0, 200),
-        finish,
-      })
-    } catch (error) {
-      json(res, 200, {
-        ok: false,
-        model,
-        provider: PROVIDER,
-        latencyMs: Date.now() - started,
-        error: controller.signal.aborted
-          ? 'timeout'
-          : error instanceof Error ? error.message : 'test failed',
-      })
     } finally {
-      clearTimeout(timer)
+      testGuard.end()
     }
   })
 
