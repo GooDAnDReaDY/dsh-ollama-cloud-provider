@@ -449,3 +449,29 @@ test('clearCooldowns resets in-memory health and writes empty cooldown state ato
   const parsed = JSON.parse(raw) as { cooldowns?: Record<string, unknown> }
   assert.deepEqual(parsed.cooldowns, {})
 })
+
+test('a gateway timeout rotates to the next account (#138)', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) {
+      return new Response('upstream timeout', { status: 504, headers: { 'content-type': 'text/plain' } })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'OK'))
+  assert.equal(calls, 2)
+  assert.equal(adapter.accountHealth('first')?.reason, 'transport')
+  assert.equal(adapter.routingTrace()[0]?.account, 'second')
+})
