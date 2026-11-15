@@ -7,7 +7,7 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { bestEffortFailed } from './best-effort.ts'
-import { isLoopbackAddress, isLoopbackHostname } from './local-host.ts'
+import { authorityHostname, isLocalHostname, isLoopbackAddress, isLoopbackHostname } from './local-host.ts'
 
 /**
  * Host-side one-click updater for a DSH Web plugin.
@@ -99,6 +99,26 @@ export function isTrustedUpdateRequest(request: Request): boolean {
   }
 }
 
+/**
+ * Read-only status must also come from the local UI: a remote page that reaches
+ * the port through DNS rebinding presents its own host name and is refused.
+ */
+export function isTrustedReadRequest(request: Request): boolean {
+  const host = header(request, 'host')
+  if (host === undefined || host === '') return false
+  const hostname = authorityHostname(host)
+  if (hostname === undefined || !isLocalHostname(hostname)) return false
+  const origin = header(request, 'origin')
+  if (origin === undefined || origin === '') return true
+  try {
+    const url = new URL(origin)
+    return (url.protocol === 'http:' || url.protocol === 'https:')
+      && url.host === host && isLocalHostname(url.hostname)
+  } catch {
+    return false
+  }
+}
+
 function validProfileName(value: unknown): value is string {
   return typeof value === 'string' && value !== '' && value !== '.' && value !== '..'
     && !value.includes('/') && !value.includes('\\') && !/[\0-\x1f\x7f]/.test(value)
@@ -171,7 +191,13 @@ function profileFromArgv(argv: readonly string[]): { dir: string; name: string }
   return undefined
 }
 
+const RUNTIME_CACHE_MS = 30_000
+let runtimeCache: { at: number; value: Runtime } | undefined
+
 function runtime(): Runtime {
+  if (runtimeCache !== undefined && Date.now() - runtimeCache.at < RUNTIME_CACHE_MS) {
+    return runtimeCache.value
+  }
   const fromArgv = profileFromArgv(process.argv)
   const profileDir = resolve(process.env.DSH_PROFILE_DIR
     ?? fromArgv?.dir
@@ -181,7 +207,9 @@ function runtime(): Runtime {
     ? selected
     : validProfileName(basename(profileDir)) ? basename(profileDir) : 'web'
   const cliEntry = findDshCliEntry()
-  return cliEntry === undefined ? { profileName, profileDir } : { profileName, profileDir, cliEntry }
+  const value: Runtime = cliEntry === undefined ? { profileName, profileDir } : { profileName, profileDir, cliEntry }
+  runtimeCache = { at: Date.now(), value }
+  return value
 }
 
 type Semver = { core: readonly [number, number, number]; prerelease: readonly string[] }
@@ -310,6 +338,10 @@ export function registerPluginUpdater(ctx: Context, options: PluginUpdaterOption
       try {
         const target = runtime()
         if (request.method === 'GET' || request.method === 'HEAD') {
+          if (!isTrustedReadRequest(request)) {
+            json(response, 403, { error: 'Rejected non-local update status request.' })
+            return
+          }
           const payload = await status(options, target)
           response.writeHead(200, {
             'content-type': 'application/json; charset=utf-8',

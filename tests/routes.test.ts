@@ -571,3 +571,52 @@ test('cooldowns reset route invokes clearCooldowns and returns 200', async () =>
   assert.deepEqual(JSON.parse(res.body()), { ok: true })
   assert.equal(cleared, true)
 })
+
+test('config route rejects endpoint URLs that can leak the key (#136)', async () => {
+  const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
+  const mutations: unknown[] = []
+  const settings = {
+    writable: true,
+    mutate: async (_ns: string, ops: unknown) => { mutations.push(ops) },
+  }
+  const ctx = {
+    get: (name: string) => name === 'settings' ? settings : undefined,
+    effect: (fn: () => () => void) => { fn(); return () => {} },
+  } as never
+  const web = {
+    register: ({ path, handler }: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }) => {
+      routes.set(path, handler)
+      return () => {}
+    },
+  } as never
+  applyRoutes(ctx, web, {
+    config: () => resolveConfig({ apiKey: 'k' }),
+    adapter: { accountHealth: () => undefined, routingTrace: () => [], listModels: async () => [] } as never,
+    pool: { resolveAll: async () => [] } as never,
+    usage: { read: async () => null, usage: async () => null, clear: () => {} } as never,
+    verifyHost: async () => true,
+  })
+
+  const config = routes.get('/dsh-ollama/config')
+  assert.ok(config !== undefined)
+
+  for (const apiBase of [
+    'file:///etc/passwd',
+    'ftp://example.com',
+    'https://user:pass@example.com',
+    'https://example.com/#fragment',
+    'http://169.254.169.254/latest/meta-data',
+    'not a url',
+  ]) {
+    const rejected = fakeRes()
+    await config(postJson({ apiBase }), rejected)
+    assert.equal(rejected.statusCode, 400, `rejects ${apiBase}`)
+    assert.match(rejected.body(), /apiBase/)
+  }
+  assert.equal(mutations.length, 0)
+
+  const accepted = fakeRes()
+  await config(postJson({ apiBase: 'https://proxy.example/v1' }), accepted)
+  assert.equal(accepted.statusCode, 200)
+  assert.equal(mutations.length, 1)
+})

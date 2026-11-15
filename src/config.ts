@@ -1,5 +1,7 @@
 import z from '@deepseek-ai/schemastery'
 
+import { endpointOr } from './endpoints.ts'
+
 export const NS = 'llm-ollama-cloud'
 export const DEFAULT_API_KEY_ENV = 'OLLAMA_API_KEY'
 export const DEFAULT_API_BASE = 'https://ollama.com'
@@ -457,14 +459,10 @@ export function resolveConfig(config: Config): ResolvedConfig {
       ? config.apiKeyEnv.trim()
       : DEFAULT_API_KEY_ENV,
     ...(apiKey === undefined ? {} : { apiKey }),
-    apiBase: typeof config.apiBase === 'string' && config.apiBase !== '' ? config.apiBase : DEFAULT_API_BASE,
-    openAiBase: typeof config.openAiBase === 'string' && config.openAiBase !== ''
-      ? config.openAiBase
-      : DEFAULT_OPENAI_BASE,
-    usageUrl: typeof config.usageUrl === 'string' && config.usageUrl !== '' ? config.usageUrl : DEFAULT_USAGE_URL,
-    balanceUrl: typeof config.balanceUrl === 'string' && config.balanceUrl !== ''
-      ? config.balanceUrl
-      : DEFAULT_BALANCE_URL,
+    apiBase: endpointOr(config.apiBase, 'apiBase', DEFAULT_API_BASE),
+    openAiBase: endpointOr(config.openAiBase, 'openAiBase', DEFAULT_OPENAI_BASE),
+    usageUrl: endpointOr(config.usageUrl, 'usageUrl', DEFAULT_USAGE_URL),
+    balanceUrl: endpointOr(config.balanceUrl, 'balanceUrl', DEFAULT_BALANCE_URL),
     transport: config.transport === 'openai-chat' ? 'openai-chat' : 'native',
     modelTransports: transportRecord(config.modelTransports),
     requestTimeoutMs: positiveInt(config.requestTimeoutMs, 300_000),
