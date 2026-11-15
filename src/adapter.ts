@@ -317,10 +317,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
             if (canRotate) continue
             throw error
           }
-          const retryable = error.code === 'INVALID_CREDENTIAL'
-            || error.code === 'RATE_LIMIT'
-            || error.code === 'QUOTA'
-            || error.code === 'SERVER'
+          const retryable = this.isTransient(error) || error.code === 'INVALID_CREDENTIAL'
           const credentialOrQuota = error.code === 'INVALID_CREDENTIAL'
             || error.code === 'RATE_LIMIT'
             || error.code === 'QUOTA'
