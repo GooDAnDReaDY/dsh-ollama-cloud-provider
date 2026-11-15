@@ -29,3 +29,21 @@ test('accepts only a loopback same-origin update request', () => {
     socket: { remoteAddress: '127.0.0.1' },
   }), false)
 })
+
+test('refuses a rebinding origin whose host only starts with 127 (#135)', () => {
+  const rebinding = {
+    'x-dsh-plugin-update': '1',
+    'sec-fetch-site': 'same-origin',
+    origin: 'http://127.0.0.1.attacker.example:3080',
+    host: '127.0.0.1.attacker.example:3080',
+  }
+  assert.equal(isTrustedUpdateRequest({ headers: rebinding, socket: { remoteAddress: '127.0.0.1' } }), false)
+  assert.equal(isTrustedUpdateRequest({
+    headers: { ...rebinding, host: '127.0.0.1:3080' },
+    socket: { remoteAddress: '127.0.0.1' },
+  }), false)
+  assert.equal(isTrustedUpdateRequest({
+    headers: rebinding,
+    socket: { remoteAddress: '127.0.0.1.attacker.example' },
+  }), false)
+})

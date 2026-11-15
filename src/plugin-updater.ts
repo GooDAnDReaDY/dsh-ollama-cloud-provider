@@ -7,6 +7,7 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { bestEffortFailed } from './best-effort.ts'
+import { isLoopbackAddress, isLoopbackHostname } from './local-host.ts'
 
 /**
  * Host-side one-click updater for a DSH Web plugin.
@@ -79,16 +80,9 @@ function header(request: Request, name: string): string | undefined {
   return Array.isArray(value) ? value[0] : value
 }
 
-function isLoopback(value: string | undefined): boolean {
-  const address = value?.toLowerCase().replace(/^\[|\]$/g, '')
-  return address === 'localhost' || address === 'localhost.' || address === '::1'
-    || address?.startsWith('127.') === true
-    || address?.startsWith('::ffff:127.') === true
-}
-
 export function isTrustedUpdateRequest(request: Request): boolean {
   if (header(request, UPDATE_HEADER) !== '1') return false
-  if (!isLoopback(request.socket?.remoteAddress)) return false
+  if (!isLoopbackAddress(request.socket?.remoteAddress)) return false
   const site = header(request, 'sec-fetch-site')
   if (site !== undefined && site !== 'same-origin') return false
   const origin = header(request, 'origin')
@@ -96,8 +90,10 @@ export function isTrustedUpdateRequest(request: Request): boolean {
   if (origin === undefined || host === undefined) return false
   try {
     const url = new URL(origin)
+    // A rebinding page keeps `Host` on its own DNS name, so the origin hostname
+    // must be a literal loopback address, never a name that merely starts with 127.
     return (url.protocol === 'http:' || url.protocol === 'https:')
-      && isLoopback(url.hostname) && url.host === host
+      && isLoopbackHostname(url.hostname) && url.host === host
   } catch {
     return false
   }
