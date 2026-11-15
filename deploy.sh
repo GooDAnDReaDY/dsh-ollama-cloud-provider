@@ -21,8 +21,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 PACKAGE_NAME="@goodandready/dsh-ollama-cloud-provider"
-SIZE_HARD_LIMIT=262144   # 256 KiB — отклоняет DSH Store
-SIZE_WARN_LIMIT=256000   # практический порог предупреждения
 WEB_BASE="${DSH_WEB_BASE:-http://127.0.0.1:3080}"
 WEB_UNIT="${DSH_WEB_UNIT:-dsh-web.service}"
 
@@ -64,7 +62,7 @@ post_install_checks() {
   if [ "$health_code" = "200" ]; then
     echo "health check: HTTP 200 OK"
   else
-    echo "WARN: health check returned HTTP $health_code"
+    fail "health check returned HTTP $health_code"
   fi
   echo "post-install checks passed"
 }
@@ -81,10 +79,10 @@ case "$MODE" in
     require_node
     command -v dsh >/dev/null 2>&1 || fail "dsh CLI not found in PATH"
     [ "${DSH_OLLAMA_APPROVED:-}" = "yes" ] || fail "production install requires explicit approval: run with DSH_OLLAMA_APPROVED=yes"
-    local_version="$(node -p "require('./package.json').version")"
+    target_version="$(node -p "require('./package.json').version")"
     TARGET_VERSION="${2:-}"
     [ -n "$TARGET_VERSION" ] || fail "usage: DSH_OLLAMA_APPROVED=yes bash deploy.sh install <exact-version>"
-    [ "$TARGET_VERSION" = "$local_version" ] || fail "target version $TARGET_VERSION does not match package.json $local_version"
+    [ "$TARGET_VERSION" = "$target_version" ] || fail "target version $TARGET_VERSION does not match package.json $target_version"
     echo "installing $PACKAGE_NAME@$TARGET_VERSION into the DSH web profile"
     dsh plugin --profile web add "$PACKAGE_NAME@$TARGET_VERSION"
     post_install_checks "$TARGET_VERSION"
