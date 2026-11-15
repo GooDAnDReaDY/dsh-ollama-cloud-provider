@@ -111,8 +111,8 @@ graph LR
 
 ## Requirements
 
-- **DeepSeek Harness**: \0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0\ (desktop and web profiles).
-- **Node.js**: \>=22.0.0\.
+- **DeepSeek Harness**: `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0` (desktop and web profiles).
+- **Node.js**: `>=22.0.0`.
 - **Ollama Cloud Account**: one or more active API keys from Ollama Cloud or a compatible proxy endpoint.
 
 ## Install
@@ -128,17 +128,17 @@ npm pack
 Install the published package:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.38
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.39
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.38
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.39
 ```
 
 Or install the packed tarball into a profile:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.38.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.39.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.38.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.39.tgz
 ```
 
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
@@ -262,6 +262,13 @@ node scripts/probe.mjs
 The Ollama Cloud settings page in DSH Desktop (dark theme): configured credential, balance and usage, and the connection probe.
 
 ![Ollama Cloud settings](media/visual-verification.png)
+
+## Security
+
+- Write routes require a loopback socket, a same-origin `Origin`/`Referer` and the host authentication check; a DNS name is never treated as loopback.
+- API keys are resolved through the DSH credential service; the browser only learns whether a key is configured, never its value.
+- Custom endpoint URLs must be absolute `http(s)` without embedded credentials or fragments; link-local and metadata addresses are refused.
+- `/status` is cached for 10 seconds, while refresh, test and endpoint-discovery routes are single-flight and rate-limited.
 
 ## Limitations
 

@@ -93,8 +93,8 @@ graph LR
 
 ## Requirements / Требования
 
-- **DeepSeek Harness**: \0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0\ (профили desktop и web).
-- **Node.js**: \>=22.0.0\.
+- **DeepSeek Harness**: `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0` (профили desktop и web).
+- **Node.js**: `>=22.0.0`.
 - **Аккаунт Ollama Cloud**: один или несколько действующих API-ключей Ollama Cloud или совместимого прокси.
 
 ## Установка
@@ -110,17 +110,17 @@ npm pack
 Установка опубликованного пакета из npm:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.38
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.39
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.38
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.39
 ```
 
 Либо установка из упакованного tarball:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.38.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.39.tgz
 # DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.38.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.39.tgz
 ```
 
 После установки перезапустите dsh (или DSH Desktop) и выберите **Ollama Cloud** в списке моделей.
@@ -215,6 +215,13 @@ modelAccountRules:
 - `GET https://ollama.com/api/tags` служит источником флагов `capabilities` по моделям.
 - Нативный `/api/chat` передает NDJSON с подробной статистикой токенов в финальном объекте.
 - Совместимый эндпоинт OpenAI `/v1/chat/completions` поддерживает стриминг, инструменты, зрение (vision) и `reasoning_effort`.
+
+## Безопасность
+
+- Write-маршруты требуют loopback-сокет, same-origin `Origin`/`Referer` и проверку подлинности хоста; DNS-имя никогда не считается loopback.
+- Ключи читаются через сервис учётных данных DSH; браузер узнаёт только факт наличия ключа, но не его значение.
+- Собственные адреса эндпоинтов должны быть абсолютными `http(s)` без встроенных учётных данных и фрагментов; link-local и metadata-адреса отклоняются.
+- `/status` кэшируется на 10 секунд, а маршруты обновления, теста и поиска эндпоинтов ограничены по частоте и выполняются в единственном экземпляре.
 
 ## Ограничения
 

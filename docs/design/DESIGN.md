@@ -3,7 +3,7 @@
 ## Product / Purpose
 - **Назначение**: Полнофункциональный Cordis-плагин для DeepSeek Harness (DSH), обеспечивающий интеграцию с облачным API моделей Ollama Cloud.
 - **Аудитория**: Пользователи DeepSeek Harness (Web UI и Desktop), использующие модели Ollama Cloud (Llama 3.x, Qwen 2.5, DeepSeek R1/V3, Mistral, Gemma и др.) для чата, reasoning и PTC/tool calling.
-- **Статус**: Active (v0.1.37 развернут в production web и desktop профилях, тесты зеленые).
+- **Статус**: Active (v0.1.39 подготовлен к production-приёмке, 175/175 тестов).
 
 ## User Surfaces
 - **Web/UI**:

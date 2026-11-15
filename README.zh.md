@@ -92,8 +92,8 @@ graph LR
 
 ## Requirements / 系统要求
 
-- **DeepSeek Harness**: \0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0\（桌面版与 Web 配置文件）。
-- **Node.js**: \>=22.0.0\。
+- **DeepSeek Harness**: `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0`（桌面版与 Web 配置文件）。
+- **Node.js**: `>=22.0.0`。
 - **Ollama Cloud 账户**: 一个或多个有效的 Ollama Cloud API Key 或兼容的代理端点。
 
 ## 安装指南
@@ -109,17 +109,17 @@ npm pack
 从 npm 安装已发布版本：
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.38
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.39
 # DSH 桌面端：
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.38
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.39
 ```
 
 或通过打包文件安装：
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.38.tgz
+dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.39.tgz
 # DSH 桌面端：
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.38.tgz
+dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.39.tgz
 ```
 
 安装完成后重启 dsh 或 DSH 桌面端，在模型列表中选择 **Ollama Cloud** 即可。
@@ -185,6 +185,13 @@ DSH Desktop（暗黑主题）中的 Ollama Cloud 设置与用量面板：
 /ollama rules             # 模型到账号规则
 /ollama test [model]      # 发送连通性测试请求
 ```
+
+## 安全说明
+
+- 写入路由要求 loopback 套接字、同源 `Origin`/`Referer` 以及宿主机认证；DNS 名称永远不会被视为 loopback。
+- API 密钥通过 DSH 凭据服务解析；浏览器只能获知是否已配置，无法读取密钥值。
+- 自定义端点必须是完整的 `http(s)` 地址，不得包含账号密码或片段；link-local 与 metadata 地址会被拒绝。
+- `/status` 缓存 10 秒；刷新、测试与端点发现路由为单飞并限流。
 
 ## 限制与注意事项
 

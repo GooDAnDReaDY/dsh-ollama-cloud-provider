@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.39 — 2026-11-15
+
+- Security: loopback Host detection now requires an IP literal, so a DNS-rebinding page can no longer pass the read host gate or the update endpoint (#135).
+- Security: endpoint URLs (`apiBase`, `openAiBase`, `usageUrl`, `balanceUrl`) must be absolute `http(s)` without embedded credentials or fragments; link-local and metadata addresses are refused, and an unsafe value falls back to the default (#136).
+- Security: update status requires a local Host and same-origin Origin, while refresh, model refresh, connection test and endpoint discovery are single-flight and rate-limited; `/status` is cached for 10 seconds (#137).
+- Reliability: HTTP 504/408 responses now rotate to the next account instead of failing the turn, matching the exception path (#138).
+- Reliability: request-log compaction writes through a temporary file and renames it, so a concurrent reader never sees an empty or partial log (#142).
+- Tooling: `deploy.sh install` works again (`local` outside a function aborted it), and `verify` fails instead of warning when `/health` is not 200 (#143).
+- Documentation: added a Security section to all three READMEs and fixed the escaped version ranges in Requirements.
+
+175 tests.
+
 ## 0.1.38 — 2026-11-12
 
 - Architecture & Contracts: established canonical `docs/design/DESIGN.md` (following `project-design-contract`), `AGENTS.md`, `index.md`, `deploy.sh`, and `docs/deployment/DEPLOYMENT.md` (#127).
