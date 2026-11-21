@@ -99,3 +99,24 @@ test('patchOf with zero visible models clears positive modelVisibility overrides
   assert.equal(patch.showAllModels, false)
   assert.deepEqual(patch.modelVisibility, {})
 })
+
+test('a manual model row keeps a stable uid that never reaches the patch (#141)', () => {
+  const draft = draftOf(state({}))
+  draft.manualModels.push({
+    uid: 'manual-row-1',
+    id: 'custom:1b',
+    enabled: true,
+    name: '',
+    contextWindow: '',
+    maxTokens: '',
+    image: false,
+    thinking: false,
+    reasoningEfforts: '',
+    defaultReasoning: '',
+    tools: true,
+  })
+  assert.equal(draft.manualModels[0]?.uid, 'manual-row-1')
+  const patch = patchOf(draft) as { manualModels: Array<Record<string, unknown>> }
+  assert.equal(patch.manualModels.length, 1)
+  assert.equal('uid' in (patch.manualModels[0] ?? {}), false)
+})

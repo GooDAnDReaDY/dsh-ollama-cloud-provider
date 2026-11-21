@@ -231,7 +231,11 @@ export function createUsageReader(
     key: string,
     range: UsageRange,
     epoch: number,
-  ): Promise<{ totals: UsageTotals; byModel: Array<{ model: string } & UsageTotals> } | undefined> => {
+  ): Promise<
+    | { totals: UsageTotals; byModel: Array<{ model: string } & UsageTotals> }
+    | { rateLimited: true }
+    | undefined
+  > => {
     if (key === '') return undefined
     const current = config()
     const cacheKey = `${fingerprint(key)}:${range}`
@@ -243,7 +247,7 @@ export function createUsageReader(
     }
     const now = Date.now()
     const recent = usageCalls.filter((at) => now - at < USAGE_WINDOW_MS)
-    if (recent.length >= USAGE_WINDOW_LIMIT) return undefined
+    if (recent.length >= USAGE_WINDOW_LIMIT) return { rateLimited: true }
     recent.push(now)
     usageCalls.length = 0
     usageCalls.push(...recent)
@@ -274,12 +278,18 @@ export function createUsageReader(
   }
 
   const compose = async (key: string, range: UsageRange, epoch: number): Promise<UsageResult> => {
-    const [balance, usage] = await Promise.all([readBalance(key), readUsage(key, range, epoch)])
+    const [balance, usageRead] = await Promise.all([readBalance(key), readUsage(key, range, epoch)])
+    const rateLimited = usageRead !== undefined && 'rateLimited' in usageRead
+    const usage = usageRead !== undefined && !('rateLimited' in usageRead) ? usageRead : undefined
     const reportKey = `${fingerprint(key)}:report:${range}`
     if (balance === undefined && usage === undefined) {
-      const result: UsageResult = { error: 'usage and balance are unavailable', checkedAt: Date.now() }
+      const result: UsageResult = {
+        error: rateLimited ? 'usage rate limit reached; retry shortly' : 'usage and balance are unavailable',
+        checkedAt: Date.now(),
+      }
       const previous = lastGood.get(reportKey)
-      if (epoch === generation) cache.set(reportKey, result)
+      // A local rate limit is not an endpoint failure: never cache it as one.
+      if (!rateLimited && epoch === generation) cache.set(reportKey, result)
       return previous === undefined ? result : {
         ...previous,
         stale: true,

@@ -223,3 +223,40 @@ test('usage reader caches a failed check and deduplicates concurrent reads', asy
   assert.equal(cached?.error !== undefined, true)
   assert.equal(calls, after)
 })
+
+test('reports the local usage rate limit instead of an API outage (#144)', async () => {
+  let balanceUp = true
+  let usageCalls = 0
+  const fakeFetch = (async (input: string | URL | Request) => {
+    const url = String(input)
+    if (url.includes('/api/balance')) {
+      return balanceUp
+        ? new Response(JSON.stringify({ included: { balance_usd: 5, allowance_usd: 10 } }), { status: 200 })
+        : new Response('', { status: 503 })
+    }
+    usageCalls += 1
+    return new Response(JSON.stringify({ totals: { request_count: 1 } }), { status: 200 })
+  }) as typeof fetch
+  const reader = createUsageReader(
+    () => ({
+      usageUrl: 'https://ollama.com/api/usage',
+      balanceUrl: 'https://ollama.com/api/balance',
+      userAgent: 'test',
+    }) as never,
+    async () => ({ key: 'key-rate-limit', source: 'test' }),
+    fakeFetch,
+  )
+
+  for (let index = 0; index < 10; index += 1) {
+    await reader.usage('7d')
+    reader.clear()
+  }
+  assert.ok(usageCalls >= 9, 'the window limit was reached')
+
+  balanceUp = false
+  const limited = await reader.usage('7d')
+  assert.equal(limited?.error, 'usage rate limit reached; retry shortly')
+
+  const repeated = await reader.usage('7d')
+  assert.equal(repeated?.error, 'usage rate limit reached; retry shortly', 'the limit is not cached as an outage')
+})

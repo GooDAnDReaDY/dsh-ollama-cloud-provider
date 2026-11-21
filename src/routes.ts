@@ -454,6 +454,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
   }
 
   let models: Array<Record<string, unknown>> = []
+  let providerError: string | undefined
   try {
     const listed = await deps.adapter.listModels(PROVIDER, { unfiltered: true })
     models = listed.map((model) => {
@@ -475,7 +476,9 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
         visible: modelVisible(model.id, config),
       }
     })
-  } catch {
+  } catch (error) {
+    bestEffortFailed('state:listModels', error)
+    providerError = error instanceof Error ? error.message : String(error)
     models = []
   }
 
@@ -491,6 +494,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
     usage: usage ?? null,
     routing: deps.adapter.routingTrace(),
     revision: settingsRevision(ctx),
+    ...(providerError === undefined ? {} : { providerError }),
   }
 }
 
