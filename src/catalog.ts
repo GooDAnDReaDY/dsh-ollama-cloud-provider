@@ -180,6 +180,7 @@ async function fetchJson(
       accept: 'application/json',
       'user-agent': config.userAgent,
     },
+    redirect: 'error',
     signal,
   })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)

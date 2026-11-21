@@ -150,3 +150,20 @@ test('keeps one tool-call id when upstream sends it after the first delta (#145)
   assert.match(String(deltas[0]?.id), /^call_[0-9a-f-]{36}$/)
   assert.equal(end?.block.id, deltas[0]?.id, 'block-end must reuse the emitted id')
 })
+
+test('rejects an oversized SSE event instead of buffering it (#152)', async () => {
+  const huge = 'x'.repeat(1_000_001)
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(huge))
+      controller.close()
+    },
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of parseChatStream(
+      new Response(body, { headers: { 'content-type': 'text/event-stream' } }),
+      1000,
+      undefined,
+    )) {}
+  }, /oversized stream event/i)
+})

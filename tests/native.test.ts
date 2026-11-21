@@ -254,3 +254,16 @@ test('skips malformed non-JSON lines gracefully', async () => {
   ])
   assert.ok(chunks.some((chunk: any) => chunk.type === 'text-delta' && chunk.text === 'ok'))
 })
+
+test('rejects an oversized NDJSON frame instead of buffering it (#152)', async () => {
+  const huge = 'x'.repeat(1_000_001)
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(huge))
+      controller.close()
+    },
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of parseNativeStream(new Response(body), 1000, undefined)) {}
+  }, /oversized stream frame/i)
+})

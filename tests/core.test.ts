@@ -159,6 +159,14 @@ test('explicit empty visibility means none while legacy empty means all', () => 
   assert.equal(modelVisible('x', resolveConfig({ visibleModels: [], showAllModels: true })), true)
 })
 
+test('prototype keys in config records are ignored (#152)', () => {
+  const raw = JSON.parse('{"__proto__":{"polluted":true},"safe":true}') as Record<string, boolean>
+  const config = resolveConfig({ modelVisibility: raw })
+  assert.equal(Object.getPrototypeOf(config.modelVisibility), Object.prototype)
+  assert.equal('polluted' in config.modelVisibility, false)
+  assert.equal(config.modelVisibility.safe, true)
+})
+
 test('serves a cached catalog without a network call and refreshes on demand (#139)', async () => {
   const staleConfig = resolveConfig({ apiKey: 'test-key', apiBase: 'https://catalog-stale.example' })
   clearCatalogCache()

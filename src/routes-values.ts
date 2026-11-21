@@ -2,6 +2,10 @@ import type { ManualModel, ModelOverride, ModelPriceOverride, TransportId } from
 
 const TRANSPORTS = new Set<TransportId>(['native', 'openai-chat'])
 
+function unsafeKey(key: string): boolean {
+  return key === '__proto__' || key === 'constructor' || key === 'prototype'
+}
+
 const CREDENTIAL_REF_PATTERN = /^OLLAMA_[A-Z0-9_]+$/
 
 /** The plugin may read and write only its own credential namespace. */
@@ -90,7 +94,7 @@ export function cleanModelOverrides(value: unknown): Record<string, ModelOverrid
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
   const out: Record<string, ModelOverride> = {}
   for (const [id, entry] of Object.entries(value)) {
-    if (id === '' || id.includes('..') || typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
+    if (unsafeKey(id) || id === '' || id.includes('..') || typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
     const record = entry as Record<string, unknown>
     const efforts = Array.isArray(record.reasoningEfforts)
       ? record.reasoningEfforts.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
@@ -119,7 +123,10 @@ export function cleanModelOverrides(value: unknown): Record<string, ModelOverrid
 export function cleanBooleanRecord(value: unknown): Record<string, boolean> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
   const out: Record<string, boolean> = {}
-  for (const [key, entry] of Object.entries(value)) if (typeof entry === 'boolean') out[key] = entry
+  for (const [key, entry] of Object.entries(value)) {
+    if (unsafeKey(key)) continue
+    if (typeof entry === 'boolean') out[key] = entry
+  }
   return out
 }
 
@@ -127,6 +134,7 @@ export function cleanNumberRecord(value: unknown): Record<string, number> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
   const out: Record<string, number> = {}
   for (const [key, entry] of Object.entries(value)) {
+    if (unsafeKey(key)) continue
     if (typeof entry === 'number' && Number.isInteger(entry) && entry > 0) out[key] = entry
   }
   return out
@@ -136,6 +144,7 @@ export function cleanTransports(value: unknown): Record<string, TransportId> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
   const out: Record<string, TransportId> = {}
   for (const [key, entry] of Object.entries(value)) {
+    if (unsafeKey(key)) continue
     if (typeof entry === 'string' && TRANSPORTS.has(entry as TransportId)) out[key] = entry as TransportId
   }
   return out
@@ -145,6 +154,7 @@ export function cleanPrices(value: unknown): Record<string, ModelPriceOverride> 
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
   const out: Record<string, ModelPriceOverride> = {}
   for (const [key, entry] of Object.entries(value)) {
+    if (unsafeKey(key)) continue
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
     const raw = entry as Record<string, unknown>
     const price: ModelPriceOverride = {}

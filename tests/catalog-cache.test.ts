@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -53,6 +53,21 @@ test('serves an offline disk snapshot without a network call when autoRefresh is
     }) as typeof fetch, false)
     assert.deepEqual(ids, ['gpt-oss:120b'])
     assert.equal(calls, 0)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
+  }
+})
+
+test('writes the snapshot with restrictive permissions (#152)', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-cache-mode-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    await saveCatalogSnapshot(base, ['gpt-oss:120b'], {})
+    const info = await stat(catalogCachePath())
+    assert.equal(info.mode & 0o777, 0o600)
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previous
