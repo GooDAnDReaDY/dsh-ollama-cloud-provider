@@ -1,6 +1,7 @@
 import type { HostState, TransportId } from './api.ts'
 
 export interface ManualModelDraft {
+  uid: string
   id: string
   enabled: boolean
   name: string
@@ -117,7 +118,8 @@ export function draftOf(state: HostState): Draft {
     visibleModels: state.config.showAllModels ? allIds : [...state.config.visibleModels],
     filterModelsByPlan: state.config.filterModelsByPlan,
     modelVisibility: { ...state.config.modelVisibility },
-    manualModels: (state.config.manualModels ?? []).map((model) => ({
+    manualModels: (state.config.manualModels ?? []).map((model, index) => ({
+      uid: `manual-${index}`,
       id: model.id,
       enabled: model.enabled !== false,
       name: model.name ?? '',

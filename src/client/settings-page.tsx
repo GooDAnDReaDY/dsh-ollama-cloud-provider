@@ -28,6 +28,13 @@ import { ModelOverrideEditor } from './model-override-editor.tsx'
 import { PluginUpdateCard } from './update-card.tsx'
 import { UsageBars } from './usage-bars.tsx'
 
+let manualRowSeq = 0
+
+function nextManualUid(): string {
+  manualRowSeq += 1
+  return `manual-${Date.now().toString(36)}-${manualRowSeq}`
+}
+
 export function ModelEntry(props: {
   model: ModelRow
   visible: boolean
@@ -36,11 +43,12 @@ export function ModelEntry(props: {
   onTransport: (transport: TransportId | '') => void
   onDragStart?: () => void
   onDrop?: () => void
+  onDragEnd?: () => void
   onEdit?: () => void
   dragging?: boolean
   t: (key: string) => string
 }): ReactNode {
-  const { model, visible, transport, onVisible, onTransport, onDragStart, onDrop, onEdit, dragging, t } = props
+  const { model, visible, transport, onVisible, onTransport, onDragStart, onDrop, onDragEnd, onEdit, dragging, t } = props
   return (
     <div
       className={`ocl-model${dragging === true ? ' ocl-dragging' : ''}`}
@@ -48,6 +56,7 @@ export function ModelEntry(props: {
       onDragStart={onDragStart}
       onDragOver={(event) => { if (onDrop !== undefined) event.preventDefault() }}
       onDrop={onDrop}
+      onDragEnd={onDragEnd}
     >
       <span className="ocl-drag-handle" title={t('dragOrder')} aria-hidden="true">⋮⋮</span>
       <input type="checkbox" checked={visible} aria-label={`${model.id} ${t('visibility')}`} onChange={(event) => onVisible(event.target.checked)} />
@@ -249,6 +258,7 @@ export function OllamaCloudSettingsPage(props: {
   const addManualModel = (): void => {
     update({
       manualModels: [...draft.manualModels, {
+        uid: nextManualUid(),
         id: '',
         enabled: true,
         name: '',
@@ -506,21 +516,21 @@ export function OllamaCloudSettingsPage(props: {
                   type="password"
                   placeholder={t('pasteKey')}
                   aria-label={`${t('pasteKey')} (${account.label})`}
-                  value={accountKeys[account.label] ?? ''}
+                  value={accountKeys[index] ?? ''}
                   onChange={(event) => {
-                    setAccountKeys((current) => ({ ...current, [account.label]: event.target.value }))
+                    setAccountKeys((current) => ({ ...current, [index]: event.target.value }))
                   }}
                 />
                 <button
                   type="button"
                   className="ocl-button ocl-button-primary"
-                  disabled={(accountKeys[account.label] ?? '').trim() === ''}
+                  disabled={(accountKeys[index] ?? '').trim() === ''}
                   onClick={() => {
                     const ref = account.apiKeyEnv.trim()
                     if (ref === '') return
-                    void saveKey(ref, (accountKeys[account.label] ?? '').trim())
+                    void saveKey(ref, (accountKeys[index] ?? '').trim())
                       .then(() => {
-                        setAccountKeys((current) => ({ ...current, [account.label]: '' }))
+                        setAccountKeys((current) => ({ ...current, [index]: '' }))
                         setNotice(t('saved'))
                         return load(true)
                       })
@@ -713,6 +723,7 @@ export function OllamaCloudSettingsPage(props: {
                         if (dragId !== null) moveModel(dragId, model.id)
                         setDragId(null)
                       }}
+                      onDragEnd={() => setDragId(null)}
                       onEdit={() => setEditingModel(model.id)}
                       onVisible={(visible) => toggleModel(model.id, visible)}
                       onTransport={(transport) => {
@@ -748,7 +759,7 @@ export function OllamaCloudSettingsPage(props: {
         </h3>
         <p className="ocl-hint">{t('manualModelsHint')}</p>
         {draft.manualModels.map((model, index) => (
-          <div className="ocl-model-section" key={`${model.id}-${index}`}>
+          <div className="ocl-model-section" key={model.uid}>
             <div className="ocl-grid">
               <Field label={t('modelId')} value={model.id} onChange={(value) => updateManual(index, { id: value })} />
               <Field label={t('modelName')} value={model.name} onChange={(value) => updateManual(index, { name: value })} />
