@@ -120,9 +120,9 @@ graph LR
 Install the published package from the registry:
 
 ```bash
-dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.40
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.41
 # DSH Desktop:
-dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.40
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.41
 ```
 
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
