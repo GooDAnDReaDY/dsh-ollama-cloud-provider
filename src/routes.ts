@@ -18,7 +18,7 @@ import {
   refreshCatalog,
 } from './catalog.ts'
 import { NS, type Config, type ResolvedConfig } from './config.ts'
-import type { KeyPool } from './credentials.ts'
+import { accountLabel, type KeyPool } from './credentials.ts'
 import { discoverModels } from './discovery.ts'
 import { checkEndpoint } from './endpoints.ts'
 import { priceFor } from './pricing.ts'
@@ -407,9 +407,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
   const slots = [
     { label: 'default', ref: config.apiKeyEnv, default: true },
     ...config.accounts.map((account, index) => ({
-      label: typeof account.label === 'string' && account.label.trim() !== ''
-        ? account.label.trim()
-        : `account-${index + 2}`,
+      label: accountLabel(account.label, index),
       ref: typeof account.apiKeyEnv === 'string' ? account.apiKeyEnv.trim() : '',
       default: false,
     })),

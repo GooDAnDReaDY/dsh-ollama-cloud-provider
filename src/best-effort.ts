@@ -25,16 +25,3 @@ export function bestEffortFailed(label: string, error: unknown): void {
     void caught
   }
 }
-
-export async function bestEffort<T>(
-  label: string,
-  action: () => Promise<T> | T,
-  fallback?: T,
-): Promise<T | undefined> {
-  try {
-    return await action()
-  } catch (err) {
-    bestEffortFailed(label, err)
-    return fallback
-  }
-}

@@ -250,7 +250,7 @@ Checked live on 2026-10-21:
 npm run typecheck
 npm test
 npm run build
-npm run check         # typecheck + tests + build
+npm run check         # typecheck + tests + build + smoke-load + pack:check
 npm run release       # check + packed tarball
 node scripts/probe.mjs
 ```

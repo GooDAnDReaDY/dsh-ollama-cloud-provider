@@ -28,7 +28,7 @@
 - Architecture & Contracts: established canonical `docs/design/DESIGN.md` (following `project-design-contract`), `AGENTS.md`, `index.md`, `deploy.sh`, and `docs/deployment/DEPLOYMENT.md` (#127).
 - Artifact Guard & Packaging: implemented automated pack guard `scripts/pack-check.mjs` preventing root release tarballs and enforcing DSH Store file size limit (<256 KiB) as part of `npm run check` and `npm run release` (#128, #131).
 - Publication Boundary: established `.gitattributes` publication layer with `export-ignore` excluding internal documents, deployment scripts, plans, and `scripts/` from public exports while maintaining git tracking (#130).
-- Error Diagnostics & Health: replaced 10 unmonitored silent catches across adapter, catalog, index, routes, and transports with `bestEffortFailed` logging via `ctx.logger`; augmented `GET /dsh-ollama/health` with provider error surfacing (`ok: false` and `error` field) on discovery failures (#131).
+- Error Diagnostics & Health: replaced 10 unmonitored silent catches across adapter, catalog, index, routes, and transports with `bestEffortFailed` logging via `ctx.logger`; augmented `GET /dsh-ollama/health` with provider error surfacing (`ok: false` and `providerError` field) on discovery failures (#131).
 - Modularity: decomposed monolithic 6033-line `lib/index.js` into clean domain-separated modules (`routes.js`, `adapter.js`, `config.js`, etc.) with `tsdown` unbundling, reducing primary entry point to ~150 lines (#131).
 - Repository Hygiene: audited and pruned 12 stale and detached worktrees, documenting SHAs and ancestor relationships (#129).
 
@@ -39,7 +39,7 @@
 ## 0.1.36 — 2026-11-09
 
 - Resilience: shortened 401/403 credential rejection cooldown from 24 hours to 5 minutes, added explicit reset endpoint (`POST /dsh-ollama/cooldowns/reset`) and "Reset cooldowns" UI action in settings page, and surfaced exact remaining wait time and root cause (`INVALID_CREDENTIAL`, `QUOTA`, `RATE_LIMIT`) when all keys are cooling (#117).
-- Security & Hygiene: untracked internal agent instructions (`AGENTS.md`), project metadata (`index.md`), Gitea templates (`.gitea/`), and internal design/audit documentation (`docs/`) from git mirror trees and added them to `.gitignore`, preventing public leakage to external mirrors (#118).
+- Security & Hygiene: untracked internal agent instructions (`AGENTS.md`), project metadata (`index.md`), Gitea templates (`.gitea/`), and internal design/audit documentation (`docs/`) from git mirror trees and added them to `.gitattributes` with `export-ignore`, preventing leakage into archive-based mirrors (#118).
 - Security: added `trustedHost` check to `readOnly` route validation, rejecting DNS rebinding attacks on `/dsh-ollama/health` and `/dsh-ollama/status` when non-local `Host` headers are supplied (#119).
 - Protocol Conformance: prioritized token exhaustion `done_reason === 'length'` (`max-tokens`) over partial in-band tool call markers in native transport streaming (`src/transports/native.ts`) (#120).
 - State Persistence: replaced direct file writes with atomic file write (`atomicWriteFile` using temp file + `rename`) for `cooldowns.json` and `sticky.json` to prevent file corruption on unexpected crashes (#121).
@@ -446,7 +446,7 @@ Audit fixes (Gitea #1–#15):
 - Heatmap and theme values no longer hardcode colors (#10).
 - Test-connection requests disable thinking and use a 32-token budget (#11).
 - The request log is flushed on shutdown (#12).
-- Architecture documentation moved to `docs/design/ARCHITECTURE.md`; the
+- Architecture documentation consolidated into `docs/design/DESIGN.md`; the
   design contract lives in `docs/design/DESIGN.md` (#13).
 - Added wiring, analytics, route-guard and adapter regression tests (#14).
 - Account rows show the 7-day spend without a meaningless percentage (#15).

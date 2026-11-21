@@ -50,6 +50,11 @@ async function resolveRef(ctx: Context, refName: string): Promise<ResolvedKey | 
   return undefined
 }
 
+export function accountLabel(label: string | undefined, index: number): string {
+  const trimmed = typeof label === 'string' ? label.trim() : ''
+  return trimmed === '' ? `account-${index + 2}` : trimmed
+}
+
 function slotsOf(config: ResolvedConfig): Slot[] {
   const slots: Slot[] = [{
     label: 'default',
@@ -57,9 +62,7 @@ function slotsOf(config: ResolvedConfig): Slot[] {
     refName: config.apiKeyEnv,
   }]
   for (const [index, account] of config.accounts.entries()) {
-    const label = typeof account.label === 'string' && account.label.trim() !== ''
-      ? account.label.trim()
-      : `account-${index + 2}`
+    const label = accountLabel(account.label, index)
     const literal = typeof account.apiKey === 'string' && account.apiKey.trim() !== ''
       ? account.apiKey.trim()
       : undefined

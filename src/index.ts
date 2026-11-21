@@ -11,7 +11,7 @@ import { refreshCatalog } from './catalog.ts'
 import { createCatalogScheduler } from './catalog-scheduler.ts'
 import { applyCommands } from './commands.ts'
 import { Config, NS, resolveConfig, unwrapVolatileConfig } from './config.ts'
-import { createKeyPool } from './credentials.ts'
+import { accountLabel, createKeyPool } from './credentials.ts'
 import { registerPluginUpdater } from './plugin-updater.ts'
 import { PROVIDER } from './provider-ids.ts'
 import { flushRequestLog, readRequestHeatmap } from './request-log.ts'
@@ -29,7 +29,7 @@ export { OllamaCloudAdapter }
 export type { OllamaCloudAdapterDeps } from './adapter.ts'
 export type { Config as OllamaCloudConfig, ResolvedConfig, TransportId } from './config.ts'
 export type { ResolvedKey } from './credentials.ts'
-export { createKeyPool, createKeyResolver } from './credentials.ts'
+export { createKeyPool } from './credentials.ts'
 export { applyCommands } from './commands.ts'
 export type { CommandDeps } from './commands.ts'
 export { applyRoutes } from './routes.ts'
@@ -111,12 +111,8 @@ export function apply(ctx: Context, config: Config): void {
       accountSlots: () => [
         { id: 'default', label: 'default' },
         ...current().accounts.map((account, index) => ({
-          id: typeof account.label === 'string' && account.label.trim() !== ''
-            ? account.label.trim()
-            : `account-${index + 2}`,
-          label: typeof account.label === 'string' && account.label.trim() !== ''
-            ? account.label.trim()
-            : `account-${index + 2}`,
+          id: accountLabel(account.label, index),
+          label: accountLabel(account.label, index),
         })),
       ],
       visibleModels: () => current().visibleModels,

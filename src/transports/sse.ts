@@ -1,42 +1,9 @@
-import { bestEffortFailed } from '../best-effort.ts'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 
-const MAX_FRAME_BYTES = 1_000_000
+import { bestEffortFailed } from '../best-effort.ts'
+import { readWithIdleTimeout } from './stream-reader.ts'
 
-async function readWithIdleTimeout(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  idleTimeoutMs: number,
-  signal: AbortSignal | undefined,
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (signal?.aborted === true) throw signal.reason
-  return await new Promise((resolve, reject) => {
-    let settled = false
-    const finish = (action: () => void) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      signal?.removeEventListener('abort', onAbort)
-      action()
-    }
-    const timer = setTimeout(() => {
-      finish(() => reject(new LlmError(
-        `Ollama Cloud stream went idle for ${idleTimeoutMs}ms`,
-        'TIMEOUT',
-      )))
-      void reader.cancel().catch((err: unknown) => bestEffortFailed('sse:cancel', err))
-    }, idleTimeoutMs)
-    timer.unref?.()
-    const onAbort = () => {
-      finish(() => reject(signal?.reason ?? new DOMException('aborted', 'AbortError')))
-      void reader.cancel().catch((err: unknown) => bestEffortFailed('sse:cancel', err))
-    }
-    signal?.addEventListener('abort', onAbort, { once: true })
-    reader.read().then(
-      (value) => finish(() => resolve(value)),
-      (error: unknown) => finish(() => reject(error)),
-    )
-  })
-}
+const MAX_FRAME_BYTES = 1_000_000
 
 /** Yield the `data:` payload of every SSE event, honoring cancellation and idle timeouts. */
 export async function* sseData(
@@ -49,7 +16,7 @@ export async function* sseData(
   let buffer = ''
   try {
     for (;;) {
-      const result = await readWithIdleTimeout(reader, idleTimeoutMs, signal)
+      const result = await readWithIdleTimeout(reader, idleTimeoutMs, signal, 'sse')
       if (result.done) break
       buffer = (buffer + decoder.decode(result.value, { stream: true })).replace(/\r\n/g, '\n')
       if (Buffer.byteLength(buffer, 'utf8') > MAX_FRAME_BYTES) {

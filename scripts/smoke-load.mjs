@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 
 import { apply, name, inject, OllamaCloudAdapter, Config, effectiveModel, resolveConfig } from '../lib/index.js'
 
-assert.equal(name, 'llm-ollama-cloud')
+assert.equal(name, '@goodandready/dsh-ollama-cloud-provider')
 assert.deepEqual(inject, ['llm'])
 assert.ok(Config !== undefined)
 
@@ -44,6 +44,11 @@ assert.ok(registration?.[2] instanceof OllamaCloudAdapter)
 
 const config = resolveConfig({ apiKey: 'smoke' })
 assert.equal(effectiveModel('gpt-oss:120b', config).transport, 'native')
+
+if (process.env.SMOKE_LIVE !== '1') {
+  console.log('smoke-load: OK (offline; set SMOKE_LIVE=1 for the live catalog check)')
+  process.exit(0)
+}
 
 const adapter = new OllamaCloudAdapter({
   config: () => config,

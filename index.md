@@ -14,7 +14,7 @@
 ## Пользовательские и системные Entry Points
 - Серверная часть: `src/index.ts` -> компилируется в `lib/index.js` (модульный ESM).
 - Клиентская часть: `src/client/index.tsx` -> компилируется в `lib/client.js` (CJS бандл для DSH ModuleLoader).
-- Маршруты API: `src/routes.ts` (`/dsh-ollama/health`, `/status`, `/state`, `/config`, `/update`, `/cooldowns/reset`).
+- Маршруты API: `src/routes.ts` (`/dsh-ollama/health`, `/status`, `/state`, `/analytics`, `/usage`, `/balance`, `/config`, `/key`, `/key/clear`, `/refresh`, `/models/refresh`, `/discover`, `/test`, `/cooldowns/reset`, `/update`).
 
 ## Основные компоненты
 - `src/adapter.ts`: Реализация `LlmAdapter` с ротацией аккаунтов, кулдаунами и стримингом.
