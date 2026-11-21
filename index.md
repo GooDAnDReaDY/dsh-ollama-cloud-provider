@@ -5,7 +5,7 @@
 ## Назначение и текущий статус
 - **Назначение**: Cordis-плагин LLM-провайдера Ollama Cloud для DeepSeek Harness.
 - **Пакет**: `@goodandready/dsh-ollama-cloud-provider` (лицензия MIT).
-- **Текущий статус**: `active` (версия 0.1.40).
+- **Текущий статус**: `active` (версия 0.1.41).
 - **Размещение**:
   - DEV: `/mnt/external/Project/DEV/dhsplugins/dsh-ollama-cloud-provider`
   - Web Profile: `/home/vadim/.dsh/profiles/web`
@@ -30,9 +30,9 @@
 1. `npm run build` — сборка проекта через `tsdown` (`lib/` с `unbundle: true` и `lib/client.js`).
 2. `npm run prepare` — предрелизная сборка (`tsdown 1>&2`).
 3. `npm run typecheck` — проверка типов через `tsc --noEmit`.
-4. `npm test` — полный запуск 39 тестовых файлов (194 теста) через `node --test`.
+4. `npm test` — полный запуск 40 тестовых файлов (198 тестов) через `node --test`.
 5. `npm run pack:check` — проверка на отсутствие `*.tgz` в корне и соблюдение лимита размера файлов (<256 KiB).
-6. `npm run check` — комплексная проверка: `typecheck && test && build && pack:check`.
+6. `npm run check` — комплексная проверка: `typecheck && test && build && smoke-load && pack:check`.
 7. `npm run release` — валидация и упаковка релизного артефакта в `dist/`.
 8. `npm run sync:models` — синхронизация статического каталога моделей с Ollama Cloud API.
 
@@ -43,4 +43,4 @@
   - `bash deploy.sh verify [version]` — проверка работоспособности.
 
 ## Дата и способ последней проверки
-- 21.11.2026: Прогон всех тестов (194/194 pass), preflight (0 FAIL), проверка на стенде MiniPC и в production web-профиле (0.1.40).
+- 21.11.2026: Прогон всех тестов (198/198 pass), preflight (0 FAIL), проверка на стенде MiniPC и в production web-профиле (0.1.41).

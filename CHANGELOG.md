@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.41 — 2026-11-21
+
+- Settings: the page is a list of collapsible cards (`<details>/<summary>`, keyboard accessible) with the DSH card metrics (12px radius, 15px/600 title, 14×16 header); Key and the model editor are open by default, the quota card opens on its 80 % warning and Discover opens on an error. Actions inside a header no longer toggle the card (#148).
+- Localization: one typed `locale.register(NS, { en, zh })` call, a shared `format.ts` for relative time and dates (following the DSH language), translated routing reasons and quota labels, so the Chinese UI no longer mixes English strings (#149).
+- Config: record validation lives only in `config.ts`; `routes-values` delegates to it, including manual models and account rules with the same 1..10,000,000 bounds, so a value can no longer be saved and then silently dropped (#146).
+- Documentation: install instructions are registry-first in all three languages; all 45 settings are listed; RU/ZH gained the web search/fetch section; all three gained Troubleshooting; ZH gained the settings-page section; `dist/*.tgz` removed (#150).
+- Release record: DESIGN, index and CHANGELOG match the code; `scripts/smoke-load.mjs` is fixed, builds-aware and runs inside `npm run check` without network (#151).
+- Refactor: unused exports removed, the NDJSON/SSE idle reader shared, and account labels computed in one place (#147).
+- Audit: `relativeLabel` rolls 60m→1h and 24h→1d, invalid locale tags no longer throw, and the shared card CSS no longer affects non-collapsible cards.
+
+198 tests.
+
 ## 0.1.40 — 2026-11-21
 
 - Settings: an empty numeric field is now unset (`null`) instead of being replaced by a default, invalid values are reported per field and block the save, and `configWritable` disables Save on a read-only host (#140).
