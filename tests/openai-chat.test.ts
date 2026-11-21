@@ -133,3 +133,20 @@ test('openai-chat stream preserves upstream tool_call id and treats empty string
   assert.match(String(deltaEmpty?.id), /^call_[0-9a-f-]{36}$/)
   assert.notEqual(deltaEmpty?.id, '')
 })
+
+test('keeps one tool-call id when upstream sends it after the first delta (#145)', async () => {
+  const chunks = await collect([
+    '{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"read","arguments":"{\\"a\\""}}]}}]}',
+    '{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_upstream_late","function":{"arguments":":1}"}}]}}]}',
+    '{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+    '[DONE]',
+  ])
+  const deltas = chunks.filter((chunk) => chunk.type === 'tool-call-delta') as Array<{ id: string }>
+  const end = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call') as
+    | { block: { id: string } }
+    | undefined
+  assert.equal(deltas.length, 2)
+  assert.equal(new Set(deltas.map((delta) => delta.id)).size, 1, 'all deltas must share one id')
+  assert.match(String(deltas[0]?.id), /^call_[0-9a-f-]{36}$/)
+  assert.equal(end?.block.id, deltas[0]?.id, 'block-end must reuse the emitted id')
+})
