@@ -18,19 +18,6 @@ export interface RequestOutcome {
   error?: string
 }
 
-export interface RequestRecord {
-  at: number
-  provider: string
-  model: string
-  purpose?: string
-  account?: string
-  reason?: string
-  ok?: boolean
-  latencyMs?: number
-  ttftMs?: number
-  error?: string
-}
-
 export interface ModelRequestHeatmap {
   provider: string
   model: string

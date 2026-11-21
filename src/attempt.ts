@@ -1,10 +1,3 @@
-export interface AttemptBudget {
-  readonly signal: AbortSignal
-  readonly timedOut: boolean
-  readonly callerAborted: boolean
-  dispose(): void
-}
-
 export interface BudgetView {
   readonly signal: AbortSignal
   timedOut: boolean

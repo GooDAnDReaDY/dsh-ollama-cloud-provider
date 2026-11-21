@@ -1,4 +1,5 @@
 import type { ManualModel, ModelOverride, ModelPriceOverride, TransportId } from './config.ts'
+import { accountLabel } from './credentials.ts'
 
 const TRANSPORTS = new Set<TransportId>(['native', 'openai-chat'])
 
@@ -28,7 +29,7 @@ export function cleanAccounts(value: unknown): Array<{ label: string; apiKeyEnv:
     const label = typeof record.label === 'string' ? record.label.trim() : ''
     const apiKeyEnv = typeof record.apiKeyEnv === 'string' ? record.apiKeyEnv.trim() : ''
     if (label === '' && apiKeyEnv === '') continue
-    out.push({ label: label === '' ? `account-${out.length + 2}` : label, apiKeyEnv })
+    out.push({ label: accountLabel(label, out.length), apiKeyEnv })
   }
   return out
 }
