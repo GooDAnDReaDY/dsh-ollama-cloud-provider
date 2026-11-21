@@ -11,7 +11,7 @@
 - **Назначение**: LLM-провайдер для DeepSeek Harness, реализующий интеграцию с Ollama Cloud API (native и OpenAI-compatible transports, catalog, usage, analytics, multi-key rotation).
 - **Основные пользователи**: Пользователи DeepSeek Harness (Web и Desktop).
 - **Текущий статус**: active
-- **Статус проверен**: 11.11.2026, полный прогон тестового набора 158/158 тестов, preflight PASS, работа в production web и desktop профилях.
+- **Статус проверен**: 21.11.2026, версия 0.1.40, полный прогон тестового набора 194/194 тестов, preflight PASS, production web-профиль обновлён.
 
 ## Package Policy (DSH-плагин)
 - Все плагины проектируются публичными с первого коммита под scope `@goodandready/`.
