@@ -53,3 +53,13 @@ test('caches the probe so repeated UI polls do not fan out (#137)', async () => 
 
   clearStatusCache()
 })
+
+test('probes without following redirects (#152)', async () => {
+  let redirect: RequestRedirect | undefined
+  const fetchImpl = (async (_input: string | URL | Request, init?: RequestInit) => {
+    redirect = init?.redirect
+    return new Response('{}', { status: 200 })
+  }) as typeof fetch
+  await probeService(config, fetchImpl)
+  assert.equal(redirect, 'error')
+})

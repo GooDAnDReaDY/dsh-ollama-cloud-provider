@@ -197,6 +197,7 @@ export function createUsageReader(
             accept: 'application/json',
             'user-agent': current.userAgent,
           },
+          redirect: 'error',
           signal: AbortSignal.timeout(USAGE_TIMEOUT_MS),
         })
       } catch (error) {

@@ -93,10 +93,10 @@ function effortName(id: string): string {
 
 async function atomicWriteFile(filePath: string, data: string): Promise<void> {
   const dir = dirname(filePath)
-  await mkdir(dir, { recursive: true })
+  await mkdir(dir, { recursive: true, mode: 0o700 })
   const tmp = join(dir, `.${basename(filePath)}.${randomUUID()}.tmp`)
   try {
-    await writeFile(tmp, data, 'utf8')
+    await writeFile(tmp, data, { encoding: 'utf8', mode: 0o600 })
     await rename(tmp, filePath)
   } catch (error) {
     await rm(tmp, { force: true }).catch((err: unknown) => bestEffortFailed('atomicWriteFile:rm-tmp', err))
@@ -562,6 +562,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
+          redirect: 'error',
           signal: controller.signal,
         })
         if (attempt < policy.maxRetries && isRetryableStatus(response.status)) {

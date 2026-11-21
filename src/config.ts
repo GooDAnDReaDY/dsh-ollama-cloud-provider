@@ -310,7 +310,7 @@ function modelOverrideRecord(value: unknown): Record<string, ModelOverride> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
   const out: Record<string, ModelOverride> = {}
   for (const [id, entry] of Object.entries(value)) {
-    if (id === '' || id.includes('..') || typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
+    if (unsafeKey(id) || id === '' || id.includes('..') || typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
     const record = entry as Record<string, unknown>
     const contextWindow = integerInRange(record.contextWindow, 1, 10_000_000)
     const efforts = Array.isArray(record.reasoningEfforts)
@@ -384,9 +384,14 @@ function recordOf(value: unknown): Record<string, unknown> {
     : {}
 }
 
+function unsafeKey(key: string): boolean {
+  return key === '__proto__' || key === 'constructor' || key === 'prototype'
+}
+
 function numberRecord(value: unknown): Record<string, number> {
   const out: Record<string, number> = {}
   for (const [key, entry] of Object.entries(recordOf(value))) {
+    if (unsafeKey(key)) continue
     if (typeof entry === 'number' && Number.isInteger(entry) && entry > 0) out[key] = entry
   }
   return out
@@ -395,6 +400,7 @@ function numberRecord(value: unknown): Record<string, number> {
 function booleanRecord(value: unknown): Record<string, boolean> {
   const out: Record<string, boolean> = {}
   for (const [key, entry] of Object.entries(recordOf(value))) {
+    if (unsafeKey(key)) continue
     if (typeof entry === 'boolean') out[key] = entry
   }
   return out
@@ -403,6 +409,7 @@ function booleanRecord(value: unknown): Record<string, boolean> {
 function priceRecord(value: unknown): Record<string, ModelPriceOverride> {
   const out: Record<string, ModelPriceOverride> = {}
   for (const [key, entry] of Object.entries(recordOf(value))) {
+    if (unsafeKey(key)) continue
     const raw = recordOf(entry)
     const price: ModelPriceOverride = {}
     if (typeof raw.input === 'number' && raw.input >= 0) price.input = raw.input
@@ -418,6 +425,7 @@ const TRANSPORTS = new Set<TransportId>(['native', 'openai-chat'])
 function transportRecord(value: unknown): Record<string, TransportId> {
   const out: Record<string, TransportId> = {}
   for (const [key, entry] of Object.entries(recordOf(value))) {
+    if (unsafeKey(key)) continue
     if (typeof entry === 'string' && TRANSPORTS.has(entry as TransportId)) {
       out[key] = entry as TransportId
     }

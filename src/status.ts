@@ -27,6 +27,7 @@ export async function probeService(
   try {
     const response = await fetchImpl(tagsUrlFor(config), {
       method: 'GET',
+      redirect: 'error',
       signal: controller.signal,
       headers: { accept: 'application/json' },
     })

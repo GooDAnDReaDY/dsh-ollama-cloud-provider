@@ -41,7 +41,7 @@ import {
   isCredentialRef,
   normalizeCredentialRef,
 } from './routes-values.ts'
-import { safeErrorMessage } from './sanitize.ts'
+import { redactText, safeErrorMessage } from './sanitize.ts'
 import type { UsageRange, UsageReader } from './usage.ts'
 
 const MAX_BODY_BYTES = 256 * 1024
@@ -386,7 +386,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
       keyInfo = {
         configured: info.configured,
         writable: info.writable,
-        ...(info.source === undefined ? {} : { source: info.source }),
+        ...(info.source === undefined ? {} : { source: redactText(info.source) }),
       }
     } catch (error) {
       // An invalid reference is reported as unconfigured.
@@ -445,7 +445,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
     accounts.push({
       ...slot,
       configured,
-      source,
+      source: redactText(source),
       active: activeLabel === slot.label,
       coolingUntil: health?.coolingUntil ?? 0,
       mark: health?.reason ?? '',
@@ -494,6 +494,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
     usage: usage ?? null,
     routing: deps.adapter.routingTrace(),
     revision: settingsRevision(ctx),
+    configWritable: getSettings(ctx)?.writable !== false,
     ...(providerError === undefined ? {} : { providerError }),
   }
 }

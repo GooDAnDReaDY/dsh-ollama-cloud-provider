@@ -102,10 +102,10 @@ export function recordRequest(
       const path = requestLogPath()
       const directory = dirname(path)
       if (readyDirectory !== directory) {
-        await mkdir(directory, { recursive: true })
+        await mkdir(directory, { recursive: true, mode: 0o700 })
         readyDirectory = directory
       }
-      await appendFile(path, line, 'utf8')
+      await appendFile(path, line, { encoding: 'utf8', mode: 0o600 })
       appends += 1
       if (appends % COMPACT_EVERY === 0) await compactRequestLog()
     } catch (error) {
@@ -134,7 +134,7 @@ export async function compactRequestLog(
     if (lines.length <= keepLines) return
     const temporary = `${path}.tmp`
     try {
-      await writeFile(temporary, `${lines.slice(-keepLines).join('\n')}\n`, 'utf8')
+      await writeFile(temporary, `${lines.slice(-keepLines).join('\n')}\n`, { encoding: 'utf8', mode: 0o600 })
       await rename(temporary, path)
     } catch (error) {
       await rm(temporary, { force: true }).catch((caught: unknown) => {

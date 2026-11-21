@@ -68,8 +68,8 @@ export async function saveCatalogSnapshot(
   const temp = `${path}.${process.pid}.${createHash('sha1').update(`${Date.now()}`).digest('hex').slice(0, 8)}.tmp`
   const payload: CacheFile = { version: VERSION, baseURL, at: Date.now(), ids, meta }
   try {
-    await mkdir(dirname(path), { recursive: true })
-    await writeFile(temp, `${JSON.stringify(payload)}\n`, 'utf8')
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+    await writeFile(temp, `${JSON.stringify(payload)}\n`, { encoding: 'utf8', mode: 0o600 })
     await rename(temp, path)
   } catch (error) {
     bestEffortFailed('catalog cache write failed', error)

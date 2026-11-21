@@ -170,3 +170,19 @@ test('compacts atomically and leaves no temporary file (#142)', async () => {
     await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
   }
 })
+
+test('writes the request log with restrictive permissions (#152)', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-log-mode-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    recordRequest('ollama-cloud', 'm', Date.now())
+    await flushRequestLog()
+    const info = await stat(requestLogPath())
+    assert.equal(info.mode & 0o777, 0o600)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
+  }
+})

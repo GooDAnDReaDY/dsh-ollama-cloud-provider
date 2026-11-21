@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync } from 'node:fs'
+import { stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -474,4 +475,24 @@ test('a gateway timeout rotates to the next account (#138)', async () => {
   assert.equal(calls, 2)
   assert.equal(adapter.accountHealth('first')?.reason, 'transport')
   assert.equal(adapter.routingTrace()[0]?.account, 'second')
+})
+
+test('persists cooldown state with restrictive permissions (#152)', async () => {
+  const p = paths()
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'unauthorized' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'bad-key', source: 'test' }),
+    fetchImpl,
+    ...p,
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {}
+  })
+  await adapter.flushCooldowns()
+  const info = await stat(p.cooldownPath)
+  assert.equal(info.mode & 0o777, 0o600)
 })

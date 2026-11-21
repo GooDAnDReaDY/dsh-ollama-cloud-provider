@@ -20,7 +20,7 @@ import {
   type TestResult,
   type TransportId,
 } from './api.ts'
-import { draftOf, mergeLoadedDraft, patchOf, safeSame, type Draft } from './settings-draft.ts'
+import { draftOf, draftPatch, mergeLoadedDraft, safeSame, type Draft } from './settings-draft.ts'
 import { CONFIG_CHANGED_EVENT } from './events.ts'
 import { accountMark, Field } from './settings-widgets.tsx'
 import { groupModels, reorderIds } from './model-groups.ts'
@@ -99,6 +99,7 @@ export function OllamaCloudSettingsPage(props: {
 }): ReactNode {
   const { t } = props
   const [state, setState] = useState<HostState | null>(null)
+  const configWritable = state?.configWritable !== false
   const [draft, setDraft] = useState<Draft | null>(null)
   const [original, setOriginal] = useState<Draft | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -152,9 +153,15 @@ export function OllamaCloudSettingsPage(props: {
 
   const save = useCallback(async () => {
     if (draft === null) return
+    const { patch, errors } = draftPatch(draft)
+    const failed = Object.entries(errors)
+    if (failed.length > 0) {
+      setError(failed.map(([name, message]) => `${name}: ${message}`).join('; '))
+      return
+    }
     setSaving(true)
     try {
-      await saveConfig(patchOf(draft))
+      await saveConfig(patch)
       window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT))
       setNotice(t('saved'))
       setError(null)
@@ -898,9 +905,10 @@ export function OllamaCloudSettingsPage(props: {
       <PluginUpdateCard t={t} />
 
       <div className="ocl-row">
-        <button type="button" className="ocl-button ocl-button-primary" disabled={!dirty || saving} onClick={() => { void save() }}>
+        <button type="button" className="ocl-button ocl-button-primary" disabled={!dirty || saving || !configWritable} onClick={() => { void save() }}>
           {saving ? t('saving') : t('save')}
         </button>
+        {configWritable ? null : <span className="ocl-badge ocl-badge-warn">{t('settingsReadOnly')}</span>}
         {dirty ? <span className="ocl-badge ocl-badge-warn">{t('unsaved')}</span> : null}
         <button
           type="button"

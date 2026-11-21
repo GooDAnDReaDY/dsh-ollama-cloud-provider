@@ -1,6 +1,8 @@
 import { bestEffortFailed } from '../best-effort.ts'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 
+const MAX_FRAME_BYTES = 1_000_000
+
 async function readWithIdleTimeout(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   idleTimeoutMs: number,
@@ -49,6 +51,9 @@ export async function* sseData(
       const result = await readWithIdleTimeout(reader, idleTimeoutMs, signal)
       if (result.done) break
       buffer = (buffer + decoder.decode(result.value, { stream: true })).replace(/\r\n/g, '\n')
+      if (buffer.length > MAX_FRAME_BYTES) {
+        throw new LlmError('Ollama Cloud sent an oversized stream event', 'PROVIDER_HTTP_ERROR')
+      }
       for (;;) {
         const boundary = buffer.indexOf('\n\n')
         if (boundary < 0) break

@@ -75,6 +75,11 @@ export interface Draft {
   modelTransports: Record<string, TransportId | ''>
 }
 
+export interface DraftPatch {
+  patch: Record<string, unknown>
+  errors: Record<string, string>
+}
+
 function textOf(value: number | null | undefined): string {
   return value === null || value === undefined ? '' : String(value)
 }
@@ -157,20 +162,31 @@ export function draftOf(state: HostState): Draft {
   }
 }
 
-export function numberOrNull(text: string): number | null {
+/**
+ * An empty field means "unset", never "substitute a default". The schema owns
+ * the default, so an explicit null is the only value that cannot silently
+ * replace what the user typed.
+ */
+export function numberOrNull(text: string, field = 'value'): number | null {
   const trimmed = text.trim()
   if (trimmed === '') return null
   const value = Number(trimmed)
-  if (!Number.isInteger(value) || value < 0) throw new Error(`Invalid number: ${text}`)
+  if (!Number.isInteger(value) || value < 0) throw new Error(`${field} must be a non-negative integer`)
   return value
 }
 
-function boundedNumber(text: string, min: number, max: number, integer: boolean): number | null {
+function boundedNumber(
+  text: string,
+  min: number,
+  max: number,
+  integer: boolean,
+  field = 'value',
+): number | null {
   const trimmed = text.trim()
   if (trimmed === '') return null
   const value = Number(trimmed)
   if (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
-    throw new Error(`Invalid number: ${text}`)
+    throw new Error(`${field} must be ${integer ? 'an integer ' : ''}between ${min} and ${max}`)
   }
   return value
 }
@@ -179,35 +195,72 @@ function stopList(text: string): string[] {
   return text.split(/[\n,]/).map((entry) => entry.trim()).filter((entry) => entry !== '')
 }
 
-export function patchOf(draft: Draft): Record<string, unknown> {
-  return {
+export function draftPatch(draft: Draft): DraftPatch {
+  const errors: Record<string, string> = {}
+  const field = <T>(name: string, compute: () => T): T | null => {
+    try {
+      return compute()
+    } catch (error) {
+      errors[name] = error instanceof Error ? error.message : String(error)
+      return null
+    }
+  }
+
+  const manualModels: Array<Record<string, unknown>> = []
+  draft.manualModels.forEach((model, index) => {
+    const id = model.id.trim()
+    if (id === '') return
+    const name = `manualModels[${index}]`
+    try {
+      const contextWindow = numberOrNull(model.contextWindow, `${name}.contextWindow`)
+      const maxTokens = numberOrNull(model.maxTokens, `${name}.maxTokens`)
+      manualModels.push({
+        id,
+        enabled: model.enabled,
+        ...(model.name.trim() === '' ? {} : { name: model.name.trim() }),
+        ...(contextWindow === null ? {} : { contextWindow }),
+        ...(maxTokens === null ? {} : { maxTokens }),
+        image: model.image,
+        thinking: model.thinking,
+        ...(stopList(model.reasoningEfforts).length === 0
+          ? {}
+          : { reasoningEfforts: stopList(model.reasoningEfforts) }),
+        ...(model.defaultReasoning.trim() === '' ? {} : { defaultReasoning: model.defaultReasoning.trim() }),
+        tools: model.tools,
+      })
+    } catch (error) {
+      errors[name] = error instanceof Error ? error.message : String(error)
+    }
+  })
+
+  const patch: Record<string, unknown> = {
     apiKeyEnv: draft.apiKeyEnv.trim(),
     apiBase: draft.apiBase.trim(),
     openAiBase: draft.openAiBase.trim(),
     usageUrl: draft.usageUrl.trim(),
     balanceUrl: draft.balanceUrl.trim(),
     transport: draft.transport,
-    requestTimeoutMs: numberOrNull(draft.requestTimeoutMs) ?? 300000,
-    streamIdleTimeoutMs: numberOrNull(draft.streamIdleTimeoutMs) ?? 300000,
-    attemptTimeoutMs: boundedNumber(draft.attemptTimeoutMs, 0, 3_600_000, true) ?? 0,
-    retryMaxRetries: boundedNumber(draft.retryMaxRetries, 0, 10, true) ?? 0,
-    retryBaseDelayMs: boundedNumber(draft.retryBaseDelayMs, 0, 60_000, true) ?? 250,
-    retryMaxDelayMs: boundedNumber(draft.retryMaxDelayMs, 0, 120_000, true) ?? 2000,
-    retryJitter: boundedNumber(draft.retryJitter, 0, 1, false) ?? 0.2,
-    maxOutputTokens: numberOrNull(draft.maxOutputTokens),
-    contextWindow: numberOrNull(draft.contextWindow),
-    temperature: boundedNumber(draft.temperature, 0, 2, false),
-    topK: boundedNumber(draft.topK, 1, 1_000_000, true),
-    topP: boundedNumber(draft.topP, 0, 1, false),
-    minP: boundedNumber(draft.minP, 0, 1, false),
-    seed: boundedNumber(draft.seed, 0, 4_294_967_295, true),
-    repeatPenalty: boundedNumber(draft.repeatPenalty, 0, 2, false),
-    repeatLastN: boundedNumber(draft.repeatLastN, -1, 1_000_000, true),
-    numCtx: boundedNumber(draft.numCtx, 1, 10_000_000, true),
+    requestTimeoutMs: field('requestTimeoutMs', () => numberOrNull(draft.requestTimeoutMs, 'requestTimeoutMs')),
+    streamIdleTimeoutMs: field('streamIdleTimeoutMs', () => numberOrNull(draft.streamIdleTimeoutMs, 'streamIdleTimeoutMs')),
+    attemptTimeoutMs: field('attemptTimeoutMs', () => boundedNumber(draft.attemptTimeoutMs, 0, 3_600_000, true, 'attemptTimeoutMs')),
+    retryMaxRetries: field('retryMaxRetries', () => boundedNumber(draft.retryMaxRetries, 0, 10, true, 'retryMaxRetries')),
+    retryBaseDelayMs: field('retryBaseDelayMs', () => boundedNumber(draft.retryBaseDelayMs, 0, 60_000, true, 'retryBaseDelayMs')),
+    retryMaxDelayMs: field('retryMaxDelayMs', () => boundedNumber(draft.retryMaxDelayMs, 0, 120_000, true, 'retryMaxDelayMs')),
+    retryJitter: field('retryJitter', () => boundedNumber(draft.retryJitter, 0, 1, false, 'retryJitter')),
+    maxOutputTokens: field('maxOutputTokens', () => numberOrNull(draft.maxOutputTokens, 'maxOutputTokens')),
+    contextWindow: field('contextWindow', () => numberOrNull(draft.contextWindow, 'contextWindow')),
+    temperature: field('temperature', () => boundedNumber(draft.temperature, 0, 2, false, 'temperature')),
+    topK: field('topK', () => boundedNumber(draft.topK, 1, 1_000_000, true, 'topK')),
+    topP: field('topP', () => boundedNumber(draft.topP, 0, 1, false, 'topP')),
+    minP: field('minP', () => boundedNumber(draft.minP, 0, 1, false, 'minP')),
+    seed: field('seed', () => boundedNumber(draft.seed, 0, 4_294_967_295, true, 'seed')),
+    repeatPenalty: field('repeatPenalty', () => boundedNumber(draft.repeatPenalty, 0, 2, false, 'repeatPenalty')),
+    repeatLastN: field('repeatLastN', () => boundedNumber(draft.repeatLastN, -1, 1_000_000, true, 'repeatLastN')),
+    numCtx: field('numCtx', () => boundedNumber(draft.numCtx, 1, 10_000_000, true, 'numCtx')),
     keepAlive: draft.keepAlive.trim(),
     stop: stopList(draft.stop),
     autoRefresh: draft.autoRefresh,
-    refreshMinutes: boundedNumber(draft.refreshMinutes, 0, 10_080, true) ?? 1440,
+    refreshMinutes: field('refreshMinutes', () => boundedNumber(draft.refreshMinutes, 0, 10_080, true, 'refreshMinutes')),
     showSidebarQuota: draft.showSidebarQuota,
     planLabel: draft.planLabel.trim(),
     activeAccount: draft.activeAccount.trim(),
@@ -228,44 +281,29 @@ export function patchOf(draft: Draft): Record<string, unknown> {
             ([id, val]) => val === false || draft.visibleModels.includes(id),
           ),
         ),
-    manualModels: draft.manualModels
-      .filter((model) => model.id.trim() !== '')
-      .map((model) => ({
-        id: model.id.trim(),
-        enabled: model.enabled,
-        ...(model.name.trim() === '' ? {} : { name: model.name.trim() }),
-        ...(numberOrNull(model.contextWindow) === null ? {} : { contextWindow: numberOrNull(model.contextWindow) }),
-        ...(numberOrNull(model.maxTokens) === null ? {} : { maxTokens: numberOrNull(model.maxTokens) }),
-        image: model.image,
-        thinking: model.thinking,
-        ...(stopList(model.reasoningEfforts).length === 0
-          ? {}
-          : { reasoningEfforts: stopList(model.reasoningEfforts) }),
-        ...(model.defaultReasoning.trim() === '' ? {} : { defaultReasoning: model.defaultReasoning.trim() }),
-        tools: model.tools,
-      })),
+    manualModels,
     modelOrder: draft.modelOrder.filter((id) => id !== ''),
-    contextWindowOverrides: Object.fromEntries(
+    contextWindowOverrides: field('contextWindowOverrides', () => Object.fromEntries(
       Object.entries(draft.contextWindowOverrides)
-        .map(([id, value]) => [id, numberOrNull(value)] as const)
+        .map(([id, value]) => [id, numberOrNull(value, `contextWindowOverrides.${id}`)] as const)
         .filter((entry): entry is readonly [string, number] => entry[1] !== null && entry[1] > 0),
-    ),
-    priceOverrides: Object.fromEntries(
+    )) ?? {},
+    priceOverrides: field('priceOverrides', () => Object.fromEntries(
       Object.entries(draft.priceOverrides)
         .map(([id, price]) => {
           const out: Record<string, number> = {}
-          for (const [field, value] of Object.entries(price)) {
-            const parsed = numberOrNull(value)
-            if (parsed !== null) out[field] = parsed
+          for (const [name, value] of Object.entries(price)) {
+            const parsed = numberOrNull(value, `priceOverrides.${id}.${name}`)
+            if (parsed !== null) out[name] = parsed
           }
           return [id, out] as const
         })
         .filter((entry) => Object.keys(entry[1]).length > 0),
-    ),
-    modelOverrides: Object.fromEntries(
+    )) ?? {},
+    modelOverrides: field('modelOverrides', () => Object.fromEntries(
       Object.entries(draft.modelOverrides)
         .map(([id, override]) => {
-          const contextWindow = numberOrNull(override.contextWindow)
+          const contextWindow = numberOrNull(override.contextWindow, `modelOverrides.${id}.contextWindow`)
           const efforts = stopList(override.reasoningEfforts)
           const out: Record<string, unknown> = {
             ...(contextWindow === null || contextWindow <= 0 ? {} : { contextWindow }),
@@ -278,11 +316,20 @@ export function patchOf(draft: Draft): Record<string, unknown> {
           return [id, out] as const
         })
         .filter((entry) => Object.keys(entry[1]).length > 0),
-    ),
+    )) ?? {},
     modelTransports: Object.fromEntries(
       Object.entries(draft.modelTransports).filter(([, value]) => value !== ''),
     ),
   }
+
+  return { patch, errors }
+}
+
+export function patchOf(draft: Draft): Record<string, unknown> {
+  const { patch, errors } = draftPatch(draft)
+  const first = Object.values(errors)[0]
+  if (first !== undefined) throw new Error(first)
+  return patch
 }
 
 export function same(a: Draft, b: Draft): boolean {
