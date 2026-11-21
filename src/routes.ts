@@ -494,6 +494,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
     usage: usage ?? null,
     routing: deps.adapter.routingTrace(),
     revision: settingsRevision(ctx),
+    configWritable: getSettings(ctx)?.writable !== false,
     ...(providerError === undefined ? {} : { providerError }),
   }
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { HostState } from '../src/client/api.ts'
-import { draftOf, mergeLoadedDraft, patchOf } from '../src/client/settings-draft.ts'
+import { draftOf, draftPatch, mergeLoadedDraft, patchOf } from '../src/client/settings-draft.ts'
 
 function state(config: Partial<HostState['config']>): HostState {
   return {
@@ -119,4 +119,25 @@ test('a manual model row keeps a stable uid that never reaches the patch (#141)'
   const patch = patchOf(draft) as { manualModels: Array<Record<string, unknown>> }
   assert.equal(patch.manualModels.length, 1)
   assert.equal('uid' in (patch.manualModels[0] ?? {}), false)
+})
+
+test('an empty numeric field is unset instead of rewritten with a default (#140)', () => {
+  const draft = draftOf(state({}))
+  draft.requestTimeoutMs = ''
+  draft.retryBaseDelayMs = ''
+  draft.refreshMinutes = ''
+  const patch = patchOf(draft)
+  assert.equal(patch.requestTimeoutMs, null)
+  assert.equal(patch.retryBaseDelayMs, null)
+  assert.equal(patch.refreshMinutes, null)
+})
+
+test('invalid values are reported per field and block the save (#140)', () => {
+  const draft = draftOf(state({}))
+  draft.requestTimeoutMs = 'abc'
+  draft.temperature = '9'
+  const { errors } = draftPatch(draft)
+  assert.match(errors.requestTimeoutMs ?? '', /requestTimeoutMs/)
+  assert.match(errors.temperature ?? '', /temperature/)
+  assert.throws(() => patchOf(draft), /requestTimeoutMs/)
 })

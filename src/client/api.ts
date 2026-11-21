@@ -163,6 +163,7 @@ export interface HostState {
   usage: UsageState | null
   routing: RoutingTraceRow[]
   revision?: number
+  configWritable?: boolean
 }
 
 export interface ServiceStatus {

@@ -659,3 +659,41 @@ test('state reports a provider error instead of an empty catalog (#144)', async 
   assert.deepEqual(body.models, [])
   assert.equal(body.providerError, 'catalog down')
 })
+
+test('state exposes a read-only settings service (#140)', async () => {
+  const routes = new Map<string, (req: unknown, res: unknown) => Promise<void>>()
+  const ctx = {
+    get: (name: string) => name === 'settings' ? { writable: false } : undefined,
+    effect: (fn: () => () => void) => { fn(); return () => {} },
+  } as never
+  const web = {
+    register: ({ path, handler }: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }) => {
+      routes.set(path, handler)
+      return () => {}
+    },
+  } as never
+  applyRoutes(ctx, web, {
+    config: () => resolveConfig({ apiKey: 'k' }),
+    adapter: {
+      listModels: async () => [],
+      accountHealth: () => undefined,
+      routingTrace: () => [],
+      stream: async function* () { yield { type: 'finish', reason: { kind: 'stop' } } },
+    } as never,
+    pool: { resolveAll: async () => [], resolve: async () => { throw new Error('missing') } } as never,
+    usage: { read: async () => undefined, usage: async () => undefined, clear: () => {} } as never,
+    verifyHost: async () => true,
+  })
+
+  const state = routes.get('/dsh-ollama/state')
+  assert.ok(state !== undefined)
+  const res = fakeRes()
+  await state({
+    method: 'GET',
+    headers: { host: '127.0.0.1:3080' },
+    socket: { remoteAddress: '127.0.0.1' },
+  }, res)
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body()) as { configWritable?: boolean }
+  assert.equal(body.configWritable, false)
+})
