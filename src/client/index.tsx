@@ -40,8 +40,10 @@ export const inject = ['slots', 'locale']
  * the sidebar, and the center panel it opens.
  */
 export function apply(ctx: Context): void {
-  ctx.effect(() => ctx.locale.register(NS, 'en', dictionaries.en), 'dsh-ollama-cloud-provider: en copy')
-  ctx.effect(() => ctx.locale.register(NS, 'zh', dictionaries.zh), 'dsh-ollama-cloud-provider: zh copy')
+  ctx.effect(
+    () => ctx.locale.register(NS, { en: dictionaries.en, zh: dictionaries.zh }),
+    'dsh-ollama-cloud-provider: dictionaries',
+  )
   ctx.effect(() => injectCss(), 'dsh-ollama-cloud-provider: styles')
 
   const t = ctx.locale.bind(NS)

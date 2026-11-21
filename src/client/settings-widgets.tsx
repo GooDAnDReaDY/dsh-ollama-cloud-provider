@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import type { AccountRow } from './api.ts'
+import { relativeLabel } from './format.ts'
 
 export function Field(props: {
   label: string
@@ -27,11 +28,8 @@ export function Field(props: {
   )
 }
 
-export function untilText(epoch: number): string {
-  const delta = Math.max(0, epoch - Date.now())
-  if (delta >= 86_400_000) return `${Math.round(delta / 86_400_000)}d`
-  if (delta >= 3_600_000) return `${Math.round(delta / 3_600_000)}h`
-  return `${Math.max(1, Math.round(delta / 60_000))}m`
+export function untilText(epoch: number, t: (key: string) => string): string {
+  return relativeLabel(Math.max(0, epoch - Date.now()), t)
 }
 
 export function accountMark(
@@ -46,5 +44,5 @@ export function accountMark(
       ? t('markRateLimit')
       : t('markTransport')
   if (account.coolingUntil <= 0) return label
-  return `${label} · ${untilText(account.coolingUntil)}`
+  return `${label} · ${untilText(account.coolingUntil, t)}`
 }

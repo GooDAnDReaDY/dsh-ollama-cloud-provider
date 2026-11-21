@@ -22,6 +22,7 @@ import {
 } from './api.ts'
 import { draftOf, draftPatch, mergeLoadedDraft, safeSame, type Draft } from './settings-draft.ts'
 import { CONFIG_CHANGED_EVENT } from './events.ts'
+import { creditsDetail, formatDate, formatTime } from './format.ts'
 import { accountMark, Field } from './settings-widgets.tsx'
 import { groupModels, reorderIds } from './model-groups.ts'
 import { ModelOverrideEditor } from './model-override-editor.tsx'
@@ -409,7 +410,7 @@ export function OllamaCloudSettingsPage(props: {
           </span>
           {service === null
             ? null
-            : <span className="ocl-hint">{service.latencyMs} ms · {new Date(service.checkedAt).toLocaleTimeString()}</span>}
+            : <span className="ocl-hint">{service.latencyMs} ms · {formatTime(service.checkedAt)}</span>}
           <button type="button" className="ocl-button" disabled={serviceBusy} onClick={() => { void loadService() }}>
             {serviceBusy ? t('checkingService') : t('refreshStatus')}
           </button>
@@ -500,14 +501,16 @@ export function OllamaCloudSettingsPage(props: {
                 : (
                   <div className="ocl-accountUsage">
                     {quotaBars(known.usage.report).map((bar) => (
-                      <span className="ocl-badge" key={bar.key} title={bar.detail}>
-                        {bar.detail ?? `${bar.label}: ${bar.remainingPercent.toFixed(0)}% ${t('remaining')}`}
+                      <span className="ocl-badge" key={bar.key} title={bar.detailValues === undefined ? t(bar.labelKey ?? 'quotaWindow') : creditsDetail(bar.detailValues, t)}>
+                        {bar.detailValues === undefined
+                          ? t(bar.labelKey ?? 'quotaWindow')
+                          : creditsDetail(bar.detailValues, t)}
                         {bar.resetsAt === undefined
                           ? ''
-                          : ` · ${t('until')} ${new Date(bar.resetsAt).toLocaleDateString()}`}
+                          : ` · ${t('until')} ${formatDate(bar.resetsAt)}`}
                       </span>
                     ))}
-                    <span className="ocl-hint">{new Date(known.usage.checkedAt).toLocaleTimeString()}</span>
+                    <span className="ocl-hint">{formatTime(known.usage.checkedAt)}</span>
                   </div>
                 )}
               {known?.usage?.report?.windows.d7 === undefined ? null : (

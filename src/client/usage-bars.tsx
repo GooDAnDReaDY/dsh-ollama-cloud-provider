@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import type { QuotaBar } from '../quota-model.ts'
+import { creditsDetail, formatDateTime, relativeLabel } from './format.ts'
 
 function percentClass(percent: number): string {
   if (percent >= 90) return 'ocl-bar-fill ocl-bar-fill-bad'
@@ -8,19 +9,11 @@ function percentClass(percent: number): string {
   return 'ocl-bar-fill'
 }
 
-function reset(iso: string | undefined): string {
+function reset(iso: string | undefined, t: (key: string) => string): string {
   if (iso === undefined) return ''
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
-  const delta = date.getTime() - Date.now()
-  const relative = delta <= 0
-    ? 'now'
-    : delta >= 86_400_000
-      ? `${Math.round(delta / 86_400_000)}d`
-      : delta >= 3_600_000
-        ? `${Math.round(delta / 3_600_000)}h`
-        : `${Math.max(1, Math.round(delta / 60_000))}m`
-  return `${date.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} (${relative})`
+  return `${formatDateTime(date.getTime())} (${relativeLabel(date.getTime() - Date.now(), t)})`
 }
 
 export function UsageBars(props: { bars: readonly QuotaBar[]; t: (key: string) => string }): ReactNode {
@@ -30,27 +23,20 @@ export function UsageBars(props: { bars: readonly QuotaBar[]; t: (key: string) =
     <div className="ocl-bars">
       {bars.map((entry) => (
         <div className="ocl-bar-row" key={entry.key}>
-          <span title={entry.labelKey === undefined ? entry.label : t(entry.labelKey)}>{entry.labelKey === undefined ? entry.label : t(entry.labelKey)}</span>
+          <span title={t(entry.labelKey ?? 'quotaWindow')}>{t(entry.labelKey ?? 'quotaWindow')}</span>
           <div className="ocl-bar">
             <div
               className={percentClass(entry.usedPercent)}
               style={{ width: `${Math.max(0, Math.min(100, entry.usedPercent))}%` }}
             />
           </div>
-          <span title={entry.resetsAt === undefined ? undefined : new Date(entry.resetsAt).toLocaleString()}>
+          <span title={entry.resetsAt === undefined ? undefined : formatDateTime(entry.resetsAt)}>
             {entry.remainingPercent.toFixed(0)}% {t('remaining')}
-            {entry.resetsAt === undefined ? '' : ` · ${reset(entry.resetsAt)}`}
+            {entry.resetsAt === undefined ? '' : ` · ${reset(entry.resetsAt, t)}`}
           </span>
           {entry.detailValues === undefined
-            ? (entry.detail === undefined ? null : <span className="ocl-hint">{entry.detail}</span>)
-            : (
-                <span className="ocl-hint">
-                  ${entry.detailValues.remaining.toFixed(2)} / ${entry.detailValues.allowance.toFixed(2)} {t('remaining')}
-                  {entry.detailValues.purchased > 0
-                    ? ` · ${t('purchased')} $${entry.detailValues.purchased.toFixed(2)}`
-                    : ''}
-                </span>
-              )}
+            ? null
+            : <span className="ocl-hint">{creditsDetail(entry.detailValues, t)}</span>}
         </div>
       ))}
     </div>

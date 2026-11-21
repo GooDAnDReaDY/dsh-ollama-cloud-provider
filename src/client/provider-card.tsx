@@ -39,7 +39,7 @@ export function OllamaProviderCardView(props: {
           {bars.map((bar) => (
             <div className="ocl-row" key={bar.key}>
               <span className="ocl-model-name">
-                {bar.labelKey === undefined ? bar.label : t(bar.labelKey)}
+                {t(bar.labelKey ?? 'quotaWindow')}
               </span>
               <span className="ocl-badge">{bar.remainingPercent.toFixed(0)}% {t('remaining')}</span>
             </div>

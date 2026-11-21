@@ -57,9 +57,7 @@ export function quotaBars(report: UsageReport | undefined): readonly QuotaBar[] 
       ? ((credits.includedAllowance - credits.includedRemaining) / credits.includedAllowance) * 100
       : 0
     return [
-      bar('included', 'Included credits', used, {
-        detail: `$${credits.includedRemaining.toFixed(2)} of $${credits.includedAllowance.toFixed(2)} left`
-          + (credits.purchased > 0 ? ` · $${credits.purchased.toFixed(2)} purchased` : ''),
+      bar('included', '', used, {
         detailValues: {
           remaining: credits.includedRemaining,
           allowance: credits.includedAllowance,
@@ -70,8 +68,8 @@ export function quotaBars(report: UsageReport | undefined): readonly QuotaBar[] 
     ]
   }
   return [
-    legacyBar('fiveHour', '5-hour window', report.legacy?.fiveHour),
-    legacyBar('weekly', 'Weekly window', report.legacy?.weekly),
+    legacyBar('fiveHour', '', report.legacy?.fiveHour),
+    legacyBar('weekly', '', report.legacy?.weekly),
   ].filter((entry): entry is QuotaBar => entry !== undefined)
 }
 
@@ -91,12 +89,12 @@ export function windowRows(report: UsageReport | undefined): readonly WindowRow[
   return [
     report.windows.d24 === undefined
       ? undefined
-      : { key: '24h' as const, label: '24 hours', labelKey: 'last24h', totals: report.windows.d24 },
+      : { key: '24h' as const, label: '', labelKey: 'last24h', totals: report.windows.d24 },
     report.windows.d7 === undefined
       ? undefined
-      : { key: '7d' as const, label: '7 days', labelKey: 'last7d', totals: report.windows.d7 },
+      : { key: '7d' as const, label: '', labelKey: 'last7d', totals: report.windows.d7 },
     report.windows.d30 === undefined
       ? undefined
-      : { key: '30d' as const, label: '30 days', labelKey: 'last30d', totals: report.windows.d30 },
+      : { key: '30d' as const, label: '', labelKey: 'last30d', totals: report.windows.d30 },
   ].filter((entry): entry is WindowRow => entry !== undefined)
 }

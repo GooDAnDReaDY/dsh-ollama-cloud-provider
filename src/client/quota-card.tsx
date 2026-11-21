@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
+import { formatTime, relativeLabel } from './format.ts'
+
 import { quotaBars, windowRows, worstUsedPercent } from '../quota-model.ts'
 import {
   fetchAnalytics,
@@ -80,15 +82,11 @@ function MiniRing(props: { percent: number; size?: number }): ReactNode {
   )
 }
 
-function resetLabel(iso: string | undefined): string {
+function resetLabel(iso: string | undefined, t: (key: string) => string): string {
   if (iso === undefined) return ''
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
-  const delta = date.getTime() - Date.now()
-  if (delta <= 0) return 'now'
-  if (delta >= 86_400_000) return `${Math.round(delta / 86_400_000)}d`
-  if (delta >= 3_600_000) return `${Math.round(delta / 3_600_000)}h`
-  return `${Math.max(1, Math.round(delta / 60_000))}m`
+  return relativeLabel(date.getTime() - Date.now(), t)
 }
 
 export function QuotaCard(props: {
@@ -131,7 +129,7 @@ function QuotaCardBody(props: {
   const plan = state?.config.planLabel?.trim() ?? ''
   const name = plan === '' ? t('quotaCardName') : `${t('quotaCardName')} · ${plan}`
   const detail = bars
-    .map((entry) => `${entry.labelKey === undefined ? entry.label : t(entry.labelKey)}: ${entry.remainingPercent.toFixed(0)}% ${t('remaining')}`)
+    .map((entry) => `${t(entry.labelKey ?? 'quotaWindow')}: ${entry.remainingPercent.toFixed(0)}% ${t('remaining')}`)
     .join(' · ') + (state?.usage?.stale === true ? ` · ${t('lastGoodUsage')}` : '')
 
   return (
@@ -156,10 +154,10 @@ function QuotaCardBody(props: {
         : bars.map((entry) => (
             <span className="ocl-footRow" key={entry.key}>
               <span className="ocl-footHead">
-                <span className="ocl-footLabel">{entry.labelKey === undefined ? entry.label : t(entry.labelKey)}</span>
+                <span className="ocl-footLabel">{t(entry.labelKey ?? 'quotaWindow')}</span>
                 <span className="ocl-footAmount">
                   {entry.remainingPercent.toFixed(0)}% {t('remaining')}
-                  {entry.resetsAt === undefined ? '' : ` · ${resetLabel(entry.resetsAt)}`}
+                  {entry.resetsAt === undefined ? '' : ` · ${resetLabel(entry.resetsAt, t)}`}
                 </span>
               </span>
               <span className="ocl-footBar">
@@ -373,11 +371,11 @@ export function QuotaPanel(props: { t: (key: string) => string; close?: () => vo
                   <tbody>
                     {state.routing.map((row, index) => (
                       <tr key={`${row.at}-${index}`}>
-                        <td>{new Date(row.at).toLocaleTimeString()}</td>
+                        <td>{formatTime(row.at)}</td>
                         <td>{row.account}</td>
                         <td>{row.model}</td>
                         <td>
-                          {row.reason}
+                          {t(`reason_${row.reason}`)}
                           {row.ok ? '' : ` · ${t('routingFailed')}${row.error === undefined ? '' : ` (${row.error})`}`}
                         </td>
                       </tr>
