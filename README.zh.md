@@ -98,15 +98,7 @@ graph LR
 
 ## 安装指南
 
-从源码构建与打包：
-
-```bash
-npm install
-npm run build
-npm pack
-```
-
-从 npm 安装已发布版本：
+从 registry 安装已发布版本：
 
 ```bash
 dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.40
@@ -114,15 +106,23 @@ dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.40
 dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.40
 ```
 
-或通过打包文件安装：
-
-```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.40.tgz
-# DSH 桌面端：
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.40.tgz
-```
-
 安装完成后重启 dsh 或 DSH 桌面端，在模型列表中选择 **Ollama Cloud** 即可。
+
+受支持的安装来源是 registry 中的精确版本。只有在开发插件本身时才需要从源码构建；参见英文
+README 的 Development 一节。
+
+## 网页搜索与抓取
+
+当 DSH 提供 `web` 服务时，插件会把 Ollama Cloud 注册为搜索和抓取提供商（`id: ollama-cloud`）。
+使用与聊天相同的凭据引用调用 `POST <apiBase>/api/web_search` 和 `POST <apiBase>/api/web_fetch`。
+禁止重定向，传输失败重试一次，搜索结果上限 10 条，页面文本上限 256 KiB。
+
+```yaml
+- id: web
+  config:
+    searchProvider: ollama-cloud
+    fetchProvider: ollama-cloud
+```
 
 ## 配置示例
 
@@ -147,6 +147,49 @@ dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud
 ```
 
 除 `apiKey` 外的所有配置项均可在 DSH 设置页直接修改。
+
+### 配置项参考
+
+| 配置项 | 默认值 |
+|---|---|
+| `apiKeyEnv` | `OLLAMA_API_KEY` |
+| `apiKey` | —（仅限 composition） |
+| `apiBase` | `https://ollama.com` |
+| `openAiBase` | `https://ollama.com/v1` |
+| `usageUrl` | `https://ollama.com/api/usage` |
+| `balanceUrl` | `https://ollama.com/api/balance` |
+| `transport` | `native` |
+| `modelTransports` | `{}` |
+| `requestTimeoutMs` | `300000` |
+| `streamIdleTimeoutMs` | `300000` |
+| `attemptTimeoutMs` | `0`（关闭） |
+| `retryMaxRetries` | `0` |
+| `retryBaseDelayMs` | `250` |
+| `retryMaxDelayMs` | `2000` |
+| `retryJitter` | `0.2` |
+| `visibleModels` | `[]` |
+| `showAllModels` | `false` |
+| `modelVisibility` | `{}` |
+| `manualModels` | `[]` |
+| `modelOverrides` | `{}` |
+| `modelOrder` | `[]` |
+| `filterModelsByPlan` | `true` |
+| `contextWindow` | 模型元数据 |
+| `contextWindowOverrides` | `{}` |
+| `maxOutputTokens` | 模型元数据 |
+| `temperature`、`topK`、`topP`、`minP` | 提供商默认值 |
+| `seed`、`repeatPenalty`、`repeatLastN` | 提供商默认值 |
+| `numCtx`、`keepAlive`、`stop` | 提供商默认值 |
+| `autoRefresh` | `true` |
+| `refreshMinutes` | `1440`（`0` 表示仅启动时） |
+| `accounts` | `[]` |
+| `modelAccountRules` | `[]` |
+| `stickySession` | `true` |
+| `activeAccount` | `""` |
+| `showSidebarQuota` | `false` |
+| `planLabel` | `""` |
+| `priceOverrides` | `{}` |
+| `userAgent` | `dsh-ollama-cloud-provider/<版本>` |
 
 ### 密钥配置
 
@@ -192,6 +235,16 @@ DSH Desktop（暗黑主题）中的 Ollama Cloud 设置与用量面板：
 - API 密钥通过 DSH 凭据服务解析；浏览器只能获知是否已配置，无法读取密钥值。
 - 自定义端点必须是完整的 `http(s)` 地址，不得包含账号密码或片段；link-local 与 metadata 地址会被拒绝。
 - `/status` 缓存 10 秒；刷新、测试与端点发现路由为单飞并限流。
+
+## 故障排查
+
+- **模型列表为空** — 打开 `GET /dsh-ollama/health`，`providerError` 会给出原因；检查 `apiBase`、网络和密钥。
+- **401/403** — 密钥被拒绝并冷却 5 分钟；修复凭据后，在设置中重置冷却或调用 `POST /dsh-ollama/cooldowns/reset`。
+- **所有账号都在冷却** — 错误会包含剩余时间和原因（`INVALID_CREDENTIAL`、`QUOTA`、`RATE_LIMIT`）。
+- **多次刷新后用量显示不可用** — `/api/usage` 限制每分钟 10 次；插件会提示 `usage rate limit reached; retry shortly`，请稍等一分钟。
+- **更新按钮不可用** — 运行时未找到 DSH CLI；使用 `dsh plugin --profile web add ...@<版本>` 安装精确版本。
+- **设置为只读** — 宿主的设置服务为只读；保存已禁用，徽章会说明原因。
+- **网关 502/504** — 密钥会切换到下一个账号；路由表中会显示 `rotation`。
 
 ## 限制与注意事项
 

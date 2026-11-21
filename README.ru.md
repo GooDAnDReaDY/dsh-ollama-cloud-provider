@@ -99,15 +99,7 @@ graph LR
 
 ## Установка
 
-Сборка и упаковка из исходного кода:
-
-```bash
-npm install
-npm run build
-npm pack
-```
-
-Установка опубликованного пакета из npm:
+Установите опубликованный пакет из registry:
 
 ```bash
 dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.40
@@ -115,15 +107,24 @@ dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.40
 dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.40
 ```
 
-Либо установка из упакованного tarball:
-
-```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.40.tgz
-# DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.40.tgz
-```
-
 После установки перезапустите dsh (или DSH Desktop) и выберите **Ollama Cloud** в списке моделей.
+
+Поддерживаемый источник установки — точная версия из registry. Сборка из исходников нужна только
+при разработке самого плагина; см. раздел Development в английском README.
+
+## Веб-поиск и загрузка страниц
+
+Если в DSH есть сервис `web`, плагин регистрирует Ollama Cloud как провайдера поиска и загрузки
+страниц (`id: ollama-cloud`). Используются `POST <apiBase>/api/web_search` и
+`POST <apiBase>/api/web_fetch` с тем же credential reference, что и чат. Редиректы запрещены,
+транспортный сбой повторяется один раз, результаты поиска ограничены 10, текст страницы — 256 KiB.
+
+```yaml
+- id: web
+  config:
+    searchProvider: ollama-cloud
+    fetchProvider: ollama-cloud
+```
 
 ## Конфигурация
 
@@ -148,6 +149,49 @@ dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud
 ```
 
 Все поля, кроме `apiKey`, доступны для изменения в интерфейсе настроек DSH.
+
+### Справочник настроек
+
+| Поле | По умолчанию |
+|---|---|
+| `apiKeyEnv` | `OLLAMA_API_KEY` |
+| `apiKey` | — (только composition) |
+| `apiBase` | `https://ollama.com` |
+| `openAiBase` | `https://ollama.com/v1` |
+| `usageUrl` | `https://ollama.com/api/usage` |
+| `balanceUrl` | `https://ollama.com/api/balance` |
+| `transport` | `native` |
+| `modelTransports` | `{}` |
+| `requestTimeoutMs` | `300000` |
+| `streamIdleTimeoutMs` | `300000` |
+| `attemptTimeoutMs` | `0` (выключен) |
+| `retryMaxRetries` | `0` |
+| `retryBaseDelayMs` | `250` |
+| `retryMaxDelayMs` | `2000` |
+| `retryJitter` | `0.2` |
+| `visibleModels` | `[]` |
+| `showAllModels` | `false` |
+| `modelVisibility` | `{}` |
+| `manualModels` | `[]` |
+| `modelOverrides` | `{}` |
+| `modelOrder` | `[]` |
+| `filterModelsByPlan` | `true` |
+| `contextWindow` | из метаданных модели |
+| `contextWindowOverrides` | `{}` |
+| `maxOutputTokens` | из метаданных модели |
+| `temperature`, `topK`, `topP`, `minP` | значение провайдера |
+| `seed`, `repeatPenalty`, `repeatLastN` | значение провайдера |
+| `numCtx`, `keepAlive`, `stop` | значение провайдера |
+| `autoRefresh` | `true` |
+| `refreshMinutes` | `1440` (`0` — только при старте) |
+| `accounts` | `[]` |
+| `modelAccountRules` | `[]` |
+| `stickySession` | `true` |
+| `activeAccount` | `""` |
+| `showSidebarQuota` | `false` |
+| `planLabel` | `""` |
+| `priceOverrides` | `{}` |
+| `userAgent` | `dsh-ollama-cloud-provider/<версия>` |
 
 ### Получение и хранение ключей
 
@@ -222,6 +266,16 @@ modelAccountRules:
 - Ключи читаются через сервис учётных данных DSH; браузер узнаёт только факт наличия ключа, но не его значение.
 - Собственные адреса эндпоинтов должны быть абсолютными `http(s)` без встроенных учётных данных и фрагментов; link-local и metadata-адреса отклоняются.
 - `/status` кэшируется на 10 секунд, а маршруты обновления, теста и поиска эндпоинтов ограничены по частоте и выполняются в единственном экземпляре.
+
+## Диагностика
+
+- **В списке моделей пусто** — проверьте `GET /dsh-ollama/health`: поле `providerError` называет причину. Проверьте `apiBase`, сеть и ключ.
+- **401/403** — ключ отклонён и остывает 5 минут; исправьте credential, затем сбросьте cooldowns в настройках или вызовите `POST /dsh-ollama/cooldowns/reset`.
+- **Все аккаунты остывают** — ошибка содержит оставшееся время и причину (`INVALID_CREDENTIAL`, `QUOTA`, `RATE_LIMIT`).
+- **Расход «недоступен» после нескольких обновлений** — `/api/usage` допускает 10 запросов в минуту; плагин сообщает `usage rate limit reached; retry shortly`. Подождите минуту.
+- **Кнопка обновления неактивна** — CLI DSH не найден в runtime; установите точную версию через `dsh plugin --profile web add ...@<версия>`.
+- **Настройки read-only** — сервис настроек хоста только для чтения; Save отключён, бейдж объясняет причину.
+- **502/504 от шлюза** — ключ переключается на следующий аккаунт; в таблице маршрутизации видно `rotation`.
 
 ## Ограничения
 

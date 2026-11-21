@@ -47,6 +47,16 @@ const en = {
   quotaWeekly: 'Weekly window',
   until: 'until',
   purchased: 'Purchased',
+  now: 'now',
+  minutesShort: 'm',
+  hoursShort: 'h',
+  daysShort: 'd',
+  quotaWindow: 'Quota window',
+  reason_rule: 'rule',
+  reason_sticky: 'sticky',
+  reason_pinned: 'pinned',
+  reason_default: 'default',
+  reason_rotation: 'rotation',
   range: 'Range',
   last24h: 'Last 24 hours',
   last7d: 'Last 7 days',
@@ -296,6 +306,16 @@ const zh: typeof en = {
   quotaWeekly: '每周窗口',
   until: '至',
   purchased: '已购买',
+  now: '现在',
+  minutesShort: '分',
+  hoursShort: '小时',
+  daysShort: '天',
+  quotaWindow: '配额窗口',
+  reason_rule: '规则',
+  reason_sticky: '粘性会话',
+  reason_pinned: '固定账号',
+  reason_default: '默认',
+  reason_rotation: '轮换',
   range: '范围',
   last24h: '最近 24 小时',
   last7d: '最近 7 天',
@@ -496,6 +516,12 @@ const zh: typeof en = {
   checking: '检查中…',
   currentVersion: '当前',
   latestVersion: '最新',
+}
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    'settings.ollama': keyof typeof en
+  }
 }
 
 export const dictionaries = { en, zh }
