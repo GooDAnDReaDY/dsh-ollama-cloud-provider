@@ -117,15 +117,7 @@ graph LR
 
 ## Install
 
-Build and pack first:
-
-```bash
-npm install
-npm run build
-npm pack
-```
-
-Install the published package:
+Install the published package from the registry:
 
 ```bash
 dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.40
@@ -133,18 +125,10 @@ dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.40
 dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.40
 ```
 
-Or install the packed tarball into a profile:
-
-```bash
-dsh plugin --profile web add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.40.tgz
-# DSH Desktop:
-dsh plugin --profile desktop add /absolute/path/to/goodandready-dsh-ollama-cloud-provider-0.1.40.tgz
-```
-
 Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
 
-> **Use the tarball, not the directory.** On dsh 0.2.1-rc.2/rc.3 the Desktop CLI aliases a local
-> directory passed to `dsh plugin add` and overwrites the target's `package.json`.
+The exact registry version is the supported installation source. Build and pack from source only
+when developing the plugin itself; see [Development](#development).
 
 ## Configure
 
@@ -171,6 +155,49 @@ Restart dsh (or DSH Desktop), then pick **Ollama Cloud** in the model picker.
 ```
 
 Every field except `apiKey` is volatile and appears in dsh settings.
+
+### Settings reference
+
+| Field | Default | Meaning |
+|---|---|---|
+| `apiKeyEnv` | `OLLAMA_API_KEY` | Credential-reference name of the primary key. |
+| `apiKey` | — | Literal key, composition only; never commit. |
+| `apiBase` | `https://ollama.com` | Native API root. |
+| `openAiBase` | `https://ollama.com/v1` | OpenAI-compatible root. |
+| `usageUrl` | `https://ollama.com/api/usage` | Spend endpoint. |
+| `balanceUrl` | `https://ollama.com/api/balance` | Balance endpoint. |
+| `transport` | `native` | Default wire protocol. |
+| `modelTransports` | `{}` | Per-model protocol override. |
+| `requestTimeoutMs` | `300000` | Response-header timeout per attempt. |
+| `streamIdleTimeoutMs` | `300000` | Max gap between stream chunks. |
+| `attemptTimeoutMs` | `0` | Whole-attempt budget; `0` disables it. |
+| `retryMaxRetries` | `0` | In-adapter retries before rotation. |
+| `retryBaseDelayMs` | `250` | Backoff base. |
+| `retryMaxDelayMs` | `2000` | Backoff cap. |
+| `retryJitter` | `0.2` | Backoff jitter (0–1). |
+| `visibleModels` | `[]` | Explicit allowlist when not showing all. |
+| `showAllModels` | `false` | Ignore the allowlist and show everything. |
+| `modelVisibility` | `{}` | Per-model explicit show/hide. |
+| `manualModels` | `[]` | Hand-defined models absent from the catalog. |
+| `modelOverrides` | `{}` | Per-model capabilities, context and reasoning. |
+| `modelOrder` | `[]` | Picker order. |
+| `filterModelsByPlan` | `true` | Hide models the plan cannot use. |
+| `contextWindow` | model meta | Global context override. |
+| `contextWindowOverrides` | `{}` | Per-model context override. |
+| `maxOutputTokens` | model meta | Global output cap. |
+| `temperature`…`topP`/`minP` | provider default | Sampling. |
+| `seed`, `repeatPenalty`, `repeatLastN` | provider default | Sampling. |
+| `numCtx`, `keepAlive`, `stop` | provider default | Native generation controls. |
+| `autoRefresh` | `true` | Refresh the catalog in the background. |
+| `refreshMinutes` | `1440` | Refresh interval; `0` = mount only. |
+| `accounts` | `[]` | Extra keys with `label` and `apiKeyEnv`. |
+| `modelAccountRules` | `[]` | Glob `pattern → account` routing. |
+| `stickySession` | `true` | Keep one account per conversation. |
+| `activeAccount` | `""` | Pin one account by label. |
+| `showSidebarQuota` | `false` | Show the sidebar quota card. |
+| `planLabel` | `""` | Optional label next to the provider name. |
+| `priceOverrides` | `{}` | Per-model price overrides. |
+| `userAgent` | `dsh-ollama-cloud-provider/<version>` | Outbound User-Agent. |
 
 ### Keys
 
@@ -269,6 +296,16 @@ The Ollama Cloud settings page in DSH Desktop (dark theme): configured credentia
 - API keys are resolved through the DSH credential service; the browser only learns whether a key is configured, never its value.
 - Custom endpoint URLs must be absolute `http(s)` without embedded credentials or fragments; link-local and metadata addresses are refused.
 - `/status` is cached for 10 seconds, while refresh, test and endpoint-discovery routes are single-flight and rate-limited.
+
+## Troubleshooting
+
+- **No models in the picker** — open `GET /dsh-ollama/health`; `providerError` names the catalog failure. Check `apiBase`, network access and the key.
+- **401/403** — the key is rejected and cooled for 5 minutes; fix the credential, then reset cooldowns in Settings or call `POST /dsh-ollama/cooldowns/reset`.
+- **All accounts cooling** — the error carries the remaining wait and the reason (`INVALID_CREDENTIAL`, `QUOTA`, `RATE_LIMIT`).
+- **Usage is unavailable after several refreshes** — `/api/usage` allows 10 requests per minute; the plugin reports `usage rate limit reached; retry shortly` instead of an outage. Wait a minute.
+- **Update button is disabled** — the DSH CLI entry was not found at runtime; install the exact version with `dsh plugin --profile web add ...@<version>`.
+- **Settings are read-only** — the host's settings service is read-only; Save is disabled and the badge says why.
+- **502/504 from the gateway** — the key rotates to the next account; the routing table shows `rotation`.
 
 ## Limitations
 
