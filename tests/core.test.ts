@@ -8,6 +8,13 @@ import { CONTEXT_WINDOW_EXCEEDED_CODE, type GenerateOptions } from '@deepseek-ai
 
 import { clearCatalogCache, effectiveModel, modelAvailable, modelVisible, refreshCatalog, sortForPicker } from '../src/catalog.ts'
 import { GENERATED_MODELS } from '../src/models.generated.ts'
+import {
+  cleanBooleanRecord,
+  cleanModelOverrides,
+  cleanNumberRecord,
+  cleanPrices,
+  cleanTransports,
+} from '../src/routes-values.ts'
 import { DEFAULT_API_BASE, DEFAULT_OPENAI_BASE, resolveConfig } from '../src/config.ts'
 import { classifyResponseError } from '../src/errors.ts'
 import { buildChatBody, buildNativeBody, buildNativeMessages } from '../src/messages.ts'
@@ -165,6 +172,17 @@ test('prototype keys in config records are ignored (#152)', () => {
   assert.equal(Object.getPrototypeOf(config.modelVisibility), Object.prototype)
   assert.equal('polluted' in config.modelVisibility, false)
   assert.equal(config.modelVisibility.safe, true)
+})
+
+test('route cleaners reuse the config normalizers (#146)', () => {
+  assert.deepEqual(cleanBooleanRecord({ a: true, b: 'x' }), { a: true })
+  assert.deepEqual(cleanNumberRecord({ a: 5, b: -1, c: 1.5 }), { a: 5 })
+  assert.deepEqual(cleanTransports({ a: 'native', b: 'openai-chat', c: 'x' }), { a: 'native', b: 'openai-chat' })
+  assert.deepEqual(cleanPrices({ m: { input: 1, output: -1 } }), { m: { input: 1 } })
+  assert.deepEqual(
+    cleanModelOverrides(JSON.parse('{"m":{"thinking":true},"__proto__":{"x":1}}')),
+    { m: { thinking: true, reasoningEfforts: ['off', 'high'] } },
+  )
 })
 
 test('serves a cached catalog without a network call and refreshes on demand (#139)', async () => {

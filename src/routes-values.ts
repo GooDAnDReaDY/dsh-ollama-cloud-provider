@@ -1,11 +1,12 @@
 import type { ManualModel, ModelOverride, ModelPriceOverride, TransportId } from './config.ts'
+import {
+  booleanRecord,
+  modelOverrideRecord,
+  numberRecord,
+  priceRecord,
+  transportRecord,
+} from './config.ts'
 import { accountLabel } from './credentials.ts'
-
-const TRANSPORTS = new Set<TransportId>(['native', 'openai-chat'])
-
-function unsafeKey(key: string): boolean {
-  return key === '__proto__' || key === 'constructor' || key === 'prototype'
-}
 
 const CREDENTIAL_REF_PATTERN = /^OLLAMA_[A-Z0-9_]+$/
 
@@ -92,77 +93,21 @@ export function cleanManualModels(value: unknown): ManualModel[] {
 }
 
 export function cleanModelOverrides(value: unknown): Record<string, ModelOverride> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-  const out: Record<string, ModelOverride> = {}
-  for (const [id, entry] of Object.entries(value)) {
-    if (unsafeKey(id) || id === '' || id.includes('..') || typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
-    const record = entry as Record<string, unknown>
-    const efforts = Array.isArray(record.reasoningEfforts)
-      ? record.reasoningEfforts.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-      : undefined
-    const thinking = typeof record.thinking === 'boolean' ? record.thinking : undefined
-    const normalizedEfforts = thinking === true && (efforts === undefined || efforts.length === 0)
-      ? ['off', 'high']
-      : thinking === false ? [] : efforts
-    const outEntry: ModelOverride = {
-      ...(typeof record.contextWindow === 'number' && Number.isInteger(record.contextWindow) && record.contextWindow > 0
-        ? { contextWindow: record.contextWindow }
-        : {}),
-      ...(typeof record.image === 'boolean' ? { image: record.image } : {}),
-      ...(thinking === undefined ? {} : { thinking }),
-      ...(normalizedEfforts === undefined ? {} : { reasoningEfforts: normalizedEfforts }),
-      ...(typeof record.defaultEffort === 'string' && record.defaultEffort.trim() !== ''
-        ? { defaultEffort: record.defaultEffort.trim() }
-        : {}),
-      ...(typeof record.enabled === 'boolean' ? { enabled: record.enabled } : {}),
-    }
-    if (Object.keys(outEntry).length > 0) out[id] = outEntry
-  }
-  return out
+  return modelOverrideRecord(value)
 }
 
 export function cleanBooleanRecord(value: unknown): Record<string, boolean> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-  const out: Record<string, boolean> = {}
-  for (const [key, entry] of Object.entries(value)) {
-    if (unsafeKey(key)) continue
-    if (typeof entry === 'boolean') out[key] = entry
-  }
-  return out
+  return booleanRecord(value)
 }
 
 export function cleanNumberRecord(value: unknown): Record<string, number> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-  const out: Record<string, number> = {}
-  for (const [key, entry] of Object.entries(value)) {
-    if (unsafeKey(key)) continue
-    if (typeof entry === 'number' && Number.isInteger(entry) && entry > 0) out[key] = entry
-  }
-  return out
+  return numberRecord(value)
 }
 
 export function cleanTransports(value: unknown): Record<string, TransportId> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-  const out: Record<string, TransportId> = {}
-  for (const [key, entry] of Object.entries(value)) {
-    if (unsafeKey(key)) continue
-    if (typeof entry === 'string' && TRANSPORTS.has(entry as TransportId)) out[key] = entry as TransportId
-  }
-  return out
+  return transportRecord(value)
 }
 
 export function cleanPrices(value: unknown): Record<string, ModelPriceOverride> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-  const out: Record<string, ModelPriceOverride> = {}
-  for (const [key, entry] of Object.entries(value)) {
-    if (unsafeKey(key)) continue
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
-    const raw = entry as Record<string, unknown>
-    const price: ModelPriceOverride = {}
-    if (typeof raw.input === 'number' && raw.input >= 0) price.input = raw.input
-    if (typeof raw.output === 'number' && raw.output >= 0) price.output = raw.output
-    if (typeof raw.cacheRead === 'number' && raw.cacheRead >= 0) price.cacheRead = raw.cacheRead
-    if (Object.keys(price).length > 0) out[key] = price
-  }
-  return out
+  return priceRecord(value)
 }
