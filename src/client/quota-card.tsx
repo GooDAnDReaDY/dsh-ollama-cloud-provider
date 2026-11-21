@@ -184,6 +184,7 @@ export function QuotaPanel(props: { t: (key: string) => string; close?: () => vo
   const { t, close } = props
   const { state, error, load } = useHostState(60_000)
   const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [range, setRange] = useState<'24h' | '7d' | '30d'>('7d')
   const [usage, setUsage] = useState<UsageState | null>(null)
   const [analytics, setAnalytics] = useState<AnalyticsReport | null>(null)
@@ -216,9 +217,17 @@ export function QuotaPanel(props: { t: (key: string) => string; close?: () => vo
 
   const refresh = (): void => {
     setBusy(true)
-    void refreshState()
-      .then(() => load())
-      .finally(() => setBusy(false))
+    setActionError(null)
+    void (async () => {
+      try {
+        await refreshState()
+        await load()
+      } catch (caught) {
+        setActionError(caught instanceof Error ? caught.message : String(caught))
+      } finally {
+        setBusy(false)
+      }
+    })()
   }
 
   return (
@@ -246,6 +255,7 @@ export function QuotaPanel(props: { t: (key: string) => string; close?: () => vo
       </div>
 
       {error === null ? null : <p className="ocl-error">{t('failed')}: {error}</p>}
+      {actionError === null ? null : <p className="ocl-error">{t('failed')}: {actionError}</p>}
 
       <section className="ocl-card">
         <div className="ocl-row">
