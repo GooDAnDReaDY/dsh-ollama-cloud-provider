@@ -311,8 +311,8 @@ export function OllamaCloudSettingsPage(props: {
       {error === null ? null : <div className="ocl-error">{error}</div>}
       {notice === null ? null : <div className="ocl-notice">{notice}</div>}
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">
+      <details className="ocl-card">
+        <summary className="ocl-card-title">
           {t('key')}
           <span className={`ocl-badge ${state.key.configured ? 'ocl-badge-ok' : 'ocl-badge-warn'}`}>
             {state.key.configured ? t('keyConfigured') : t('keyMissing')}
@@ -321,7 +321,7 @@ export function OllamaCloudSettingsPage(props: {
           {accountMark(activeAccount, t) === undefined
             ? null
             : <span className="ocl-badge ocl-badge-bad">{accountMark(activeAccount, t)}</span>}
-        </h3>
+        </summary>
         <p className="ocl-hint">{t('keyHint')}</p>
         {bars.length === 0
           ? <p className="ocl-hint">{t('usageError')}: {state.usage?.error ?? t('noUsage')}</p>
@@ -397,10 +397,10 @@ export function OllamaCloudSettingsPage(props: {
             ? <span className="ocl-notice">{t('testOk').replace('{ms}', String(testResult.latencyMs))}</span>
             : <span className="ocl-error">{t('testFailed')}: {testResult.error}</span>}
         </div>
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">{t('serviceStatus')}</h3>
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('serviceStatus')}</summary>
         <div className="ocl-row ocl-statusRow">
           <span className={`ocl-statusDot${service?.ok === true ? ' ocl-statusDotOk' : service === null ? '' : ' ocl-statusDotBad'}`} />
           <span>
@@ -419,14 +419,14 @@ export function OllamaCloudSettingsPage(props: {
           ? null
           : <p className="ocl-hint">{serviceError ?? service?.error}</p>}
         <p className="ocl-hint">{t('serviceStatusHint')}</p>
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">
+      <details className="ocl-card">
+        <summary className="ocl-card-title">
           {t('quota')}
           <span className="ocl-badge">{activeAccount?.label ?? t('noActiveAccount')}</span>
           <button type="button" className="ocl-button" onClick={() => { void refresh() }}>{t('refresh')}</button>
-        </h3>
+        </summary>
         {worst >= 95 ? <div className="ocl-error">{t('quotaExhausted')}</div> : null}
         {worst >= 80 && worst < 95 ? <div className="ocl-notice">{t('quotaWarning')}</div> : null}
         <UsageBars bars={bars} t={t} />
@@ -455,13 +455,13 @@ export function OllamaCloudSettingsPage(props: {
           </div>
         )}
         <p className="ocl-hint">{t('quotaHint')}</p>
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">
+      <details className="ocl-card">
+        <summary className="ocl-card-title">
           {t('accounts')}
           <span className="ocl-badge">{draft.accounts.length} {t('accountCount')}</span>
-        </h3>
+        </summary>
         <p className="ocl-hint">{t('accountsHint')}</p>
         {draft.accounts.map((account, index) => {
           const known = state.accounts.find((entry) => entry.label === account.label)
@@ -595,10 +595,10 @@ export function OllamaCloudSettingsPage(props: {
             {t('auto')}
           </button>
         </div>
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">{t('modelAccountRules')}</h3>
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('modelAccountRules')}</summary>
         <p className="ocl-hint">{t('modelAccountRulesHint')}</p>
         {draft.modelAccountRules.map((rule, index) => (
           <div className="ocl-row" key={index}>
@@ -642,10 +642,10 @@ export function OllamaCloudSettingsPage(props: {
         >
           {t('addRule')}
         </button>
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">{t('routing')}</h3>
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('routing')}</summary>
         <p className="ocl-hint">{t('routingHint')}</p>
         <label className="ocl-row">
           <input
@@ -656,10 +656,10 @@ export function OllamaCloudSettingsPage(props: {
           <span>{t('stickySession')}</span>
         </label>
         <p className="ocl-hint">{t('stickySessionHint')}</p>
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">
+      <details className="ocl-card">
+        <summary className="ocl-card-title">
           {t('models')}
           <span className="ocl-badge">{state.models.length} {t('modelCount')}</span>
           <button type="button" className="ocl-button" onClick={() => { void reloadModels() }}>
@@ -679,7 +679,7 @@ export function OllamaCloudSettingsPage(props: {
           >
             {t('hideAll')}
           </button>
-        </h3>
+        </summary>
         <p className="ocl-hint">{t('modelsHint')}</p>
         <label className="ocl-row">
           <input
@@ -748,10 +748,11 @@ export function OllamaCloudSettingsPage(props: {
                 </div>
               ))}
         </div>
-      </section>
+      </details>
 
       {editingModel !== null && state.models.some((model) => model.id === editingModel) && (
-        <section className="ocl-card">
+        <details className="ocl-card">
+          <summary className="ocl-card-title">{t('editModel')}</summary>
           <ModelOverrideEditor
             model={state.models.find((model) => model.id === editingModel)!}
             draft={draft}
@@ -759,14 +760,14 @@ export function OllamaCloudSettingsPage(props: {
             update={update}
             close={() => setEditingModel(null)}
           />
-        </section>
+        </details>
       )}
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">
+      <details className="ocl-card">
+        <summary className="ocl-card-title">
           {t('manualModels')}
           <button type="button" className="ocl-button" onClick={addManualModel}>{t('addManualModel')}</button>
-        </h3>
+        </summary>
         <p className="ocl-hint">{t('manualModelsHint')}</p>
         {draft.manualModels.map((model, index) => (
           <div className="ocl-model-section" key={model.uid}>
@@ -785,10 +786,10 @@ export function OllamaCloudSettingsPage(props: {
             <button type="button" className="ocl-button ocl-button-danger" onClick={() => removeManual(index)}>{t('removeManualModel')}</button>
           </div>
         ))}
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">{t('generation')}</h3>
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('generation')}</summary>
         <p className="ocl-hint">{t('generationHint')}</p>
         <div className="ocl-grid">
           <Field label={t('temperature')} type="number" value={draft.temperature} onChange={(value) => update({ temperature: value })} />
@@ -812,10 +813,10 @@ export function OllamaCloudSettingsPage(props: {
         </label>
         <Field label={t('refreshMinutes')} type="number" value={draft.refreshMinutes} onChange={(value) => update({ refreshMinutes: value })} />
         <p className="ocl-hint">{t('autoRefreshHint')}</p>
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">{t('advanced')}</h3>
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('advanced')}</summary>
         <div className="ocl-grid">
           <Field label={t('apiKeyEnv')} hint={t('apiKeyEnvHint')} value={draft.apiKeyEnv} onChange={(value) => update({ apiKeyEnv: value })} />
           <Field label={t('apiBase')} value={draft.apiBase} onChange={(value) => update({ apiBase: value })} />
@@ -845,10 +846,10 @@ export function OllamaCloudSettingsPage(props: {
           <Field label={t('contextWindow')} type="number" value={draft.contextWindow} onChange={(value) => update({ contextWindow: value })} />
           <Field label={t('planLabel')} hint={t('planLabelHint')} value={draft.planLabel} onChange={(value) => update({ planLabel: value })} />
         </div>
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">{t('discover')}</h3>
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('discover')}</summary>
         <p className="ocl-hint">{t('discoverHint')}</p>
         <label className="ocl-field">
           <span>{t('endpoint')}</span>
@@ -890,10 +891,10 @@ export function OllamaCloudSettingsPage(props: {
             </div>
           </div>
         )}
-      </section>
+      </details>
 
-      <section className="ocl-card">
-        <h3 className="ocl-card-title">{t('sidebar')}</h3>
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('sidebar')}</summary>
         <label className="ocl-row">
           <input
             type="checkbox"
@@ -903,7 +904,7 @@ export function OllamaCloudSettingsPage(props: {
           <span>{t('showSidebarQuota')}</span>
         </label>
         <p className="ocl-hint">{t('showSidebarQuotaHint')}</p>
-      </section>
+      </details>
 
       <PluginUpdateCard t={t} />
 

@@ -27,8 +27,13 @@ export const CSS = `
 .ocl-head { display: flex; flex-direction: column; gap: 4px; }
 .ocl-title { font-size: 18px; font-weight: 650; margin: 0; }
 .ocl-hint { font-size: 12px; opacity: 0.72; line-height: 1.5; margin: 0; }
-.ocl-card { border: 1px solid var(--ocl-border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--ocl-fill); }
-.ocl-card-title { font-size: 13px; font-weight: 650; margin: 0; display: flex; align-items: center; gap: 8px; }
+.ocl-card { border: 1px solid var(--ocl-border); border-radius: 12px; background: var(--ocl-fill); display: flex; flex-direction: column; gap: 10px; }
+.ocl-card-title { font-size: 15px; font-weight: 600; line-height: 1.4; margin: 0; padding: 14px 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.ocl-card-title::-webkit-details-marker { display: none; }
+.ocl-card-title::after { content: ''; width: 7px; height: 7px; margin-left: auto; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .16s; color: var(--ocl-text-tertiary); }
+details.ocl-card[open] > .ocl-card-title::after { transform: rotate(225deg); }
+.ocl-card > *:not(.ocl-card-title) { margin-left: 16px; margin-right: 16px; }
+.ocl-card > *:not(.ocl-card-title):last-child { margin-bottom: 14px; }
 .ocl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .ocl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
 .ocl-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }

@@ -306,7 +306,7 @@ function nonEmptyStrings(value: unknown): string[] | undefined {
   return out.length === 0 ? undefined : out
 }
 
-function modelOverrideRecord(value: unknown): Record<string, ModelOverride> {
+export function modelOverrideRecord(value: unknown): Record<string, ModelOverride> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
   const out: Record<string, ModelOverride> = {}
   for (const [id, entry] of Object.entries(value)) {
@@ -388,7 +388,7 @@ function unsafeKey(key: string): boolean {
   return key === '__proto__' || key === 'constructor' || key === 'prototype'
 }
 
-function numberRecord(value: unknown): Record<string, number> {
+export function numberRecord(value: unknown): Record<string, number> {
   const out: Record<string, number> = {}
   for (const [key, entry] of Object.entries(recordOf(value))) {
     if (unsafeKey(key)) continue
@@ -397,7 +397,7 @@ function numberRecord(value: unknown): Record<string, number> {
   return out
 }
 
-function booleanRecord(value: unknown): Record<string, boolean> {
+export function booleanRecord(value: unknown): Record<string, boolean> {
   const out: Record<string, boolean> = {}
   for (const [key, entry] of Object.entries(recordOf(value))) {
     if (unsafeKey(key)) continue
@@ -406,7 +406,7 @@ function booleanRecord(value: unknown): Record<string, boolean> {
   return out
 }
 
-function priceRecord(value: unknown): Record<string, ModelPriceOverride> {
+export function priceRecord(value: unknown): Record<string, ModelPriceOverride> {
   const out: Record<string, ModelPriceOverride> = {}
   for (const [key, entry] of Object.entries(recordOf(value))) {
     if (unsafeKey(key)) continue
@@ -422,7 +422,7 @@ function priceRecord(value: unknown): Record<string, ModelPriceOverride> {
 
 const TRANSPORTS = new Set<TransportId>(['native', 'openai-chat'])
 
-function transportRecord(value: unknown): Record<string, TransportId> {
+export function transportRecord(value: unknown): Record<string, TransportId> {
   const out: Record<string, TransportId> = {}
   for (const [key, entry] of Object.entries(recordOf(value))) {
     if (unsafeKey(key)) continue
