@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.40 — 2026-11-21
+
+- Settings: an empty numeric field is now unset (`null`) instead of being replaced by a default, invalid values are reported per field and block the save, and `configWritable` disables Save on a read-only host (#140).
+- Settings: manual-model rows keep a stable identity while editing, account key buffers are tied to the row, and a cancelled drag clears its state (#141).
+- Catalog: cold loads are single-flight, a failed refresh is stored with a zero timestamp instead of looking fresh, and one scheduler reads `autoRefresh`/`refreshMinutes` on every tick (#139).
+- Diagnostics: a catalog failure surfaces as `providerError` instead of an empty model list, the local usage rate limit is reported as a rate limit, and quota refresh errors are shown (#144).
+- Transports: tool-call ids stay stable within a block even when the upstream id arrives late, NDJSON/SSE frames are capped at 1 MiB, idle timeouts keep their `TIMEOUT` code, and readers are cancelled cleanly (#145, #152).
+- Security: `redirect: 'error'` on every key-bearing request, `0600/0700` state files, prototype keys ignored, discovery pinned to the validated IP, `providerError`/`source` redacted (#152).
+
+194 tests.
+
 ## 0.1.39 — 2026-11-15
 
 - Security: loopback Host detection now requires an IP literal, so a DNS-rebinding page can no longer pass the read host gate or the update endpoint (#135).
