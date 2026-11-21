@@ -185,10 +185,19 @@ export function createUsageReader(
     return Date.now() - hit.checkedAt < ttl ? hit : undefined
   }
 
-  const request = async (url: string, key: string): Promise<Response> => {
+  const noteUsageCall = (): void => {
+    const now = Date.now()
+    const recent = usageCalls.filter((at) => now - at < USAGE_WINDOW_MS)
+    recent.push(now)
+    usageCalls.length = 0
+    usageCalls.push(...recent)
+  }
+
+  const request = async (url: string, key: string, countUsage = false): Promise<Response> => {
     const current = config()
     const policy = retryPolicy({ ...current, retryMaxRetries: Math.max(2, current.retryMaxRetries) })
     for (let attempt = 0; ; attempt += 1) {
+      if (countUsage) noteUsageCall()
       let response: Response
       try {
         response = await fetchImpl(url, {
@@ -249,14 +258,11 @@ export function createUsageReader(
     const now = Date.now()
     const recent = usageCalls.filter((at) => now - at < USAGE_WINDOW_MS)
     if (recent.length >= USAGE_WINDOW_LIMIT) return { rateLimited: true }
-    recent.push(now)
-    usageCalls.length = 0
-    usageCalls.push(...recent)
     try {
       const url = new URL(current.usageUrl)
       url.searchParams.set('range', range)
       url.searchParams.set('group_by', 'model')
-      const response = await request(url.toString(), key)
+      const response = await request(url.toString(), key, true)
       if (!response.ok) {
         if (epoch === generation) {
           cache.set(cacheKey, {

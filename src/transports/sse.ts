@@ -19,15 +19,16 @@ async function readWithIdleTimeout(
       action()
     }
     const timer = setTimeout(() => {
-      reader.cancel().catch((err: unknown) => bestEffortFailed('sse:cancel', err))
       finish(() => reject(new LlmError(
         `Ollama Cloud stream went idle for ${idleTimeoutMs}ms`,
         'TIMEOUT',
       )))
+      void reader.cancel().catch((err: unknown) => bestEffortFailed('sse:cancel', err))
     }, idleTimeoutMs)
+    timer.unref?.()
     const onAbort = () => {
-      reader.cancel().catch((err: unknown) => bestEffortFailed('sse:cancel', err))
       finish(() => reject(signal?.reason ?? new DOMException('aborted', 'AbortError')))
+      void reader.cancel().catch((err: unknown) => bestEffortFailed('sse:cancel', err))
     }
     signal?.addEventListener('abort', onAbort, { once: true })
     reader.read().then(
@@ -51,7 +52,7 @@ export async function* sseData(
       const result = await readWithIdleTimeout(reader, idleTimeoutMs, signal)
       if (result.done) break
       buffer = (buffer + decoder.decode(result.value, { stream: true })).replace(/\r\n/g, '\n')
-      if (buffer.length > MAX_FRAME_BYTES) {
+      if (Buffer.byteLength(buffer, 'utf8') > MAX_FRAME_BYTES) {
         throw new LlmError('Ollama Cloud sent an oversized stream event', 'PROVIDER_HTTP_ERROR')
       }
       for (;;) {
@@ -77,6 +78,11 @@ export async function* sseData(
       if (data !== '') yield data
     }
   } finally {
-    reader.releaseLock()
+    await reader.cancel().catch((err: unknown) => bestEffortFailed('sse:cancel', err))
+    try {
+      reader.releaseLock()
+    } catch (error) {
+      bestEffortFailed('sse:release', error)
+    }
   }
 }

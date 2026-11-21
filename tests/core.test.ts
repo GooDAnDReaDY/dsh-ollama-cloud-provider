@@ -227,7 +227,7 @@ test('coalesces concurrent cold loads into one network refresh (#139)', async ()
   clearCatalogCache()
 })
 
-test('does not cache a failed refresh as a fresh catalog (#139)', async () => {
+test('does not cache a failed refresh as a fresh catalog and retries in the background (#139)', async () => {
   const config = resolveConfig({ apiKey: 'test-key', apiBase: 'https://catalog-failing.example' })
   clearCatalogCache()
   const fallback = Object.keys(GENERATED_MODELS)
@@ -241,7 +241,7 @@ test('does not cache a failed refresh as a fresh catalog (#139)', async () => {
     throw new Error('offline')
   }) as typeof fetch)
   assert.deepEqual(second, fallback)
-  assert.equal(calls, 0, 'the stale entry is served without another network attempt')
+  assert.equal(calls, 2, 'the stale zero-timestamp entry triggers a background retry')
   clearCatalogCache()
 })
 

@@ -211,8 +211,19 @@ export async function refreshCatalog(
     }
   }
   const cached = cache.get(key)
-  if (!force && cached !== undefined) return cached.ids
+  if (!force && cached !== undefined) {
+    const ttl = catalogTtlMs(config)
+    if (ttl > 0 && (cached.at === 0 || Date.now() - cached.at >= ttl)) {
+      void refreshShared(config, fetchImpl, key, true)
+    }
+    return cached.ids
+  }
   return refreshShared(config, fetchImpl, key, cached !== undefined)
+}
+
+function catalogTtlMs(config: ResolvedConfig): number {
+  if (!config.autoRefresh || config.refreshMinutes <= 0) return 0
+  return Math.max(1, Math.floor(config.refreshMinutes)) * 60_000
 }
 
 function refreshShared(
@@ -262,6 +273,7 @@ async function refreshNow(
     if (live.length > 0) {
       const ids = adoptLive(live, tags, key)
       if (ids.length > 0) {
+        if (epoch !== generation) return ids
         cache.set(key, { at: Date.now(), ids })
         await persist(key, ids)
         return ids
@@ -280,6 +292,7 @@ async function refreshNow(
         if (liveKey.startsWith(`${key}|`)) liveMeta.delete(liveKey)
       }
       const ids = discovered
+      if (epoch !== generation) return ids
       cache.set(key, { at: Date.now(), ids })
       await persist(key, ids)
       return ids
