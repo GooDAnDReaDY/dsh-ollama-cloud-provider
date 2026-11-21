@@ -1,0 +1,498 @@
+import assert from 'node:assert/strict'
+import { mkdtempSync } from 'node:fs'
+import { stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import test from 'node:test'
+
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
+
+import { OllamaCloudAdapter } from '../src/adapter.ts'
+import { resolveConfig } from '../src/config.ts'
+import { clearContextOverride, setContextOverride } from '../src/context-override.ts'
+
+function paths(): { cooldownPath: string; stickyPath: string } {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-ollama-adapter-'))
+  return {
+    cooldownPath: join(directory, 'cooldowns.json'),
+    stickyPath: join(directory, 'sticky.json'),
+  }
+}
+
+function ndjson(lines: string[]): Response {
+  return new Response(lines.join('\n'), {
+    status: 200,
+    headers: { 'content-type': 'application/x-ndjson' },
+  })
+}
+
+async function collect(stream: AsyncIterable<StreamChunk>): Promise<StreamChunk[]> {
+  const chunks: StreamChunk[] = []
+  for await (const chunk of stream) chunks.push(chunk)
+  return chunks
+}
+
+const options: GenerateOptions = {
+  provider: 'ollama-cloud',
+  model: 'gpt-oss:120b',
+  messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+}
+
+test('retries a pre-response 503 with a fresh request', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) return new Response('{"error":"temporary"}', { status: 503 })
+    return ndjson(['{"message":{"role":"assistant","content":"ok"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({
+      apiKey: 'k',
+      retryMaxRetries: 1,
+      retryBaseDelayMs: 0,
+      retryMaxDelayMs: 0,
+      retryJitter: 0,
+    }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  assert.equal(calls, 2)
+  assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'ok'))
+})
+
+test('session context override reaches the native request body', async () => {
+  let body: { options?: { num_ctx?: number } } | undefined
+  const fetchImpl = (async (_url: string, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body)) as { options?: { num_ctx?: number } }
+    return ndjson(['{"message":{"role":"assistant","content":"ok"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k', numCtx: 8192 }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  try {
+    setContextOverride('session-context', 16384)
+    await collect(adapter.stream({ ...options, sessionId: 'session-context' as never }))
+    assert.equal(body?.options?.num_ctx, 16384)
+    clearContextOverride('session-context')
+    await collect(adapter.stream({ ...options, sessionId: 'session-context' as never }))
+    assert.equal(body?.options?.num_ctx, 8192)
+  } finally {
+    clearContextOverride('session-context')
+  }
+})
+
+test('per-attempt timeout aborts a stalled chat attempt', async () => {
+  const fetchImpl = (async (_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    if (init?.signal?.aborted) {
+      reject(new DOMException('aborted', 'AbortError'))
+    } else {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+    }
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k', attemptTimeoutMs: 10, requestTimeoutMs: 5000 }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  await assert.rejects(
+    collect(adapter.stream(options)),
+    (error: unknown) => error instanceof Error && 'code' in error && error.code === 'TIMEOUT',
+  )
+})
+
+test('native stream emits thinking, text, usage and finish', async () => {
+  const fetchImpl = (async () => ndjson([
+    '{"message":{"role":"assistant","content":"","thinking":"plan"},"done":false}',
+    '{"message":{"role":"assistant","content":"Hi"},"done":false}',
+    '{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":10,"prompt_eval_cached_count":2,"eval_count":3}',
+  ])) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  assert.ok(chunks.some((chunk) => chunk.type === 'reasoning-delta' && chunk.text === 'plan'))
+  assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'Hi'))
+  const usage = chunks.find((chunk) => chunk.type === 'usage')
+  assert.deepEqual(usage, {
+    type: 'usage',
+    usage: { inputTokens: 8, outputTokens: 3, totalTokens: 13, cacheReadTokens: 2 },
+  })
+  assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+})
+
+test('native stream assembles complete tool calls', async () => {
+  const fetchImpl = (async () => ndjson([
+    '{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"read","arguments":{"path":"a"}}}]},"done":false}',
+    '{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop"}',
+  ])) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  const end = chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+  assert.equal(end?.type === 'block-end' && end.block.type === 'tool-call' ? end.block.name : '', 'read')
+  assert.equal(
+    end?.type === 'block-end' && end.block.type === 'tool-call' ? end.block.arguments : '',
+    '{"path":"a"}',
+  )
+  assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'tool-calls' } })
+})
+
+test('an invalid key rotates to the next account before streaming', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: 'invalid credentials' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return ndjson([
+      '{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}',
+    ])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'bad' }),
+    resolveKey: async () => ({ key: 'bad', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'bad', source: 'first', label: 'first' },
+      { key: 'good', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'OK'))
+  assert.equal(calls, 2)
+  assert.equal(adapter.accountHealth('bad')?.reason, 'invalid-credential')
+  assert.equal(adapter.accountHealth('good'), undefined)
+  const trace = adapter.routingTrace()
+  assert.equal(trace[0]?.account, 'second')
+})
+
+test('OpenAI-compatible stream parses reasoning and usage', async () => {
+  const body = [
+    'data: {"choices":[{"delta":{"reasoning_content":"think"}}]}',
+    'data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":"stop"}]}',
+    'data: {"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}',
+    'data: [DONE]',
+    '',
+  ].join('\n\n')
+  const fetchImpl = (async () => new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k', transport: 'openai-chat' }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  assert.ok(chunks.some((chunk) => chunk.type === 'reasoning-delta' && chunk.text === 'think'))
+  assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'Hi'))
+  assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+})
+
+test('a single-account transport error does not create a cooldown', async () => {
+  const fetchImpl = (async () => { throw new TypeError('fetch failed') }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'only', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {
+      // Consume the stream so the adapter runs to its error path.
+    }
+  }, /fetch failed/)
+  assert.equal(adapter.accountHealth('only'), undefined)
+})
+
+test('a single-account credential rejection still cools the key', async () => {
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'invalid credentials' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'only', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {
+      // Consume the stream so the adapter runs to its error path.
+    }
+  })
+  assert.equal(adapter.accountHealth('only')?.reason, 'invalid-credential')
+})
+
+test('resolveModel does not advertise an unimplemented tool projection', async () => {
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'k', source: 'test' }),
+    ...paths(),
+  })
+  const resolved = await adapter.resolveModel('ollama-cloud', 'gpt-oss:120b')
+  assert.equal('toolUpdate' in resolved, false)
+})
+
+test('a model-scoped quota rotates without cooling the key', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: 'insufficient credits for this model' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'OK'))
+  assert.equal(calls, 2)
+  assert.equal(adapter.accountHealth('first'), undefined)
+  assert.equal(adapter.accountHealth('second'), undefined)
+})
+
+test('a model-scoped mark skips the key for that model only', async () => {
+  const auths: string[] = []
+  let failFirst = true
+  const fetchImpl = (async (_input: string | URL | Request, init?: RequestInit) => {
+    const auth = (init?.headers as Record<string, string> | undefined)?.authorization ?? ''
+    auths.push(auth)
+    if (failFirst && auth.includes('first')) {
+      return new Response(JSON.stringify({ error: 'insufficient credits for this model' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+
+  await collect(adapter.stream(options))
+  assert.deepEqual(auths, ['Bearer first', 'Bearer second'])
+
+  auths.length = 0
+  await collect(adapter.stream(options))
+  assert.deepEqual(auths, ['Bearer second'])
+
+  auths.length = 0
+  failFirst = false
+  await collect(adapter.stream({ ...options, model: 'other:1b' }))
+  assert.deepEqual(auths, ['Bearer first'])
+})
+
+test('an unsupported model rotates without cooling the key', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: 'model not found' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+  await collect(adapter.stream(options))
+  assert.equal(calls, 2)
+  assert.equal(adapter.accountHealth('first'), undefined)
+})
+
+test('a single-account model-scoped quota leaves the key usable', async () => {
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'insufficient credits for this model' }), {
+    status: 403,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'only' }),
+    resolveKey: async () => ({ key: 'only', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {
+      // Consume the stream so the adapter runs to its error path.
+    }
+  }, (error: unknown) => error instanceof Error && (error as { code?: string }).code === 'QUOTA')
+  assert.equal(adapter.accountHealth('only'), undefined)
+})
+
+test('an account-wide quota still cools the key', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: 'usage limit reached' }), {
+        status: 402,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+  await collect(adapter.stream(options))
+  assert.equal(calls, 2)
+  assert.equal(adapter.accountHealth('first')?.reason, 'quota')
+})
+
+test('401/403 cools for 5 minutes and surfaces INVALID_CREDENTIAL when all accounts cool', async () => {
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'unauthorized' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'single-bad', source: 'test' }),
+    fetchImpl,
+    ...paths(),
+  })
+  // First attempt marks account as cooling
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {}
+  })
+  const health = adapter.accountHealth('single-bad')
+  assert.ok(health !== undefined)
+  assert.equal(health.reason, 'invalid-credential')
+  const cooldownDuration = health.coolingUntil - Date.now()
+  assert.ok(cooldownDuration > 4 * 60 * 1000 && cooldownDuration <= 5 * 60 * 1000)
+
+  // Second attempt finds all accounts cooling down and reports INVALID_CREDENTIAL with retry time
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {}
+  }, (err: unknown) => {
+    assert.ok(err instanceof Error)
+    assert.equal((err as { code?: string }).code, 'INVALID_CREDENTIAL')
+    assert.match(err.message, /invalid credentials \(retry in \d+m\)/)
+    return true
+  })
+})
+
+test('clearCooldowns resets in-memory health and writes empty cooldown state atomically', async () => {
+  const p = paths()
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'unauthorized' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'bad-key', source: 'test' }),
+    fetchImpl,
+    ...p,
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {}
+  })
+  await adapter.flushCooldowns()
+  assert.ok(adapter.accountHealth('bad-key') !== undefined)
+
+  adapter.clearCooldowns()
+  assert.equal(adapter.accountHealth('bad-key'), undefined)
+  await adapter.flushCooldowns()
+
+  const raw = await import('node:fs/promises').then((fs) => fs.readFile(p.cooldownPath, 'utf8'))
+  const parsed = JSON.parse(raw) as { cooldowns?: Record<string, unknown> }
+  assert.deepEqual(parsed.cooldowns, {})
+})
+
+test('a gateway timeout rotates to the next account (#138)', async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls += 1
+    if (calls === 1) {
+      return new Response('upstream timeout', { status: 504, headers: { 'content-type': 'text/plain' } })
+    }
+    return ndjson(['{"message":{"role":"assistant","content":"OK"},"done":true,"done_reason":"stop"}'])
+  }) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'first' }),
+    resolveKey: async () => ({ key: 'first', source: 'test' }),
+    resolveKeys: async () => [
+      { key: 'first', source: 'first', label: 'first' },
+      { key: 'second', source: 'second', label: 'second' },
+    ],
+    fetchImpl,
+    ...paths(),
+  })
+  const chunks = await collect(adapter.stream(options))
+  assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'OK'))
+  assert.equal(calls, 2)
+  assert.equal(adapter.accountHealth('first')?.reason, 'transport')
+  assert.equal(adapter.routingTrace()[0]?.account, 'second')
+})
+
+test('persists cooldown state with restrictive permissions (#152)', async () => {
+  const p = paths()
+  const fetchImpl = (async () => new Response(JSON.stringify({ error: 'unauthorized' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
+  const adapter = new OllamaCloudAdapter({
+    config: () => resolveConfig({ apiKey: 'k' }),
+    resolveKey: async () => ({ key: 'bad-key', source: 'test' }),
+    fetchImpl,
+    ...p,
+  })
+  await assert.rejects(async () => {
+    for await (const _chunk of adapter.stream(options)) {}
+  })
+  await adapter.flushCooldowns()
+  const info = await stat(p.cooldownPath)
+  assert.equal(info.mode & 0o777, 0o600)
+})

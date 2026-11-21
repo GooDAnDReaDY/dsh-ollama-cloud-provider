@@ -1,0 +1,295 @@
+# 📦 @goodandready/dsh-ollama-cloud-provider
+
+<div align="center">
+
+<h3>Плагин-провайдер Ollama Cloud для DeepSeek Harness</h3>
+
+<p>
+  <a href="https://goodandready.app/"><img src="https://img.shields.io/badge/🌐_DSH_Hub-goodandready.app-ff4500.svg?style=for-the-badge&labelColor=1a1a2e" alt="Витрина GoodAndReady"></a>
+  <a href="https://www.npmjs.com/package/@goodandready/dsh-ollama-cloud-provider"><img src="https://img.shields.io/npm/v/@goodandready/dsh-ollama-cloud-provider?style=for-the-badge&color=crimson&logo=npm" alt="npm версия"></a>
+  <a href="https://github.com/GooDAnDReaDY/dsh-ollama-cloud-provider/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="Лицензия"></a>
+</p>
+
+</div>
+
+<table align="center">
+  <tr>
+    <td align="center">
+      ⭐ <strong>Если вам нравится этот плагин, поставьте ему Star на GitHub</strong> — это покажет мне, что плагин полезен, и добавит мотивации продолжать его развитие.
+      <br><br>
+      🐛 <strong>Если вы нашли баг или хотите предложить новую функцию</strong>, создайте Issue на GitHub на любом языке — я рассмотрю предложение и реализую полезные улучшения в одной из следующих версий плагина.
+    </td>
+  </tr>
+</table>
+
+---
+
+Плагин-провайдер **Ollama Cloud** для [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/) (dsh).
+
+Плагин регистрирует один нативный LLM-маршрут `ollama-cloud` (`https://ollama.com`) и поддерживает два протокола передачи данных:
+
+| Транспорт | Эндпоинт | Назначение |
+|---|---|---|
+| `native` (по умолчанию) | `POST /api/chat` | thinking, вызовы инструментов (tool calls), счётчики usage (NDJSON) |
+| `openai-chat` | `POST /v1/chat/completions` | Совместимость с OpenAI API и резервный транспорт (SSE) |
+
+Ключи разрешаются динамически на каждый вызов: смена credential применяется мгновенно без перезапуска сервера.
+
+## Архитектура
+
+```mermaid
+graph LR
+    subgraph DSH["Ядро DeepSeek Harness"]
+        Agent["DSH Агент / Чат"]
+        Creds["Сервис учетных данных / окружение"]
+    end
+
+    subgraph Plugin["dsh-ollama-cloud-provider"]
+        Router{"Маршрут: ollama-cloud"}
+        Pool["Пул аккаунтов<br/>ротация, cooldown, sticky"]
+        Catalog["Живой каталог<br/>/v1/models + /api/tags"]
+        Usage["Баланс и расход<br/>/api/balance + /api/usage"]
+
+        subgraph Transports["Протоколы передачи"]
+            T1["Native /api/chat (NDJSON)"]
+            T2["OpenAI /v1/chat/completions (SSE)"]
+        end
+    end
+
+    subgraph Ollama["Ollama Cloud"]
+        Chat["ollama.com/api/chat"]
+        OpenAI["ollama.com/v1/chat/completions"]
+        Billing["/api/balance, /api/usage"]
+    end
+
+    Agent --> Router
+    Creds -.-> Pool
+    Router --> Pool
+    Pool --> Transports
+    T1 --> Chat
+    T2 --> OpenAI
+    Catalog --> Router
+    Usage --> Billing
+```
+
+## Полный обзор возможностей
+
+- **Два транспорта**, выбираемые индивидуально для каждой модели: нативный протокол Ollama API (NDJSON) и совместимый шлюз OpenAI (SSE).
+- **Поддержка всех режимов**: текст, reasoning/thinking, вызовы функций/инструментов, изображения (vision), подсчёт токенов и finish reasons на обоих транспортах.
+- **Уникальные идентификаторы вызовов инструментов**: генерация глобально уникальных ID для каждого шага исключает коллизии в мультишаговых сессиях агентов и защищает журнал сессий DSH от повреждения.
+- **Живой каталог моделей**: автоматическое чтение `GET /v1/models`, дополненное флагами возможностей `capabilities` (`tools`, `thinking`, `vision`) из `GET /api/tags`.
+- **Точные лимиты и метаданные**: контекстное окно, входные модальности, уровни reasoning и значение по умолчанию, статус поддержки инструментов и видимость в API.
+- **Баланс и аналитика расхода**: интеграция с официальными облачными эндпоинтами `/api/balance` и `/api/usage` — включённые и купленные кредиты, расход за 24 часа / 7 дней / 30 дней, а также группировка по моделям.
+- **Пул аккаунтов с авто-ротацией до первого токена**: при получении 401, 403, 429 или ответа об исчерпании квоты ключ переводится в cooldown, а запрос автоматически перенаправляется на следующий доступный аккаунт. Состояния cooldown сохраняются между перезапусками по SHA-256 fingerprint.
+- **Sticky sessions**: закрепление одного аккаунта за конкретным диалогом, плюс гибкие правила `модель ➔ аккаунт` по glob-паттернам.
+- **Оценка стоимости**: тарификация по официальному прайс-листу Ollama Cloud, включая ночные скидки (off-peak rates) и возможность ручного переопределения цен на модель.
+- **Интерфейс в браузере (Web UI)**:
+  - **Настройки → Ollama Cloud**: управление ключами, отображение баланса, пул аккаунтов, правила маршрутизации, allowlist моделей, выбор транспорта.
+  - **Карточка квоты в сайдбаре**: кольцевой индикатор с наиболее загруженным окном и детализацией остатка кредитов (по умолчанию выключена и не нагружает сеть фоновыми опросами; рядом с названием можно показать `planLabel`, например `PRO`).
+  - **Центральная панель квот**: окна расходов, разбивка по моделям, трейс маршрутизации, аналитика токенов и интерактивный heatmap запросов.
+- **Команда `/ollama`**: статус провайдера, квоты, баланс, список аккаунтов, моделей, правил и запуск тестового запроса `test [model]`.
+- **Интеграция с терминалом (TUI)**: специальная секция настроек в терминальном режиме.
+- **One-Click обновление плагина**: прямая проверка npm registry и кнопка обновления в Web UI.
+
+## Requirements / Требования
+
+- **DeepSeek Harness**: `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0` (профили desktop и web).
+- **Node.js**: `>=22.0.0`.
+- **Аккаунт Ollama Cloud**: один или несколько действующих API-ключей Ollama Cloud или совместимого прокси.
+
+## Установка
+
+Установите опубликованный пакет из registry:
+
+```bash
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.41
+# DSH Desktop:
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.41
+```
+
+После установки перезапустите dsh (или DSH Desktop) и выберите **Ollama Cloud** в списке моделей.
+
+Поддерживаемый источник установки — точная версия из registry. Сборка из исходников нужна только
+при разработке самого плагина; см. `README.md`, раздел Development.
+
+## Веб-поиск и загрузка страниц
+
+Если в DSH есть сервис `web`, плагин регистрирует Ollama Cloud как провайдера поиска и загрузки
+страниц (`id: ollama-cloud`). Используются `POST <apiBase>/api/web_search` и
+`POST <apiBase>/api/web_fetch` с тем же credential reference, что и чат. Редиректы запрещены,
+транспортный сбой повторяется один раз, результаты поиска ограничены 10, текст страницы — 256 KiB.
+
+```yaml
+- id: web
+  config:
+    searchProvider: ollama-cloud
+    fetchProvider: ollama-cloud
+```
+
+## Конфигурация
+
+```yaml
+- id: llm-ollama-cloud
+  name: "@goodandready/dsh-ollama-cloud-provider"
+  config:
+    apiKeyEnv: OLLAMA_API_KEY      # имя переменной или credential
+    # apiKey: ...                  # только в composition, не коммитить в git
+    transport: native              # native | openai-chat
+    requestTimeoutMs: 300000
+    streamIdleTimeoutMs: 300000
+    visibleModels: []
+    modelTransports: {}
+    accounts:
+      - label: Work
+        apiKeyEnv: OLLAMA_API_KEY_2
+    activeAccount: ''              # метка для принудительного закрепления
+    stickySession: true
+    showSidebarQuota: false
+    planLabel: ''                  # необязательно, например PRO
+```
+
+Все поля, кроме `apiKey`, доступны для изменения в интерфейсе настроек DSH.
+
+### Справочник настроек
+
+| Поле | По умолчанию |
+|---|---|
+| `apiKeyEnv` | `OLLAMA_API_KEY` |
+| `apiKey` | — (только composition) |
+| `apiBase` | `https://ollama.com` |
+| `openAiBase` | `https://ollama.com/v1` |
+| `usageUrl` | `https://ollama.com/api/usage` |
+| `balanceUrl` | `https://ollama.com/api/balance` |
+| `transport` | `native` |
+| `modelTransports` | `{}` |
+| `requestTimeoutMs` | `300000` |
+| `streamIdleTimeoutMs` | `300000` |
+| `attemptTimeoutMs` | `0` (выключен) |
+| `retryMaxRetries` | `0` |
+| `retryBaseDelayMs` | `250` |
+| `retryMaxDelayMs` | `2000` |
+| `retryJitter` | `0.2` |
+| `visibleModels` | `[]` |
+| `showAllModels` | `false` |
+| `modelVisibility` | `{}` |
+| `manualModels` | `[]` |
+| `modelOverrides` | `{}` |
+| `modelOrder` | `[]` |
+| `filterModelsByPlan` | `true` |
+| `contextWindow` | из метаданных модели |
+| `contextWindowOverrides` | `{}` |
+| `maxOutputTokens` | из метаданных модели |
+| `temperature`, `topK`, `topP`, `minP` | значение провайдера |
+| `seed`, `repeatPenalty`, `repeatLastN` | значение провайдера |
+| `numCtx`, `keepAlive`, `stop` | значение провайдера |
+| `autoRefresh` | `true` |
+| `refreshMinutes` | `1440` (`0` — только при старте) |
+| `accounts` | `[]` |
+| `modelAccountRules` | `[]` |
+| `stickySession` | `true` |
+| `activeAccount` | `""` |
+| `showSidebarQuota` | `false` |
+| `planLabel` | `""` |
+| `priceOverrides` | `{}` |
+| `userAgent` | `dsh-ollama-cloud-provider/<версия>` |
+
+### Получение и хранение ключей
+
+1. `config.apiKey` в файле конфигурации (`role('secret')`).
+2. Системный сервис учетных данных DSH по имени `apiKeyEnv` (по умолчанию `OLLAMA_API_KEY`).
+3. Переменные окружения процесса, `.env` проекта или `$DSH_HOME/.env`.
+
+Ключ создается в личном кабинете: <https://ollama.com/settings/keys>. Ключи бессрочные; облачный API принимает только заголовок `Authorization: Bearer`.
+
+### Пул аккаунтов и ротация
+
+Дополнительный аккаунт добавляется в **Настройки → Ollama Cloud → Аккаунты**: укажите имя метки и credential reference (например, `OLLAMA_API_KEY_2`), вставьте токен и сохраните. Ротация происходит **строго до начала генерации потока**: отклонённый ключ получает cooldown, а запрос повторяется со следующим готовым аккаунтом.
+
+Состояния cooldown сохраняются в `~/.dsh/storages/dsh-ollama/cooldowns.json` по SHA-256 хешу ключа. Ошибки авторизации (401/403) охлаждают ключ на 5 минут вместо суток, ошибки квоты учитывают Retry-After. Сбросить охлаждение всех ключей можно кнопкой «Сбросить охлаждение» в карточке аккаунтов или вызовом `POST /dsh-ollama/cooldowns/reset`.
+
+### Правила привязки «модель ➔ аккаунт»
+
+```yaml
+modelAccountRules:
+  - pattern: "*flash*"
+    account: "Work"
+```
+
+Первый совпавший glob-паттерн направляет модель на указанный аккаунт, остальные аккаунты остаются в резерве.
+
+## Баланс и мониторинг расхода
+
+- `GET /api/balance` — поддерживает новый формат (`included.balance_usd`, `allowance_usd`, `period`, `purchased.balance_usd`) и legacy-формат (`session` / `weekly` с `remaining_percent`).
+- `GET /api/usage?range=24h|7d|30d&group_by=model` — суммарные показатели и разбивка по моделям.
+
+Эндпоинт `/api/usage` ограничен лимитом в **10 запросов в минуту**, поэтому баланс кэшируется на 60 секунд, статистика расхода — на 120 секунд. Фоновых опросов нет; временная недоступность квот не прерывает работу чата.
+
+## Страница настроек Web UI
+
+В разделе **Настройки → Ollama Cloud**:
+- **Key**: статус ключа, вставка, очистка, кнопка **Test connection**.
+- **Balance & Usage**: шкалы кредитов, окна расходов, предупреждения при 80% и 95%.
+- **Accounts**: управление пулом дополнительных учетных записей.
+- **Service status**: доступность, задержка и время последней проверки.
+- **Model rules**: настройка правил ротации по моделям.
+- **Routing**: sticky-сессия для диалога.
+- **Models**: поиск, принудительное обновление каталога моделей, allowlist, переопределение транспорта.
+- **Manual catalog entries**: добавление моделей, которых нет в каталоге.
+- **Generation defaults**: параметры сэмплинга и лимиты вывода.
+- **Connection**: базовые адреса, таймауты, лимиты токенов, переопределение контекста.
+- **Discover**: проверка несохранённого эндпоинта одноразовым ключом.
+- **Sidebar**: показ карточки квоты и метка плана.
+- **Plugin update**: проверка обновлений и кнопка **Update now**.
+
+## Визуальная верификация
+
+Настройки и баланс Ollama Cloud в интерфейсе DSH Desktop (темная тема):
+
+![Настройки Ollama Cloud](media/visual-verification.png)
+
+## Команды CLI
+
+```bash
+/ollama status            # статус провайдера, квоты, модели
+/ollama usage             # окна расходов и статистика по моделям
+/ollama balance           # баланс кредитов
+/ollama accounts          # список аккаунтов и их расход
+/ollama models            # каталог моделей и параметры
+/ollama rules             # правила модель ➔ аккаунт
+/ollama test [model]      # проверочный запрос к модели
+```
+
+## Проверенные факты API (2026-10-21)
+
+- `GET https://ollama.com/v1/models` возвращает стандартный `data[]` и расширенный массив `models[]` с метаданными контекста и модальностей.
+- `GET https://ollama.com/api/tags` служит источником флагов `capabilities` по моделям.
+- Нативный `/api/chat` передает NDJSON с подробной статистикой токенов в финальном объекте.
+- Совместимый эндпоинт OpenAI `/v1/chat/completions` поддерживает стриминг, инструменты, зрение (vision) и `reasoning_effort`.
+
+## Безопасность
+
+- Write-маршруты требуют loopback-сокет, same-origin `Origin`/`Referer` и проверку подлинности хоста; DNS-имя никогда не считается loopback.
+- Ключи читаются через сервис учётных данных DSH; браузер узнаёт только факт наличия ключа, но не его значение.
+- Собственные адреса эндпоинтов должны быть абсолютными `http(s)` без встроенных учётных данных и фрагментов; link-local и metadata-адреса отклоняются.
+- `/status` кэшируется на 10 секунд, а маршруты обновления, теста и поиска эндпоинтов ограничены по частоте и выполняются в единственном экземпляре.
+
+## Диагностика
+
+- **В списке моделей пусто** — проверьте `GET /dsh-ollama/health`: поле `providerError` называет причину. Проверьте `apiBase`, сеть и ключ.
+- **401/403** — ключ отклонён и остывает 5 минут; исправьте credential, затем сбросьте cooldowns в настройках или вызовите `POST /dsh-ollama/cooldowns/reset`.
+- **Все аккаунты остывают** — ошибка содержит оставшееся время и причину (`INVALID_CREDENTIAL`, `QUOTA`, `RATE_LIMIT`).
+- **Расход «недоступен» после нескольких обновлений** — `/api/usage` допускает 10 запросов в минуту; плагин сообщает `usage rate limit reached; retry shortly`. Подождите минуту.
+- **Кнопка обновления неактивна** — CLI DSH не найден в runtime; установите точную версию через `dsh plugin --profile web add ...@<версия>`.
+- **Настройки read-only** — сервис настроек хоста только для чтения; Save отключён, бейдж объясняет причину.
+- **502/504 от шлюза** — ключ переключается на следующий аккаунт; в таблице маршрутизации видно `rotation`.
+
+## Ограничения
+
+- Только Ollama Cloud; локальный сервис `http://localhost:11434` данным плагином не регистрируется.
+- Эмбеддинги (embeddings) в облачном API не предоставляются.
+- Файловые вложения передаются текстовыми дескрипторами (handle), а не бинарными байтами.
+- Интерфейс требует web-профиль; в терминальном TUI доступны команда `/ollama` и маршрут модели.
+
+## Лицензия
+
+MIT © [GooDAnDReaDY](https://github.com/GooDAnDReaDY). См. [LICENSE](./LICENSE) и [NOTICE](./NOTICE).

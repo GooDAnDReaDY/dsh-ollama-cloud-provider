@@ -1,0 +1,936 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
+
+import { quotaBars, windowRows, worstUsedPercent } from '../quota-model.ts'
+import {
+  clearKey,
+  discoverModels,
+  fetchServiceStatus,
+  fetchState,
+  refreshModels,
+  refreshState,
+  resetCooldowns,
+  saveConfig,
+  saveKey,
+  testConnection,
+  type DiscoveryResult,
+  type HostState,
+  type ModelRow,
+  type ServiceStatus,
+  type TestResult,
+  type TransportId,
+} from './api.ts'
+import { draftOf, draftPatch, mergeLoadedDraft, safeSame, type Draft } from './settings-draft.ts'
+import { CONFIG_CHANGED_EVENT } from './events.ts'
+import { creditsDetail, formatDate, formatTime } from './format.ts'
+import { accountMark, Field } from './settings-widgets.tsx'
+import { groupModels, reorderIds } from './model-groups.ts'
+import { ModelOverrideEditor } from './model-override-editor.tsx'
+import { PluginUpdateCard } from './update-card.tsx'
+import { UsageBars } from './usage-bars.tsx'
+
+let manualRowSeq = 0
+
+function nextManualUid(): string {
+  manualRowSeq += 1
+  return `manual-${Date.now().toString(36)}-${manualRowSeq}`
+}
+
+export function ModelEntry(props: {
+  model: ModelRow
+  visible: boolean
+  transport: TransportId | ''
+  onVisible: (visible: boolean) => void
+  onTransport: (transport: TransportId | '') => void
+  onDragStart?: () => void
+  onDrop?: () => void
+  onDragEnd?: () => void
+  onEdit?: () => void
+  dragging?: boolean
+  t: (key: string) => string
+}): ReactNode {
+  const { model, visible, transport, onVisible, onTransport, onDragStart, onDrop, onDragEnd, onEdit, dragging, t } = props
+  return (
+    <div
+      className={`ocl-model${dragging === true ? ' ocl-dragging' : ''}`}
+      draggable={onDragStart !== undefined}
+      onDragStart={onDragStart}
+      onDragOver={(event) => { if (onDrop !== undefined) event.preventDefault() }}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+    >
+      <span className="ocl-drag-handle" title={t('dragOrder')} aria-hidden="true">⋮⋮</span>
+      <input type="checkbox" checked={visible} aria-label={`${model.id} ${t('visibility')}`} onChange={(event) => onVisible(event.target.checked)} />
+      <span className="ocl-model-name" title={`${model.name} · ${model.description}`}>
+        {model.id}
+        {model.free ? <span className="ocl-badge" title={t('legendFree')}> {t('free')}</span> : null}
+        {!model.free && model.cost.priced
+          ? <span className="ocl-badge" title={t('legendPrice')}> ${model.cost.input}/${model.cost.output}</span>
+          : null}
+        {!model.free && !model.cost.priced
+          ? <span className="ocl-badge" title={t('legendUnknownPrice')}> {t('priceUnknown')}</span>
+          : null}
+        <span className="ocl-badge" title={t('legendContext')}>
+          {' '}{Math.round(model.contextWindow / 1024)}K
+        </span>
+        {model.tools ? <span className="ocl-badge" title={t('legendTools')}> {t('tools')}</span> : null}
+        {model.input.includes('image') ? <span className="ocl-badge"> {t('vision')}</span> : null}
+        {model.reasoning.length > 0
+          ? <span className="ocl-badge" title={model.reasoning.join(', ')}> {t('reasoning')}</span>
+          : null}
+        {model.available ? null : <span className="ocl-badge ocl-badge-warn"> {t('unavailable')}</span>}
+      </span>
+      <button type="button" className="ocl-button" onClick={onEdit}>{t('edit')}</button>
+      <select
+        className="ocl-select"
+        value={transport === '' ? model.transport : transport}
+        aria-label={t('transport')}
+        onChange={(event) => onTransport(event.target.value as TransportId | '')}
+      >
+        <option value="native">native</option>
+        <option value="openai-chat">openai-chat</option>
+      </select>
+    </div>
+  )
+}
+
+export function OllamaCloudSettingsPage(props: {
+  t: (key: string) => string
+  close?: () => void
+}): ReactNode {
+  const { t } = props
+  const [state, setState] = useState<HostState | null>(null)
+  const configWritable = state?.configWritable !== false
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [original, setOriginal] = useState<Draft | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [search, setSearch] = useState('')
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [editingModel, setEditingModel] = useState<string | null>(null)
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
+  const [keyDraft, setKeyDraft] = useState('')
+  const [accountKeys, setAccountKeys] = useState<Record<string, string>>({})
+  const [testModel, setTestModel] = useState('gpt-oss:120b')
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<TestResult | null>(null)
+  const [service, setService] = useState<ServiceStatus | null>(null)
+  const [serviceBusy, setServiceBusy] = useState(false)
+  const [serviceError, setServiceError] = useState<string | null>(null)
+  const [discoverBase, setDiscoverBase] = useState('')
+  const [discoverKey, setDiscoverKey] = useState('')
+  const [discoverResult, setDiscoverResult] = useState<DiscoveryResult | null>(null)
+  const [discovering, setDiscovering] = useState(false)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
+
+  const load = useCallback(async (preserveDraft = false) => {
+    setLoading(true)
+    try {
+      const next = await fetchState()
+      setState(next)
+      const draftNext = draftOf(next)
+      setDraft((current) => mergeLoadedDraft(current, draftNext, preserveDraft))
+      setOriginal((current) => mergeLoadedDraft(current, draftNext, preserveDraft))
+      setError(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t('failed'))
+    } finally {
+      setLoading(false)
+    }
+  }, [t])
+
+  useEffect(() => { void load() }, [load])
+
+  const dirty = useMemo(
+    () => draft !== null && original !== null && !safeSame(draft, original),
+    [draft, original],
+  )
+
+  const update = useCallback((patch: Partial<Draft>) => {
+    setDraft((current) => current === null ? current : { ...current, ...patch })
+  }, [])
+
+  const save = useCallback(async () => {
+    if (draft === null) return
+    const { patch, errors } = draftPatch(draft)
+    const failed = Object.entries(errors)
+    if (failed.length > 0) {
+      setError(failed.map(([name, message]) => `${name}: ${message}`).join('; '))
+      return
+    }
+    setSaving(true)
+    try {
+      await saveConfig(patch)
+      window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT))
+      setNotice(t('saved'))
+      setError(null)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t('saveFailed'))
+    } finally {
+      setSaving(false)
+    }
+  }, [draft, load, t])
+
+  const refresh = useCallback(async () => {
+    try {
+      setState(await refreshState())
+      setNotice(t('refreshed'))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t('failed'))
+    }
+  }, [t])
+
+  const handleResetCooldowns = useCallback(async () => {
+    try {
+      await resetCooldowns()
+      setNotice(t('cooldownsReset'))
+      await refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t('failed'))
+    }
+  }, [refresh, t])
+
+  const reloadModels = useCallback(async () => {
+    try {
+      const next = await refreshModels()
+      setState(next)
+      setNotice(t('refreshed'))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t('failed'))
+    }
+  }, [t])
+
+  const loadService = useCallback(async () => {
+    setServiceBusy(true)
+    try {
+      setService(await fetchServiceStatus())
+      setServiceError(null)
+    } catch (caught) {
+      setServiceError(caught instanceof Error ? caught.message : t('failed'))
+    } finally {
+      setServiceBusy(false)
+    }
+  }, [t])
+
+  useEffect(() => { void loadService() }, [loadService])
+
+  const runDiscovery = async (): Promise<void> => {
+    const base = discoverBase.trim() || draft?.apiBase || ''
+    if (base === '' || discovering) return
+    setDiscovering(true)
+    setDiscoverError(null)
+    try {
+      const result = await discoverModels(base, discoverKey)
+      setDiscoverResult(result)
+      setDiscoverKey('')
+    } catch (caught) {
+      setDiscoverResult(null)
+      setDiscoverError(caught instanceof Error ? caught.message : t('discoveryFailed'))
+    } finally {
+      setDiscovering(false)
+    }
+  }
+
+  if (loading && state === null) return <p className="ocl-hint">{t('loading')}</p>
+  if (state === null || draft === null) {
+    return (
+      <div className="ocl-page">
+        <div className="ocl-error">{error ?? t('failed')}</div>
+        <button type="button" className="ocl-button" onClick={() => { void load() }}>{t('refresh')}</button>
+      </div>
+    )
+  }
+
+  const report = state.usage?.report
+  const bars = quotaBars(report)
+  const rows = windowRows(report)
+  const worst = worstUsedPercent(report)
+  const activeAccount = state.accounts.find((account) => account.active)
+  const filtered = state.models.filter((model) => search.trim() === ''
+    || model.id.toLowerCase().includes(search.trim().toLowerCase()))
+  const groups = groupModels(filtered, t('contextGroup'))
+  const modelIds = state.models.map((model) => model.id)
+
+  const moveModel = (from: string, to: string): void => {
+    if (from === to) return
+    update({ modelOrder: reorderIds(draft.modelOrder, modelIds, from, to) })
+  }
+
+  const toggleGroup = (key: string): void => {
+    setCollapsedGroups((current) => ({ ...current, [key]: current[key] !== true }))
+  }
+
+  const addManualModel = (): void => {
+    update({
+      manualModels: [...draft.manualModels, {
+        uid: nextManualUid(),
+        id: '',
+        enabled: true,
+        name: '',
+        contextWindow: '',
+        maxTokens: '',
+        image: false,
+        thinking: false,
+        reasoningEfforts: '',
+        defaultReasoning: '',
+        tools: true,
+      }],
+    })
+  }
+
+  const updateManual = (index: number, patch: Partial<Draft['manualModels'][number]>): void => {
+    update({
+      manualModels: draft.manualModels.map((model, position) =>
+        position === index ? { ...model, ...patch } : model),
+    })
+  }
+
+  const removeManual = (index: number): void => {
+    update({ manualModels: draft.manualModels.filter((_model, position) => position !== index) })
+  }
+
+  const toggleModel = (id: string, visible: boolean): void => {
+    const current = new Set(draft.visibleModels)
+    const nextVisibility = { ...draft.modelVisibility }
+    if (visible) current.add(id)
+    else current.delete(id)
+    delete nextVisibility[id]
+    update({ visibleModels: [...current], showAll: false, modelVisibility: nextVisibility })
+  }
+
+  return (
+    <div className="ocl-page">
+      <div className="ocl-head">
+        <h2 className="ocl-title">{t('title')}</h2>
+        <p className="ocl-hint">{t('intro')}</p>
+      </div>
+
+      {error === null ? null : <div className="ocl-error">{error}</div>}
+      {notice === null ? null : <div className="ocl-notice">{notice}</div>}
+
+      <details className="ocl-card" open>
+        <summary className="ocl-card-title">
+          {t('key')}
+          <span className={`ocl-badge ${state.key.configured ? 'ocl-badge-ok' : 'ocl-badge-warn'}`}>
+            {state.key.configured ? t('keyConfigured') : t('keyMissing')}
+          </span>
+          {state.key.source === undefined ? null : <span className="ocl-badge">{state.key.source}</span>}
+          {accountMark(activeAccount, t) === undefined
+            ? null
+            : <span className="ocl-badge ocl-badge-bad">{accountMark(activeAccount, t)}</span>}
+        </summary>
+        <p className="ocl-hint">{t('keyHint')}</p>
+        {bars.length === 0
+          ? <p className="ocl-hint">{t('usageError')}: {state.usage?.error ?? t('noUsage')}</p>
+          : <UsageBars bars={bars} t={t} />}
+        <div className="ocl-row">
+          <input
+            className="ocl-input"
+            type="password"
+            placeholder={t('pasteKey')}
+            aria-label={t('pasteKey')}
+            value={keyDraft}
+            onChange={(event) => setKeyDraft(event.target.value)}
+          />
+          <button
+            type="button"
+            className="ocl-button ocl-button-primary"
+            disabled={keyDraft.trim() === ''}
+            onClick={() => {
+              void saveKey(draft.apiKeyEnv || 'OLLAMA_API_KEY', keyDraft.trim())
+                .then(() => { setKeyDraft(''); setNotice(t('saved')); return load(true) })
+                .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : t('failed')))
+            }}
+          >
+            {t('saveKey')}
+          </button>
+          <button
+            type="button"
+            className="ocl-button ocl-button-danger"
+            onClick={() => {
+              void clearKey(draft.apiKeyEnv || 'OLLAMA_API_KEY')
+                .then(() => { setNotice(t('saved')); return load(true) })
+                .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : t('failed')))
+            }}
+          >
+            {t('clearKey')}
+          </button>
+        </div>
+        <div className="ocl-row">
+          <select
+            className="ocl-select"
+            value={testModel}
+            aria-label={t('model')}
+            onChange={(event) => setTestModel(event.target.value)}
+          >
+            {state.models.map((model) => (
+              <option key={model.id} value={model.id}>{model.id}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="ocl-button"
+            disabled={testing}
+            onClick={() => {
+              setTesting(true)
+              setTestResult(null)
+              void testConnection(testModel)
+                .then(setTestResult)
+                .catch((caught: unknown) => {
+                  setTestResult({
+                    ok: false,
+                    model: testModel,
+                    provider: 'ollama-cloud',
+                    latencyMs: 0,
+                    error: caught instanceof Error ? caught.message : t('failed'),
+                  })
+                })
+                .finally(() => setTesting(false))
+            }}
+          >
+            {testing ? t('testing') : t('testConnection')}
+          </button>
+          {testResult === null ? null : testResult.ok
+            ? <span className="ocl-notice">{t('testOk').replace('{ms}', String(testResult.latencyMs))}</span>
+            : <span className="ocl-error">{t('testFailed')}: {testResult.error}</span>}
+        </div>
+      </details>
+
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('serviceStatus')}</summary>
+        <div className="ocl-row ocl-statusRow">
+          <span className={`ocl-statusDot${service?.ok === true ? ' ocl-statusDotOk' : service === null ? '' : ' ocl-statusDotBad'}`} />
+          <span>
+            {service === null
+              ? (serviceBusy ? t('checkingService') : t('serviceUnknown'))
+              : service.ok ? t('serviceOnline') : t('serviceOffline')}
+          </span>
+          {service === null
+            ? null
+            : <span className="ocl-hint">{service.latencyMs} ms · {formatTime(service.checkedAt)}</span>}
+          <button type="button" className="ocl-button" disabled={serviceBusy} onClick={() => { void loadService() }}>
+            {serviceBusy ? t('checkingService') : t('refreshStatus')}
+          </button>
+        </div>
+        {serviceError === null && service?.error === undefined
+          ? null
+          : <p className="ocl-hint">{serviceError ?? service?.error}</p>}
+        <p className="ocl-hint">{t('serviceStatusHint')}</p>
+      </details>
+
+      <details className="ocl-card" open={worst >= 80}>
+        <summary className="ocl-card-title">
+          {t('quota')}
+          <span className="ocl-badge">{activeAccount?.label ?? t('noActiveAccount')}</span>
+          <button
+            type="button"
+            className="ocl-button"
+            onClick={(event) => { event.stopPropagation(); void refresh() }}
+          >{t('refresh')}</button>
+        </summary>
+        {worst >= 95 ? <div className="ocl-error">{t('quotaExhausted')}</div> : null}
+        {worst >= 80 && worst < 95 ? <div className="ocl-notice">{t('quotaWarning')}</div> : null}
+        <UsageBars bars={bars} t={t} />
+        {rows.length === 0 ? null : (
+          <div className="ocl-table-scroll">
+            <table className="ocl-table">
+              <thead>
+                <tr>
+                  <th>{t('window')}</th>
+                  <th>{t('requests')}</th>
+                  <th>{t('spend')}</th>
+                  <th>{t('tokens')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.key}>
+                    <td>{row.label}</td>
+                    <td>{row.totals.requests}</td>
+                    <td>${row.totals.usd.toFixed(3)}</td>
+                    <td>{row.totals.inputTokens + row.totals.outputTokens}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="ocl-hint">{t('quotaHint')}</p>
+      </details>
+
+      <details className="ocl-card">
+        <summary className="ocl-card-title">
+          {t('accounts')}
+          <span className="ocl-badge">{draft.accounts.length} {t('accountCount')}</span>
+        </summary>
+        <p className="ocl-hint">{t('accountsHint')}</p>
+        {draft.accounts.map((account, index) => {
+          const known = state.accounts.find((entry) => entry.label === account.label)
+          const mark = accountMark(known, t)
+          return (
+            <div className="ocl-account-block" key={index}>
+              <div className="ocl-account">
+                <input
+                  className="ocl-input"
+                  placeholder={t('accountLabel')}
+                  aria-label={t('accountLabel')}
+                  value={account.label}
+                  onChange={(event) => {
+                    const accounts = draft.accounts.map((entry, position) =>
+                      position === index ? { ...entry, label: event.target.value } : entry)
+                    update({ accounts })
+                  }}
+                />
+                <input
+                  className="ocl-input"
+                  placeholder={t('accountRef')}
+                  aria-label={t('accountRef')}
+                  value={account.apiKeyEnv}
+                  onChange={(event) => {
+                    const accounts = draft.accounts.map((entry, position) =>
+                      position === index ? { ...entry, apiKeyEnv: event.target.value } : entry)
+                    update({ accounts })
+                  }}
+                />
+                <span className={`ocl-badge ${known?.configured === true ? 'ocl-badge-ok' : 'ocl-badge-warn'}`}>
+                  {known?.configured === true ? t('keyConfigured') : t('keyMissing')}
+                </span>
+                {mark === undefined ? null : <span className="ocl-badge ocl-badge-bad">{mark}</span>}
+              </div>
+              {known?.usage?.report === undefined
+                ? <p className="ocl-hint">{t('noUsage')}</p>
+                : (
+                  <div className="ocl-accountUsage">
+                    {quotaBars(known.usage.report).map((bar) => (
+                      <span className="ocl-badge" key={bar.key} title={bar.detailValues === undefined ? t(bar.labelKey ?? 'quotaWindow') : creditsDetail(bar.detailValues, t)}>
+                        {bar.detailValues === undefined
+                          ? t(bar.labelKey ?? 'quotaWindow')
+                          : creditsDetail(bar.detailValues, t)}
+                        {bar.resetsAt === undefined
+                          ? ''
+                          : ` · ${t('until')} ${formatDate(bar.resetsAt)}`}
+                      </span>
+                    ))}
+                    <span className="ocl-hint">{formatTime(known.usage.checkedAt)}</span>
+                  </div>
+                )}
+              {known?.usage?.report?.windows.d7 === undefined ? null : (
+                <div className="ocl-row">
+                  <span className="ocl-badge">
+                    {t('spend7d')}: ${known.usage.report.windows.d7.usd.toFixed(3)}
+                  </span>
+                </div>
+              )}
+              <div className="ocl-row">
+                <input
+                  className="ocl-input"
+                  type="password"
+                  placeholder={t('pasteKey')}
+                  aria-label={`${t('pasteKey')} (${account.label})`}
+                  value={accountKeys[index] ?? ''}
+                  onChange={(event) => {
+                    setAccountKeys((current) => ({ ...current, [index]: event.target.value }))
+                  }}
+                />
+                <button
+                  type="button"
+                  className="ocl-button ocl-button-primary"
+                  disabled={(accountKeys[index] ?? '').trim() === ''}
+                  onClick={() => {
+                    const ref = account.apiKeyEnv.trim()
+                    if (ref === '') return
+                    void saveKey(ref, (accountKeys[index] ?? '').trim())
+                      .then(() => {
+                        setAccountKeys((current) => ({ ...current, [index]: '' }))
+                        setNotice(t('saved'))
+                        return load(true)
+                      })
+                      .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : t('failed')))
+                  }}
+                >
+                  {t('saveKey')}
+                </button>
+                <button
+                  type="button"
+                  className="ocl-button"
+                  onClick={() => update({ activeAccount: account.label })}
+                >
+                  {t('pinAccount')}
+                </button>
+                <button
+                  type="button"
+                  className="ocl-button ocl-button-danger"
+                  onClick={() => {
+                    update({ accounts: draft.accounts.filter((_, position) => position !== index) })
+                  }}
+                >
+                  {t('removeAccount')}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        <div className="ocl-row">
+          <button
+            type="button"
+            className="ocl-button"
+            onClick={() => {
+              update({
+                accounts: [...draft.accounts, {
+                  label: `account-${draft.accounts.length + 2}`,
+                  apiKeyEnv: `OLLAMA_API_KEY_${draft.accounts.length + 2}`,
+                }],
+              })
+            }}
+          >
+            {t('addAccount')}
+          </button>
+          <button type="button" className="ocl-button" onClick={() => { void refresh() }}>
+            {t('checkAllAccounts')}
+          </button>
+          <button type="button" className="ocl-button" onClick={() => { void handleResetCooldowns() }}>
+            {t('resetCooldowns')}
+          </button>
+          <span className="ocl-badge">{t('activeAccount')}: {draft.activeAccount === '' ? t('auto') : draft.activeAccount}</span>
+          <button type="button" className="ocl-button" onClick={() => update({ activeAccount: '' })}>
+            {t('auto')}
+          </button>
+        </div>
+      </details>
+
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('modelAccountRules')}</summary>
+        <p className="ocl-hint">{t('modelAccountRulesHint')}</p>
+        {draft.modelAccountRules.map((rule, index) => (
+          <div className="ocl-row" key={index}>
+            <input
+              className="ocl-input"
+              placeholder={t('rulePattern')}
+              aria-label={t('rulePattern')}
+              value={rule.pattern}
+              onChange={(event) => {
+                const rules = draft.modelAccountRules.map((entry, position) =>
+                  position === index ? { ...entry, pattern: event.target.value } : entry)
+                update({ modelAccountRules: rules })
+              }}
+            />
+            <input
+              className="ocl-input"
+              placeholder={t('ruleAccount')}
+              aria-label={t('ruleAccount')}
+              value={rule.account}
+              onChange={(event) => {
+                const rules = draft.modelAccountRules.map((entry, position) =>
+                  position === index ? { ...entry, account: event.target.value } : entry)
+                update({ modelAccountRules: rules })
+              }}
+            />
+            <button
+              type="button"
+              className="ocl-button ocl-button-danger"
+              onClick={() => {
+                update({ modelAccountRules: draft.modelAccountRules.filter((_, position) => position !== index) })
+              }}
+            >
+              {t('removeRule')}
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="ocl-button"
+          onClick={() => update({ modelAccountRules: [...draft.modelAccountRules, { pattern: '', account: '' }] })}
+        >
+          {t('addRule')}
+        </button>
+      </details>
+
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('routing')}</summary>
+        <p className="ocl-hint">{t('routingHint')}</p>
+        <label className="ocl-row">
+          <input
+            type="checkbox"
+            checked={draft.stickySession}
+            onChange={(event) => update({ stickySession: event.target.checked })}
+          />
+          <span>{t('stickySession')}</span>
+        </label>
+        <p className="ocl-hint">{t('stickySessionHint')}</p>
+      </details>
+
+      <details className="ocl-card">
+        <summary className="ocl-card-title">
+          {t('models')}
+          <span className="ocl-badge">{state.models.length} {t('modelCount')}</span>
+          <button type="button" className="ocl-button" onClick={(event) => { event.stopPropagation(); void reloadModels() }}>
+            {t('refresh')}
+          </button>
+          <button
+            type="button"
+            className="ocl-button"
+            onClick={(event) => { event.stopPropagation(); update({ showAll: true, visibleModels: state.models.map((model) => model.id) }) }}
+          >
+            {t('showAll')}
+          </button>
+          <button
+            type="button"
+            className="ocl-button"
+            onClick={(event) => { event.stopPropagation(); update({ showAll: false, visibleModels: [], modelVisibility: {} }) }}
+          >
+            {t('hideAll')}
+          </button>
+        </summary>
+        <p className="ocl-hint">{t('modelsHint')}</p>
+        <label className="ocl-row">
+          <input
+            type="checkbox"
+            checked={draft.filterModelsByPlan}
+            onChange={(event) => update({ filterModelsByPlan: event.target.checked })}
+          />
+          <span>{t('filterModelsByPlan')}</span>
+        </label>
+        <p className="ocl-hint">{t('filterModelsByPlanHint')}</p>
+        <div className="ocl-model-legend">
+          <span><span className="ocl-badge">{t('free')}</span> {t('legendFree')}</span>
+          <span><span className="ocl-badge">$in/$out</span> {t('legendPrice')}</span>
+          <span><span className="ocl-badge">131K</span> {t('legendContext')}</span>
+          <span><span className="ocl-badge">{t('tools')}</span> {t('legendTools')}</span>
+          <span><span className="ocl-badge">{t('vision')}</span> {t('legendImage')}</span>
+        </div>
+        <input
+          className="ocl-input"
+          placeholder={t('modelSearch')}
+          aria-label={t('modelSearch')}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <div className="ocl-models">
+          {filtered.length === 0
+            ? <p className="ocl-hint">{t('modelsEmpty')}</p>
+            : groups.map((group) => (
+                <div key={group.key} className="ocl-model-group">
+                  <button
+                    type="button"
+                    className="ocl-model-group-head"
+                    aria-expanded={collapsedGroups[group.key] !== true}
+                    onClick={() => toggleGroup(group.key)}
+                  >
+                    <span className="ocl-group-title">
+                      <span className={`ocl-chevron ${collapsedGroups[group.key] === true ? 'ocl-chevron-collapsed' : ''}`} aria-hidden="true">▾</span>
+                      {group.label}
+                    </span>
+                    <span className="ocl-badge">{group.models.length}</span>
+                  </button>
+                  {collapsedGroups[group.key] === true ? null : group.models.map((model) => (
+                    <ModelEntry
+                      key={model.id}
+                      model={model}
+                      visible={draft.modelVisibility[model.id] ?? (draft.showAll || draft.visibleModels.includes(model.id))}
+                      transport={draft.modelTransports[model.id] ?? ''}
+                      dragging={dragId === model.id}
+                      onDragStart={() => setDragId(model.id)}
+                      onDrop={() => {
+                        if (dragId !== null) moveModel(dragId, model.id)
+                        setDragId(null)
+                      }}
+                      onDragEnd={() => setDragId(null)}
+                      onEdit={() => setEditingModel(model.id)}
+                      onVisible={(visible) => toggleModel(model.id, visible)}
+                      onTransport={(transport) => {
+                        const next = { ...draft.modelTransports }
+                        if (transport === '') delete next[model.id]
+                        else next[model.id] = transport
+                        update({ modelTransports: next })
+                      }}
+                      t={t}
+                    />
+                  ))}
+                </div>
+              ))}
+        </div>
+      </details>
+
+      {editingModel !== null && state.models.some((model) => model.id === editingModel) && (
+        <details className="ocl-card" open>
+          <summary className="ocl-card-title">{t('editModel')}</summary>
+          <ModelOverrideEditor
+            model={state.models.find((model) => model.id === editingModel)!}
+            draft={draft}
+            t={t}
+            update={update}
+            close={() => setEditingModel(null)}
+          />
+        </details>
+      )}
+
+      <details className="ocl-card">
+        <summary className="ocl-card-title">
+          {t('manualModels')}
+          <button type="button" className="ocl-button" onClick={(event) => { event.stopPropagation(); addManualModel() }}>{t('addManualModel')}</button>
+        </summary>
+        <p className="ocl-hint">{t('manualModelsHint')}</p>
+        {draft.manualModels.map((model, index) => (
+          <div className="ocl-model-section" key={model.uid}>
+            <div className="ocl-grid">
+              <Field label={t('modelId')} value={model.id} onChange={(value) => updateManual(index, { id: value })} />
+              <Field label={t('modelName')} value={model.name} onChange={(value) => updateManual(index, { name: value })} />
+              <Field label={t('contextWindow')} type="number" value={model.contextWindow} onChange={(value) => updateManual(index, { contextWindow: value })} />
+              <Field label={t('maxTokens')} type="number" value={model.maxTokens} onChange={(value) => updateManual(index, { maxTokens: value })} />
+              <Field label={t('reasoningEfforts')} hint={t('manualEffortsHint')} value={model.reasoningEfforts} onChange={(value) => updateManual(index, { reasoningEfforts: value })} />
+              <Field label={t('defaultReasoning')} value={model.defaultReasoning} onChange={(value) => updateManual(index, { defaultReasoning: value })} />
+            </div>
+            <label className="ocl-row"><input type="checkbox" checked={model.enabled} onChange={(event) => updateManual(index, { enabled: event.target.checked })} /><span>{t('enabled')}</span></label>
+            <label className="ocl-row"><input type="checkbox" checked={model.image} onChange={(event) => updateManual(index, { image: event.target.checked })} /><span>{t('vision')}</span></label>
+            <label className="ocl-row"><input type="checkbox" checked={model.thinking} onChange={(event) => updateManual(index, { thinking: event.target.checked })} /><span>{t('reasoning')}</span></label>
+            <label className="ocl-row"><input type="checkbox" checked={model.tools} onChange={(event) => updateManual(index, { tools: event.target.checked })} /><span>{t('tools')}</span></label>
+            <button type="button" className="ocl-button ocl-button-danger" onClick={() => removeManual(index)}>{t('removeManualModel')}</button>
+          </div>
+        ))}
+      </details>
+
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('generation')}</summary>
+        <p className="ocl-hint">{t('generationHint')}</p>
+        <div className="ocl-grid">
+          <Field label={t('temperature')} type="number" value={draft.temperature} onChange={(value) => update({ temperature: value })} />
+          <Field label={t('topK')} type="number" value={draft.topK} onChange={(value) => update({ topK: value })} />
+          <Field label={t('topP')} type="number" value={draft.topP} onChange={(value) => update({ topP: value })} />
+          <Field label={t('minP')} type="number" value={draft.minP} onChange={(value) => update({ minP: value })} />
+          <Field label={t('seed')} type="number" value={draft.seed} onChange={(value) => update({ seed: value })} />
+          <Field label={t('repeatPenalty')} type="number" value={draft.repeatPenalty} onChange={(value) => update({ repeatPenalty: value })} />
+          <Field label={t('repeatLastN')} type="number" value={draft.repeatLastN} onChange={(value) => update({ repeatLastN: value })} />
+          <Field label={t('numCtx')} type="number" value={draft.numCtx} onChange={(value) => update({ numCtx: value })} />
+          <Field label={t('keepAlive')} hint={t('keepAliveHint')} value={draft.keepAlive} onChange={(value) => update({ keepAlive: value })} />
+          <Field label={t('stop')} hint={t('stopHint')} value={draft.stop} onChange={(value) => update({ stop: value })} />
+        </div>
+        <label className="ocl-row">
+          <input
+            type="checkbox"
+            checked={draft.autoRefresh}
+            onChange={(event) => update({ autoRefresh: event.target.checked })}
+          />
+          <span>{t('autoRefresh')}</span>
+        </label>
+        <Field label={t('refreshMinutes')} type="number" value={draft.refreshMinutes} onChange={(value) => update({ refreshMinutes: value })} />
+        <p className="ocl-hint">{t('autoRefreshHint')}</p>
+      </details>
+
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('advanced')}</summary>
+        <div className="ocl-grid">
+          <Field label={t('apiKeyEnv')} hint={t('apiKeyEnvHint')} value={draft.apiKeyEnv} onChange={(value) => update({ apiKeyEnv: value })} />
+          <Field label={t('apiBase')} value={draft.apiBase} onChange={(value) => update({ apiBase: value })} />
+          <Field label={t('openAiBase')} value={draft.openAiBase} onChange={(value) => update({ openAiBase: value })} />
+          <Field label={t('usageUrl')} value={draft.usageUrl} onChange={(value) => update({ usageUrl: value })} />
+          <Field label={t('balanceUrl')} value={draft.balanceUrl} onChange={(value) => update({ balanceUrl: value })} />
+          <label className="ocl-field">
+            <span className="ocl-label">{t('transport')}</span>
+            <select
+              className="ocl-select"
+              value={draft.transport}
+              onChange={(event) => update({ transport: event.target.value as TransportId })}
+            >
+              <option value="native">native /api/chat</option>
+              <option value="openai-chat">openai /v1/chat/completions</option>
+            </select>
+            <span className="ocl-hint">{t('transportHint')}</span>
+          </label>
+          <Field label={t('requestTimeoutMs')} type="number" value={draft.requestTimeoutMs} onChange={(value) => update({ requestTimeoutMs: value })} />
+          <Field label={t('streamIdleTimeoutMs')} type="number" value={draft.streamIdleTimeoutMs} onChange={(value) => update({ streamIdleTimeoutMs: value })} />
+          <Field label={t('attemptTimeoutMs')} hint={t('attemptTimeoutHint')} type="number" value={draft.attemptTimeoutMs} onChange={(value) => update({ attemptTimeoutMs: value })} />
+          <Field label={t('retryMaxRetries')} type="number" value={draft.retryMaxRetries} onChange={(value) => update({ retryMaxRetries: value })} />
+          <Field label={t('retryBaseDelayMs')} type="number" value={draft.retryBaseDelayMs} onChange={(value) => update({ retryBaseDelayMs: value })} />
+          <Field label={t('retryMaxDelayMs')} type="number" value={draft.retryMaxDelayMs} onChange={(value) => update({ retryMaxDelayMs: value })} />
+          <Field label={t('retryJitter')} type="number" value={draft.retryJitter} onChange={(value) => update({ retryJitter: value })} />
+          <Field label={t('maxOutputTokens')} type="number" value={draft.maxOutputTokens} onChange={(value) => update({ maxOutputTokens: value })} />
+          <Field label={t('contextWindow')} type="number" value={draft.contextWindow} onChange={(value) => update({ contextWindow: value })} />
+          <Field label={t('planLabel')} hint={t('planLabelHint')} value={draft.planLabel} onChange={(value) => update({ planLabel: value })} />
+        </div>
+      </details>
+
+      <details className="ocl-card" open={discoverError !== null}>
+        <summary className="ocl-card-title">{t('discover')}</summary>
+        <p className="ocl-hint">{t('discoverHint')}</p>
+        <label className="ocl-field">
+          <span>{t('endpoint')}</span>
+          <input
+            className="ocl-input"
+            value={discoverBase}
+            placeholder={draft.apiBase}
+            onChange={(event) => setDiscoverBase(event.target.value)}
+          />
+        </label>
+        <label className="ocl-field">
+          <span>{t('oneShotKey')}</span>
+          <input
+            className="ocl-input"
+            type="password"
+            autoComplete="off"
+            value={discoverKey}
+            placeholder={t('oneShotKeyPlaceholder')}
+            onChange={(event) => setDiscoverKey(event.target.value)}
+          />
+        </label>
+        <p className="ocl-hint">{t('oneShotKeyHint')}</p>
+        <button type="button" className="ocl-button" disabled={discovering} onClick={() => { void runDiscovery() }}>
+          {discovering ? t('discovering') : t('discoverAction')}
+        </button>
+        {discoverError !== null && <p className="ocl-error">{discoverError}</p>}
+        {discoverResult !== null && (
+          <div className="ocl-model-section">
+            <div className="ocl-model-section-head">
+              <span>{discoverResult.base} · {discoverResult.models.length} {t('modelCount')}</span>
+            </div>
+            <p className="ocl-hint">{t('currentOnly')}</p>
+            <div className="ocl-models">
+              {discoverResult.models.slice(0, 100).map((model) => (
+                <div className="ocl-model" key={model}>
+                  <span className="ocl-model-name">{model}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </details>
+
+      <details className="ocl-card">
+        <summary className="ocl-card-title">{t('sidebar')}</summary>
+        <label className="ocl-row">
+          <input
+            type="checkbox"
+            checked={draft.showSidebarQuota}
+            onChange={(event) => update({ showSidebarQuota: event.target.checked })}
+          />
+          <span>{t('showSidebarQuota')}</span>
+        </label>
+        <p className="ocl-hint">{t('showSidebarQuotaHint')}</p>
+      </details>
+
+      <PluginUpdateCard t={t} />
+
+      <div className="ocl-row">
+        <button type="button" className="ocl-button ocl-button-primary" disabled={!dirty || saving || !configWritable} onClick={() => { void save() }}>
+          {saving ? t('saving') : t('save')}
+        </button>
+        {configWritable ? null : <span className="ocl-badge ocl-badge-warn">{t('settingsReadOnly')}</span>}
+        {dirty ? <span className="ocl-badge ocl-badge-warn">{t('unsaved')}</span> : null}
+        <button
+          type="button"
+          className="ocl-button"
+          onClick={() => {
+            if (original !== null) setDraft(original)
+            setError(null)
+            setNotice(null)
+          }}
+        >
+          {t('discard')}
+        </button>
+        <button type="button" className="ocl-button" onClick={() => props.close?.()}>{t('close')}</button>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,188 @@
+import assert from 'node:assert/strict'
+import { appendFile, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import test from 'node:test'
+
+import {
+  compactRequestLog,
+  flushRequestLog,
+  readRequestHeatmap,
+  recordRequest,
+  requestLogPath,
+} from '../src/request-log.ts'
+
+test('keeps concurrent requests that share a timestamp', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-same-ms-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const at = new Date(2026, 0, 5, 14, 30).getTime()
+  try {
+    recordRequest('ollama-cloud', 'm', at, undefined, 'default', 'rotation', {
+      ok: false,
+      latencyMs: 100,
+      error: 'QUOTA',
+    })
+    recordRequest('ollama-cloud', 'm', at, undefined, 'default', 'rotation', {
+      ok: true,
+      latencyMs: 300,
+    })
+    await flushRequestLog()
+    const heatmap = await readRequestHeatmap(7, at + 200_000)
+    assert.equal(heatmap.total, 2)
+    const account = heatmap.accounts.find((entry) => entry.account === 'default')
+    assert.equal(account?.total, 2)
+    assert.equal(account?.errors, 1)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
+  }
+})
+
+test('aggregates requests per account', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-accounts-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const at = new Date(2026, 0, 5, 14, 30).getTime()
+  try {
+    recordRequest('ollama-cloud', 'm', at, undefined, 'default')
+    recordRequest('ollama-cloud', 'm', at + 60_000, undefined, 'Go #2')
+    recordRequest('ollama-cloud', 'm', at + 120_000, undefined, 'Go #2')
+    await flushRequestLog()
+    const heatmap = await readRequestHeatmap(7, at + 200_000)
+    const fallback = heatmap.accounts.find((entry) => entry.account === 'default')
+    const second = heatmap.accounts.find((entry) => entry.account === 'Go #2')
+    assert.equal(fallback?.total, 1)
+    assert.equal(second?.total, 2)
+    assert.equal(second?.hours[14], 2)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
+  }
+})
+
+test('aggregates per-account errors and latency', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-stats-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const at = new Date(2026, 0, 5, 14, 30).getTime()
+  try {
+    recordRequest('ollama-cloud', 'm', at, undefined, 'default', 'rotation', {
+      ok: false,
+      latencyMs: 100,
+      error: 'QUOTA',
+    })
+    recordRequest('ollama-cloud', 'm', at + 1, undefined, 'default', 'rotation', {
+      ok: true,
+      latencyMs: 300,
+      ttftMs: 120,
+    })
+    await flushRequestLog()
+    const heatmap = await readRequestHeatmap(7, at + 200_000)
+    const account = heatmap.accounts.find((entry) => entry.account === 'default')
+    assert.equal(account?.total, 2)
+    assert.equal(account?.errors, 1)
+    assert.equal(account?.avgLatencyMs, 200)
+    assert.equal(account?.avgTtftMs, 120)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
+  }
+})
+
+test('records requests and builds a local weekday/hour heatmap', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-log-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    const monday = new Date(2026, 0, 5, 14, 30).getTime()
+    const tuesday = new Date(2026, 0, 6, 9, 15).getTime()
+    const old = new Date(2026, 0, 8, 2, 0).getTime() - 40 * 86_400_000
+    const now = new Date(2026, 0, 10, 12, 0).getTime()
+
+    recordRequest('ollama-cloud', 'm', monday)
+    recordRequest('ollama-cloud', 'm', tuesday)
+    recordRequest('ollama-cloud', 'other', monday + 15 * 60_000)
+    recordRequest('ollama-cloud', 'm', old)
+    recordRequest('ollama-cloud', 'm', monday, 'session-title')
+    recordRequest('ollama-cloud', 'm', monday)
+    await flushRequestLog()
+    await appendFile(requestLogPath(), '{not-json\n', 'utf8')
+
+    const heatmap = await readRequestHeatmap(7, now)
+    assert.equal(heatmap.total, 4)
+    assert.equal(heatmap.hours[14], 3)
+    assert.equal(heatmap.hours[9], 1)
+    assert.equal(heatmap.grid[0]?.[14], 3)
+    assert.equal(heatmap.grid[1]?.[9], 1)
+    assert.equal(heatmap.grid.flat().reduce((sum, value) => sum + value, 0), 4)
+    assert.equal(heatmap.firstAt, monday)
+    assert.equal(heatmap.lastAt, tuesday)
+
+    const m = heatmap.models.find((entry) => entry.model === 'm')
+    const other = heatmap.models.find((entry) => entry.model === 'other')
+    assert.equal(heatmap.models.length, 2)
+    assert.equal(m?.total, 3)
+    assert.equal(m?.grid[0]?.[14], 2)
+    assert.equal(m?.grid[1]?.[9], 1)
+    assert.equal(other?.total, 1)
+    assert.equal(other?.grid[0]?.[14], 1)
+    await compactRequestLog(0, 2)
+    const compacted = await readFile(requestLogPath(), 'utf8')
+    assert.equal(compacted.trim().split('\n').length, 2)
+    assert.ok(requestLogPath().startsWith(home))
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
+  }
+})
+
+test('compacts atomically and leaves no temporary file (#142)', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-compact-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const at = new Date(2026, 0, 5, 14, 30).getTime()
+  try {
+    for (let index = 0; index < 60; index += 1) recordRequest('ollama-cloud', 'm', at + index)
+    await flushRequestLog()
+
+    const path = requestLogPath()
+    const size = (await stat(path)).size
+    const [, during] = await Promise.all([
+      compactRequestLog(Math.floor(size / 2), 10),
+      readFile(path, 'utf8'),
+    ])
+    assert.ok(during.trim() !== '')
+
+    const lines = (await readFile(path, 'utf8')).trim().split('\n')
+    assert.equal(lines.length, 10)
+    for (const line of lines) JSON.parse(line)
+
+    const entries = await readdir(join(home, 'storages', 'dsh-ollama'))
+    assert.deepEqual(entries.filter((name) => name.endsWith('.tmp')), [])
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
+  }
+})
+
+test('writes the request log with restrictive permissions (#152)', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-ollama-log-mode-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    recordRequest('ollama-cloud', 'm', Date.now())
+    await flushRequestLog()
+    const info = await stat(requestLogPath())
+    assert.equal(info.mode & 0o777, 0o600)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true }).catch((err: unknown) => { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err })
+  }
+})

@@ -1,0 +1,275 @@
+# 📦 @goodandready/dsh-ollama-cloud-provider
+
+<div align="center">
+
+<h3>面向 DeepSeek Harness 的 Ollama Cloud 模型提供商插件</h3>
+
+<p>
+  <a href="https://goodandready.app/"><img src="https://img.shields.io/badge/🌐_DSH_Hub-goodandready.app-ff4500.svg?style=for-the-badge&labelColor=1a1a2e" alt="GoodAndReady 展厅"></a>
+  <a href="https://www.npmjs.com/package/@goodandready/dsh-ollama-cloud-provider"><img src="https://img.shields.io/npm/v/@goodandready/dsh-ollama-cloud-provider?style=for-the-badge&color=crimson&logo=npm" alt="npm 版本"></a>
+  <a href="https://github.com/GooDAnDReaDY/dsh-ollama-cloud-provider/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="许可证"></a>
+</p>
+
+</div>
+
+<table align="center">
+  <tr>
+    <td align="center">
+      ⭐ <strong>如果您喜欢这个插件，请在 GitHub 上为它点亮 Star</strong> — 这能让我知道插件对您有用，并鼓励我继续开发和维护它。
+      <br><br>
+      🐛 <strong>如果您发现 Bug 或希望增加功能</strong>，请使用任意语言在 GitHub 上提交 Issue — 我会评估您的建议，并在后续版本中实现有价值的改进。
+    </td>
+  </tr>
+</table>
+
+---
+
+面向 [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/)（dsh）的 **Ollama Cloud** 模型提供商插件。
+
+插件注册一个原生 LLM 路由 `ollama-cloud`（`https://ollama.com`），支持两种底层传输协议：
+
+| 传输协议 | 端点 | 用途 |
+|---|---|---|
+| `native`（默认） | `POST /api/chat` | thinking、工具调用、usage 计数（NDJSON） |
+| `openai-chat` | `POST /v1/chat/completions` | OpenAI 兼容部署与备用网关（SSE） |
+
+密钥在每次请求时动态解析：在设置中更换凭据无需重启即可立即生效。
+
+## 架构示意
+
+```mermaid
+graph LR
+    subgraph DSH["DeepSeek Harness 核心"]
+        Agent["DSH 智能体 / 聊天"]
+        Creds["凭据服务 / 环境变量"]
+    end
+
+    subgraph Plugin["dsh-ollama-cloud-provider"]
+        Router{"路由: ollama-cloud"}
+        Pool["多账号连接池<br/>轮换、冷却、粘性会话"]
+        Catalog["实时模型目录<br/>/v1/models + /api/tags"]
+        Usage["余额与用量监控<br/>/api/balance + /api/usage"]
+
+        subgraph Transports["底层传输协议"]
+            T1["Native /api/chat (NDJSON)"]
+            T2["OpenAI /v1/chat/completions (SSE)"]
+        end
+    end
+
+    subgraph Ollama["Ollama Cloud 云端网关"]
+        Chat["ollama.com/api/chat"]
+        OpenAI["ollama.com/v1/chat/completions"]
+        Billing["/api/balance, /api/usage"]
+    end
+
+    Agent --> Router
+    Creds -.-> Pool
+    Router --> Pool
+    Pool --> Transports
+    T1 --> Chat
+    T2 --> OpenAI
+    Catalog --> Router
+    Usage --> Billing
+```
+
+## 功能全貌
+
+- **两种底层传输协议**：按模型选择 Ollama 原生协议（NDJSON）或 OpenAI 兼容协议（SSE）。
+- **全要素流式交互**：文本、深度思考（thinking）、工具调用、多模态图像、Token 统计与 finish reasons。
+- **全局唯一工具调用 ID**：自动生成跨步不重复的工具调用标识符，彻底防止多步对话（如 PTC 预设）因 ID 冲突导致 DSH 会话日志校验失败。
+- **实时模型目录**：自动从 `GET /v1/models` 获取模型列表，并结合 `GET /api/tags` 补全能力标记（`tools`、`thinking`、`vision`）。
+- **精准模型元数据**：上下文长度、输入模态、推理等级与默认配置、工具支持状态及 API 开放性。
+- **官方余额与用量分析**：集成官方 `/api/balance` 与 `/api/usage`，呈现可用额度、已购额度、24小时/7天/30天支出及按模型细分报表。
+- **多账号智能轮换**：在输出首个 Token 之前，遇到 401/403/429 或额度耗尽自动切换至备用账号。冷却时间通过 SHA-256 哈希安全持久化。
+- **会话粘性与路由规则**：支持单会话锁定同一账号，以及基于 Glob 通配符的 `模型 → 账号` 绑定规则。
+- **成本透明估算**：依据官方发布的价目表（包含闲时优惠折扣）进行费用估算，支持按模型覆盖价格。
+- **Web UI 与交互卡片**：
+  - **设置 → Ollama Cloud**：密钥配置、余额显示、账号池管理、模型白名单与协议切换。
+  - **侧边栏配额指示卡片**：环形展示最高额度窗口（默认关闭且不产生后台轮询；可在名称旁显示 `planLabel`，例如 `PRO`）。
+  - **中央用量分析面板**：支出窗口、请求热力图与用量走势。
+- **`/ollama` 快捷指令**：快速查询状态、额度、余额、账号列表与执行联通性测试。
+- **一键热更新**：在 DSH 设置页直接检测 npm 最新版本并快速安装更新。
+
+## Requirements / 系统要求
+
+- **DeepSeek Harness**: `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0`（桌面版与 Web 配置文件）。
+- **Node.js**: `>=22.0.0`。
+- **Ollama Cloud 账户**: 一个或多个有效的 Ollama Cloud API Key 或兼容的代理端点。
+
+## 安装指南
+
+从 registry 安装已发布版本：
+
+```bash
+dsh plugin --profile web add @goodandready/dsh-ollama-cloud-provider@0.1.41
+# DSH 桌面端：
+dsh plugin --profile desktop add @goodandready/dsh-ollama-cloud-provider@0.1.41
+```
+
+安装完成后重启 dsh 或 DSH 桌面端，在模型列表中选择 **Ollama Cloud** 即可。
+
+受支持的安装来源是 registry 中的精确版本。只有在开发插件本身时才需要从源码构建；参见 `README.md` 的 Development 一节。
+
+## 网页搜索与抓取
+
+当 DSH 提供 `web` 服务时，插件会把 Ollama Cloud 注册为搜索和抓取提供商（`id: ollama-cloud`）。
+使用与聊天相同的凭据引用调用 `POST <apiBase>/api/web_search` 和 `POST <apiBase>/api/web_fetch`。
+禁止重定向，传输失败重试一次，搜索结果上限 10 条，页面文本上限 256 KiB。
+
+```yaml
+- id: web
+  config:
+    searchProvider: ollama-cloud
+    fetchProvider: ollama-cloud
+```
+
+## 配置示例
+
+```yaml
+- id: llm-ollama-cloud
+  name: "@goodandready/dsh-ollama-cloud-provider"
+  config:
+    apiKeyEnv: OLLAMA_API_KEY      # 环境变量名或 DSH 凭据名
+    # apiKey: ...                  # 仅本地调试，严禁提交代码库
+    transport: native              # native | openai-chat
+    requestTimeoutMs: 300000
+    streamIdleTimeoutMs: 300000
+    visibleModels: []
+    modelTransports: {}
+    accounts:
+      - label: Work
+        apiKeyEnv: OLLAMA_API_KEY_2
+    activeAccount: ''              # 固定指定活跃账号
+    stickySession: true
+    showSidebarQuota: false
+    planLabel: ''                  # 可选，例如 PRO
+```
+
+除 `apiKey` 外的所有配置项均可在 DSH 设置页直接修改。
+
+### 配置项参考
+
+| 配置项 | 默认值 |
+|---|---|
+| `apiKeyEnv` | `OLLAMA_API_KEY` |
+| `apiKey` | —（仅限 composition） |
+| `apiBase` | `https://ollama.com` |
+| `openAiBase` | `https://ollama.com/v1` |
+| `usageUrl` | `https://ollama.com/api/usage` |
+| `balanceUrl` | `https://ollama.com/api/balance` |
+| `transport` | `native` |
+| `modelTransports` | `{}` |
+| `requestTimeoutMs` | `300000` |
+| `streamIdleTimeoutMs` | `300000` |
+| `attemptTimeoutMs` | `0`（关闭） |
+| `retryMaxRetries` | `0` |
+| `retryBaseDelayMs` | `250` |
+| `retryMaxDelayMs` | `2000` |
+| `retryJitter` | `0.2` |
+| `visibleModels` | `[]` |
+| `showAllModels` | `false` |
+| `modelVisibility` | `{}` |
+| `manualModels` | `[]` |
+| `modelOverrides` | `{}` |
+| `modelOrder` | `[]` |
+| `filterModelsByPlan` | `true` |
+| `contextWindow` | 模型元数据 |
+| `contextWindowOverrides` | `{}` |
+| `maxOutputTokens` | 模型元数据 |
+| `temperature`、`topK`、`topP`、`minP` | 提供商默认值 |
+| `seed`、`repeatPenalty`、`repeatLastN` | 提供商默认值 |
+| `numCtx`、`keepAlive`、`stop` | 提供商默认值 |
+| `autoRefresh` | `true` |
+| `refreshMinutes` | `1440`（`0` 表示仅启动时） |
+| `accounts` | `[]` |
+| `modelAccountRules` | `[]` |
+| `stickySession` | `true` |
+| `activeAccount` | `""` |
+| `showSidebarQuota` | `false` |
+| `planLabel` | `""` |
+| `priceOverrides` | `{}` |
+| `userAgent` | `dsh-ollama-cloud-provider/<版本>` |
+
+### 密钥配置
+
+1. DSH 配置中的 `config.apiKey`。
+2. DSH 凭据服务中的 `apiKeyEnv`（默认 `OLLAMA_API_KEY`）。
+3. 环境变量或 `$DSH_HOME/.env`。
+
+密钥可在官方后台生成：<https://ollama.com/settings/keys>。云端网关仅接受 `Authorization: Bearer` 请求头。
+
+### 多账号轮换与冷却重置
+
+多账号在首字输出前自动轮换。鉴权失败（401/403）进入 5 分钟冷却期，配额错误遵循 Retry-After 响应头。可在设置页中通过「重置冷却」按钮或调用 `POST /dsh-ollama/cooldowns/reset` 随时清除冷却状态。
+
+### 模型到账号路由规则
+
+```yaml
+modelAccountRules:
+  - pattern: "*flash*"
+    account: "Work"
+```
+
+## 界面与视觉验收
+
+DSH Desktop（暗黑主题）中的 Ollama Cloud 设置与用量面板：
+
+![Ollama Cloud 设置](media/visual-verification.png)
+
+## 设置页
+
+在 **设置 → Ollama Cloud** 中：
+- **密钥** — 状态、粘贴、清除、测试连接。
+- **余额与用量** — 额度条、支出窗口、80%/95% 提示。
+- **账号** — 额外密钥、花费、固定、移除、设置密钥、重置冷却。
+- **服务状态** — 可用性、延迟与最近检查时间。
+- **模型→账号规则** — glob 规则。
+- **路由** — 会话粘性。
+- **模型** — 搜索、刷新目录、隐藏模型、每模型传输、价格/上下文/能力。
+- **手动目录条目** — 添加目录中不存在的模型。
+- **生成默认值** — 采样与输出限制。
+- **连接** — 基础地址、超时、输出上限、上下文覆盖。
+- **发现** — 使用一次性密钥探测未保存的端点。
+- **侧边栏** — 显示/隐藏配额卡片与计划标签。
+- **插件更新** — 当前/最新版本与立即更新。
+
+## 常用指令
+
+```bash
+/ollama status            # 查看服务商状态、配额与模型数
+/ollama usage             # 7 天支出与按模型细分
+/ollama balance           # 包含额度与充值额度
+/ollama accounts          # 账号池健康与支出
+/ollama models            # 模型目录与参数能力
+/ollama rules             # 模型到账号规则
+/ollama test [model]      # 发送连通性测试请求
+```
+
+## 安全说明
+
+- 写入路由要求 loopback 套接字、同源 `Origin`/`Referer` 以及宿主机认证；DNS 名称永远不会被视为 loopback。
+- API 密钥通过 DSH 凭据服务解析；浏览器只能获知是否已配置，无法读取密钥值。
+- 自定义端点必须是完整的 `http(s)` 地址，不得包含账号密码或片段；link-local 与 metadata 地址会被拒绝。
+- `/status` 缓存 10 秒；刷新、测试与端点发现路由为单飞并限流。
+
+## 故障排查
+
+- **模型列表为空** — 打开 `GET /dsh-ollama/health`，`providerError` 会给出原因；检查 `apiBase`、网络和密钥。
+- **401/403** — 密钥被拒绝并冷却 5 分钟；修复凭据后，在设置中重置冷却或调用 `POST /dsh-ollama/cooldowns/reset`。
+- **所有账号都在冷却** — 错误会包含剩余时间和原因（`INVALID_CREDENTIAL`、`QUOTA`、`RATE_LIMIT`）。
+- **多次刷新后用量显示不可用** — `/api/usage` 限制每分钟 10 次；插件会提示 `usage rate limit reached; retry shortly`，请稍等一分钟。
+- **更新按钮不可用** — 运行时未找到 DSH CLI；使用 `dsh plugin --profile web add ...@<版本>` 安装精确版本。
+- **设置为只读** — 宿主的设置服务为只读；保存已禁用，徽章会说明原因。
+- **网关 502/504** — 密钥会切换到下一个账号；路由表中会显示 `rotation`。
+
+## 限制与注意事项
+
+- 仅支持 Ollama Cloud 云端模型；不会注册本地 `http://localhost:11434` 路由。
+- 云端 API 暂不提供向量嵌入（Embeddings）模型。
+- 文件附件以文本句柄（handle）形式转发。
+- `/api/usage` 限制为每分钟 10 次请求，插件已内置本地缓存以确保顺畅使用。
+- 完整功能需要 Web 配置文件；TUI 终端环境保留 `/ollama` 命令与模型推理。
+
+## 许可证
+
+MIT © [GooDAnDReaDY](https://github.com/GooDAnDReaDY)。详见 [LICENSE](./LICENSE) 与 [NOTICE](./NOTICE)。

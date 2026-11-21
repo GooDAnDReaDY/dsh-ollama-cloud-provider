@@ -1,0 +1,262 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import { quotaBars, windowRows, worstUsedPercent } from '../src/quota-model.ts'
+import { createUsageReader, normalizeBalance, normalizeUsage } from '../src/usage.ts'
+
+test('new balance format becomes a credit balance', () => {
+  const parsed = normalizeBalance({
+    included: {
+      balance_usd: 72.5,
+      allowance_usd: 100,
+      period: { from: '2026-09-15T09:30:00Z', until: '2026-10-15T09:30:00Z' },
+    },
+    purchased: { balance_usd: 25 },
+  })
+  assert.equal(parsed.kind, 'credits')
+  assert.equal(parsed.credits?.includedRemaining, 72.5)
+  assert.equal(parsed.credits?.includedAllowance, 100)
+  assert.equal(parsed.credits?.purchased, 25)
+  assert.equal(parsed.credits?.periodUntil, '2026-10-15T09:30:00Z')
+})
+
+test('legacy balance format becomes percentage windows', () => {
+  const parsed = normalizeBalance({
+    included: {
+      session: { remaining_percent: 40, resets_at: '2026-10-21T18:00:00Z' },
+      weekly: { remaining_percent: 90, status: 'ok' },
+    },
+  })
+  assert.equal(parsed.kind, 'legacy')
+  assert.equal(parsed.legacy?.fiveHour?.percentUsed, 60)
+  assert.equal(parsed.legacy?.weekly?.percentUsed, 10)
+  assert.equal(parsed.legacy?.fiveHour?.resetsAt, '2026-10-21T18:00:00Z')
+})
+
+test('usage payload normalizes totals and model groups', () => {
+  const parsed = normalizeUsage({
+    totals: {
+      request_count: 15,
+      usage_usd: 0.017,
+      input_tokens: 106_000,
+      cached_input_tokens: 46_000,
+      output_tokens: 13_600,
+    },
+    groups: [
+      { model: 'glm-5.3', request_count: 4, usage_usd: 0.005, input_tokens: 24_000, output_tokens: 3_200 },
+      { group: { model: 'gpt-oss:120b', request_count: 1, usage_usd: 0.001 } },
+    ],
+  }, '7d')
+  assert.equal(parsed.totals.requests, 15)
+  assert.equal(parsed.totals.usd, 0.017)
+  assert.equal(parsed.byModel.length, 2)
+  assert.equal(parsed.byModel[0]?.model, 'glm-5.3')
+})
+
+test('quota bars expose credits and legacy windows', () => {
+  const credits = quotaBars({
+    kind: 'credits',
+    credits: { includedRemaining: 25, includedAllowance: 100, purchased: 5 },
+    windows: {},
+    byModel: [],
+    range: '7d',
+  })
+  assert.equal(credits.length, 1)
+  assert.equal(credits[0]?.usedPercent, 75)
+  assert.equal(credits[0]?.remainingPercent, 25)
+  assert.equal(credits[0]?.labelKey, 'quotaIncludedCredits')
+  assert.equal(credits[0]?.detailValues?.allowance, 100)
+
+  const legacy = quotaBars({
+    kind: 'legacy',
+    legacy: {
+      fiveHour: { percentUsed: 60 },
+      weekly: { percentUsed: 10 },
+    },
+    windows: {},
+    byModel: [],
+    range: '7d',
+  })
+  assert.equal(legacy.length, 2)
+  assert.deepEqual(legacy.map((entry) => entry.labelKey), ['quotaFiveHour', 'quotaWeekly'])
+  assert.equal(worstUsedPercent({
+    kind: 'legacy',
+    legacy: { fiveHour: { percentUsed: 60 }, weekly: { percentUsed: 10 } },
+    windows: {},
+    byModel: [],
+    range: '7d',
+  }), 60)
+})
+
+test('window rows expose only present spend windows', () => {
+  const rows = windowRows({
+    kind: 'credits',
+    credits: { includedRemaining: 1, includedAllowance: 2, purchased: 0 },
+    windows: {
+      d24: { requests: 1, usd: 0.1, inputTokens: 10, cachedInputTokens: 0, outputTokens: 5 },
+      d7: { requests: 2, usd: 0.2, inputTokens: 20, cachedInputTokens: 0, outputTokens: 10 },
+    },
+    byModel: [],
+    range: '7d',
+  })
+  assert.deepEqual(rows.map((row) => row.key), ['24h', '7d'])
+  assert.deepEqual(rows.map((row) => row.labelKey), ['last24h', 'last7d'])
+})
+
+test('usage reader caches balance and usage per key', async () => {
+  let calls = 0
+  const fakeFetch = (async (input: string | URL | Request) => {
+    calls += 1
+    const href = String(input)
+    const body = href.includes('/api/balance')
+      ? { included: { balance_usd: 50, allowance_usd: 100 }, purchased: { balance_usd: 0 } }
+      : {
+          totals: { request_count: 3, usage_usd: 0.5, input_tokens: 100, output_tokens: 50 },
+          groups: [{ model: 'gpt-oss:120b', request_count: 3, usage_usd: 0.5 }],
+        }
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+
+  const reader = createUsageReader(
+    () => ({
+      apiBase: 'https://ollama.com',
+      openAiBase: 'https://ollama.com/v1',
+      usageUrl: 'https://ollama.com/api/usage',
+      balanceUrl: 'https://ollama.com/api/balance',
+      userAgent: 'test',
+    }) as never,
+    async () => ({ key: 'key-1', source: 'test' }),
+    fakeFetch,
+  )
+
+  const first = await reader.read()
+  assert.equal(first?.report?.credits?.includedRemaining, 50)
+  assert.equal(first?.report?.windows.d7?.requests, 3)
+  assert.equal(first?.report?.windows.weekly?.requests, 3)
+  assert.deepEqual(first?.report?.byWindow?.['7d']?.map((row) => row.model), ['gpt-oss:120b'])
+  const before = calls
+  const second = await reader.read()
+  assert.equal(second?.report?.credits?.includedRemaining, 50)
+  assert.equal(calls, before)
+})
+
+test('usage reader returns the last good snapshot after a later failure', async () => {
+  let fail = false
+  const fakeFetch = (async (input: string | URL | Request) => {
+    if (fail) return new Response('unavailable', { status: 503 })
+    const href = String(input)
+    const body = href.includes('/api/balance')
+      ? { included: { balance_usd: 50, allowance_usd: 100 }, purchased: { balance_usd: 0 } }
+      : {
+          totals: { request_count: 3, usage_usd: 0.5, input_tokens: 100, output_tokens: 50 },
+          groups: [{ model: 'gpt-oss:120b', request_count: 3, usage_usd: 0.5 }],
+        }
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  const reader = createUsageReader(
+    () => ({
+      apiBase: 'https://ollama.com',
+      openAiBase: 'https://ollama.com/v1',
+      usageUrl: 'https://ollama.com/api/usage',
+      balanceUrl: 'https://ollama.com/api/balance',
+      userAgent: 'test',
+      retryBaseDelayMs: 0,
+      retryMaxDelayMs: 0,
+      retryJitter: 0,
+    }) as never,
+    async () => ({ key: 'key-last-good', source: 'test' }),
+    fakeFetch,
+  )
+  const first = await reader.usage('7d')
+  assert.equal(first?.report?.credits?.includedRemaining, 50)
+  reader.clear()
+  fail = true
+  const stale = await reader.usage('7d')
+  assert.equal(stale?.stale, true)
+  assert.equal(stale?.report?.credits?.includedRemaining, 50)
+  assert.ok(stale?.error !== undefined)
+})
+
+test('usage reader fails open when both endpoints fail', async () => {
+  const fakeFetch = (async () => { throw new Error('offline') }) as typeof fetch
+  const reader = createUsageReader(
+    () => ({
+      apiBase: 'https://ollama.com',
+      openAiBase: 'https://ollama.com/v1',
+      usageUrl: 'https://ollama.com/api/usage',
+      balanceUrl: 'https://ollama.com/api/balance',
+      userAgent: 'test',
+    }) as never,
+    async () => ({ key: 'key-2', source: 'test' }),
+    fakeFetch,
+  )
+  const result = await reader.read()
+  assert.ok(result?.error !== undefined)
+  assert.equal(result?.report, undefined)
+})
+
+test('usage reader caches a failed check and deduplicates concurrent reads', async () => {
+  let calls = 0
+  const fakeFetch = (async () => {
+    calls += 1
+    return new Response('unavailable', { status: 503 })
+  }) as typeof fetch
+  const reader = createUsageReader(
+    () => ({
+      apiBase: 'https://ollama.com',
+      openAiBase: 'https://ollama.com/v1',
+      usageUrl: 'https://ollama.com/api/usage',
+      balanceUrl: 'https://ollama.com/api/balance',
+      userAgent: 'test',
+    }) as never,
+    async () => ({ key: 'key-3', source: 'test' }),
+    fakeFetch,
+  )
+
+  const concurrent = await Promise.all([reader.read(), reader.read()])
+  assert.equal(concurrent[0]?.error !== undefined, true)
+  assert.equal(concurrent[1]?.error !== undefined, true)
+  assert.ok(calls >= 2)
+  const after = calls
+
+  const cached = await reader.read()
+  assert.equal(cached?.error !== undefined, true)
+  assert.equal(calls, after)
+})
+
+test('reports the local usage rate limit instead of an API outage (#144)', async () => {
+  let balanceUp = true
+  let usageCalls = 0
+  const fakeFetch = (async (input: string | URL | Request) => {
+    const url = String(input)
+    if (url.includes('/api/balance')) {
+      return balanceUp
+        ? new Response(JSON.stringify({ included: { balance_usd: 5, allowance_usd: 10 } }), { status: 200 })
+        : new Response('', { status: 503 })
+    }
+    usageCalls += 1
+    return new Response(JSON.stringify({ totals: { request_count: 1 } }), { status: 200 })
+  }) as typeof fetch
+  const reader = createUsageReader(
+    () => ({
+      usageUrl: 'https://ollama.com/api/usage',
+      balanceUrl: 'https://ollama.com/api/balance',
+      userAgent: 'test',
+    }) as never,
+    async () => ({ key: 'key-rate-limit', source: 'test' }),
+    fakeFetch,
+  )
+
+  for (let index = 0; index < 10; index += 1) {
+    await reader.usage('7d')
+    reader.clear()
+  }
+  assert.ok(usageCalls >= 9, 'the window limit was reached')
+
+  balanceUp = false
+  const limited = await reader.usage('7d')
+  assert.equal(limited?.error, 'usage rate limit reached; retry shortly')
+
+  const repeated = await reader.usage('7d')
+  assert.equal(repeated?.error, 'usage rate limit reached; retry shortly', 'the limit is not cached as an outage')
+})

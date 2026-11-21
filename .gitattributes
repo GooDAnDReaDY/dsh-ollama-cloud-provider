@@ -1,0 +1,18 @@
+# Publication layer (ADR-0003): paths that never enter the public tree.
+# `git archive` honours export-ignore, so the sanitised tree is reproducible from main.
+AGENTS.md        export-ignore
+index.md         export-ignore
+deploy.sh        export-ignore
+publish.sh       export-ignore
+docs/**          export-ignore
+docs/            export-ignore
+.planning/**     export-ignore
+.planning/       export-ignore
+.worktrees/**    export-ignore
+.worktrees/      export-ignore
+.gitea/**        export-ignore
+.gitea/          export-ignore
+scripts/**       export-ignore
+scripts/         export-ignore
+dist/**          export-ignore
+dist/            export-ignore

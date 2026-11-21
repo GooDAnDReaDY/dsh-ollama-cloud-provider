@@ -1,0 +1,422 @@
+import { bestEffortFailed } from './best-effort.ts'
+import {
+  DEFAULT_CONTEXT_WINDOW,
+  DEFAULT_GENERATE_MAX_TOKENS,
+  DEFAULT_MAX_TOKENS,
+  type ManualModel,
+  type ResolvedConfig,
+  type TransportId,
+} from './config.ts'
+import { clearCatalogSnapshot, loadCatalogSnapshot, saveCatalogSnapshot } from './catalog-cache.ts'
+import { createAttemptBudget } from './attempt.ts'
+import { GENERATED_MODELS, type OllamaCloudModelMeta } from './models.generated.ts'
+import { formatPrice, priceFor } from './pricing.ts'
+import { normalizeThinking } from './reasoning.ts'
+import { modelsUrlFor, tagsUrlFor } from './routing.ts'
+
+const CATALOG_TIMEOUT_MS = 15_000
+
+interface LiveModel {
+  slug?: unknown
+  display_name?: unknown
+  context_window?: unknown
+  max_context_window?: unknown
+  input_modalities?: unknown
+  supported_reasoning_levels?: unknown
+  default_reasoning_level?: unknown
+  visibility?: unknown
+  supported_in_api?: unknown
+}
+
+interface ModelsPayload {
+  data?: Array<{ id?: unknown }>
+  models?: LiveModel[]
+}
+
+interface TagsPayload {
+  models?: Array<{ name?: unknown; model?: unknown; capabilities?: unknown }>
+}
+
+const liveMeta = new Map<string, OllamaCloudModelMeta>()
+const cache = new Map<string, { at: number; ids: readonly string[] }>()
+const inflight = new Map<string, Promise<readonly string[]>>()
+const diskLoaded = new Set<string>()
+let generation = 0
+
+function liveKey(base: string, id: string): string {
+  return `${base}|${id}`
+}
+
+const FALLBACK_META: OllamaCloudModelMeta = {
+  id: '',
+  name: '',
+  transport: 'native',
+  contextWindow: DEFAULT_CONTEXT_WINDOW,
+  maxTokens: DEFAULT_MAX_TOKENS,
+  input: ['text'],
+  reasoning: [],
+  reasoningToggle: false,
+  tools: true,
+  free: false,
+  available: true,
+  cost: { input: 0, output: 0, cacheRead: 0 },
+}
+
+function str(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
+function num(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : undefined
+}
+
+function strings(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is string => typeof entry === 'string' && entry !== '')
+}
+
+function effortNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const out: string[] = []
+  for (const entry of value) {
+    if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) {
+      const effort = str((entry as Record<string, unknown>).effort)
+      if (effort !== undefined) out.push(effort)
+    } else if (typeof entry === 'string' && entry !== '') {
+      out.push(entry)
+    }
+  }
+  return out
+}
+
+function capabilitiesByModel(tags: TagsPayload | undefined): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>()
+  for (const entry of tags?.models ?? []) {
+    const name = str(entry.name) ?? str(entry.model)
+    if (name === undefined) continue
+    out.set(name, new Set(strings(entry.capabilities)))
+  }
+  return out
+}
+
+function metaFromLive(entry: LiveModel, caps: Set<string> | undefined): OllamaCloudModelMeta {
+  const id = str(entry.slug) ?? ''
+  const base = GENERATED_MODELS[id]
+  const levels = effortNames(entry.supported_reasoning_levels)
+  const thinking = caps?.has('thinking') === true || levels.length > 0
+  const toggle = thinking && levels.length === 0
+  const modalities = strings(entry.input_modalities)
+  const image = modalities.includes('image')
+    || (base?.input.includes('image') === true && modalities.length === 0)
+  const normalized = normalizeThinking(
+    id,
+    levels.length > 0 ? levels : (base?.reasoning ?? []),
+    toggle || base?.reasoningToggle === true,
+    str(entry.default_reasoning_level) ?? base?.defaultReasoning,
+  )
+  return {
+    id,
+    name: str(entry.display_name) ?? id,
+    transport: base?.transport ?? 'native',
+    contextWindow: num(entry.context_window)
+      ?? num(entry.max_context_window)
+      ?? base?.contextWindow
+      ?? DEFAULT_CONTEXT_WINDOW,
+    maxTokens: base?.maxTokens ?? DEFAULT_MAX_TOKENS,
+    input: image ? ['text', 'image'] : ['text'],
+    reasoning: normalized.reasoning,
+    reasoningToggle: toggle || base?.reasoningToggle === true,
+    tools: caps?.has('tools') === true || base?.tools === true || base === undefined,
+    free: base?.free === true,
+    available: entry.supported_in_api !== false && entry.visibility !== 'hide',
+    ...(normalized.defaultReasoning === undefined
+      ? {}
+      : { defaultReasoning: normalized.defaultReasoning }),
+    cost: base?.cost ?? { input: 0, output: 0, cacheRead: 0 },
+  }
+}
+
+function metaForBase(base: string): Record<string, OllamaCloudModelMeta> {
+  const out: Record<string, OllamaCloudModelMeta> = {}
+  const prefix = `${base}|`
+  for (const [key, meta] of liveMeta) {
+    if (key.startsWith(prefix)) out[key.slice(prefix.length)] = meta
+  }
+  return out
+}
+
+async function persist(base: string, ids: readonly string[]): Promise<void> {
+  await saveCatalogSnapshot(base, ids, metaForBase(base))
+}
+
+/** Replace the in-memory live metadata for one API base with one successful response. */
+function adoptLive(models: readonly LiveModel[], tags: TagsPayload | undefined, base: string): string[] {
+  const caps = capabilitiesByModel(tags)
+  const ids: string[] = []
+  for (const entry of models) {
+    const meta = metaFromLive(entry, caps.get(str(entry.slug) ?? ''))
+    if (meta.id === '') continue
+    liveMeta.set(liveKey(base, meta.id), meta)
+    ids.push(meta.id)
+  }
+  const keep = new Set(ids)
+  const prefix = `${base}|`
+  for (const key of liveMeta.keys()) {
+    if (!key.startsWith(prefix)) continue
+    const id = key.slice(prefix.length)
+    if (!keep.has(id)) liveMeta.delete(key)
+  }
+  return ids
+}
+
+async function fetchJson(
+  url: string,
+  config: ResolvedConfig,
+  fetchImpl: typeof fetch,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const response = await fetchImpl(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': config.userAgent,
+    },
+    redirect: 'error',
+    signal,
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.json()
+}
+
+/**
+ * Refresh the live catalog (public, no key required) and return its ids.
+ * Network failures keep the previous live metadata and fall back to the
+ * generated snapshot, so the picker always has something to show.
+ *
+ * A cached catalog is served immediately, even after its TTL: the network
+ * refresh runs in the background so the picker never blocks on a stale entry.
+ * Only the first load (no cache) waits for the network.
+ */
+export async function refreshCatalog(
+  config: ResolvedConfig,
+  fetchImpl: typeof fetch = fetch,
+  force = false,
+): Promise<readonly string[]> {
+  const key = config.apiBase
+  if (!diskLoaded.has(key)) {
+    diskLoaded.add(key)
+    const snapshot = await loadCatalogSnapshot(key)
+    if (snapshot !== undefined && !cache.has(key)) {
+      cache.set(key, { at: snapshot.at, ids: snapshot.ids })
+      for (const [id, meta] of Object.entries(snapshot.meta)) liveMeta.set(liveKey(key, id), meta)
+    }
+  }
+  const cached = cache.get(key)
+  if (!force && cached !== undefined) {
+    const ttl = catalogTtlMs(config)
+    if (ttl > 0 && (cached.at === 0 || Date.now() - cached.at >= ttl)) {
+      void refreshShared(config, fetchImpl, key, true)
+    }
+    return cached.ids
+  }
+  return refreshShared(config, fetchImpl, key, cached !== undefined)
+}
+
+function catalogTtlMs(config: ResolvedConfig): number {
+  if (!config.autoRefresh || config.refreshMinutes <= 0) return 0
+  return Math.max(1, Math.floor(config.refreshMinutes)) * 60_000
+}
+
+function refreshShared(
+  config: ResolvedConfig,
+  fetchImpl: typeof fetch,
+  key: string,
+  keepOnFailure: boolean,
+): Promise<readonly string[]> {
+  const existing = inflight.get(key)
+  if (existing !== undefined) return existing
+  const epoch = generation
+  const task = refreshNow(config, fetchImpl, key, keepOnFailure, epoch)
+    .catch((error: unknown) => {
+      bestEffortFailed('catalog:fetchModels', error)
+      return cache.get(key)?.ids ?? Object.keys(GENERATED_MODELS)
+    })
+    .finally(() => {
+      if (inflight.get(key) === task) inflight.delete(key)
+    })
+  inflight.set(key, task)
+  return task
+}
+
+async function refreshNow(
+  config: ResolvedConfig,
+  fetchImpl: typeof fetch,
+  key: string,
+  keepOnFailure: boolean,
+  epoch: number,
+): Promise<readonly string[]> {
+  const budget = createAttemptBudget(CATALOG_TIMEOUT_MS)
+  let modelsResult: PromiseSettledResult<unknown>
+  let tagsResult: PromiseSettledResult<unknown>
+  try {
+    [modelsResult, tagsResult] = await Promise.allSettled([
+      fetchJson(modelsUrlFor(config), config, fetchImpl, budget.signal),
+      fetchJson(tagsUrlFor(config), config, fetchImpl, budget.signal),
+    ])
+  } finally {
+    budget.dispose()
+  }
+  if (epoch !== generation) return Object.keys(GENERATED_MODELS)
+  if (modelsResult.status === 'fulfilled') {
+    const payload = modelsResult.value as ModelsPayload
+    const tags = tagsResult.status === 'fulfilled' ? tagsResult.value as TagsPayload : undefined
+    const live = Array.isArray(payload.models) ? payload.models : []
+    if (live.length > 0) {
+      const ids = adoptLive(live, tags, key)
+      if (ids.length > 0) {
+        if (epoch !== generation) return ids
+        cache.set(key, { at: Date.now(), ids })
+        await persist(key, ids)
+        return ids
+      }
+    }
+    const fromData = Array.isArray(payload.data)
+      ? payload.data.map((entry) => str(entry.id)).filter((id): id is string => id !== undefined)
+      : []
+    const tagsPayload = tagsResult.status === 'fulfilled' ? tagsResult.value as TagsPayload : undefined
+    const fromTags = (tagsPayload?.models ?? [])
+      .map((entry) => str(entry.name) ?? str(entry.model))
+      .filter((id): id is string => id !== undefined)
+    const discovered = fromData.length > 0 ? fromData : fromTags
+    if (discovered.length > 0) {
+      for (const liveKey of liveMeta.keys()) {
+        if (liveKey.startsWith(`${key}|`)) liveMeta.delete(liveKey)
+      }
+      const ids = discovered
+      if (epoch !== generation) return ids
+      cache.set(key, { at: Date.now(), ids })
+      await persist(key, ids)
+      return ids
+    }
+  }
+  if (keepOnFailure) {
+    const stale = cache.get(key)
+    if (stale !== undefined) return stale.ids
+  }
+  const fallback = Object.keys(GENERATED_MODELS)
+  // A failed refresh must not look fresh: the zero timestamp keeps the entry
+  // stale so the scheduler retries instead of waiting a whole TTL.
+  if (epoch === generation) cache.set(key, { at: 0, ids: fallback })
+  return fallback
+}
+
+export function clearCatalogCache(): void {
+  generation += 1
+  cache.clear()
+  inflight.clear()
+  liveMeta.clear()
+  diskLoaded.clear()
+  clearCatalogSnapshot()
+}
+
+export function baseMeta(id: string, base: string): OllamaCloudModelMeta {
+  const meta = liveMeta.get(liveKey(base, id)) ?? GENERATED_MODELS[id]
+  return meta === undefined ? { ...FALLBACK_META, id, name: id } : meta
+}
+
+export interface EffectiveModel extends OllamaCloudModelMeta {
+  readonly transport: TransportId
+}
+
+export function manualModelFor(id: string, config: ResolvedConfig): ManualModel | undefined {
+  return config.manualModels.find((entry) => entry.id === id)
+}
+
+export function effectiveModel(id: string, config: ResolvedConfig): EffectiveModel {
+  const meta = baseMeta(id, config.apiBase)
+  const manual = manualModelFor(id, config)
+  const override = config.modelOverrides[id]
+  return {
+    ...meta,
+    name: manual?.name ?? meta.name,
+    transport: config.modelTransports[id] ?? config.transport,
+    contextWindow: config.contextWindowOverrides[id]
+      ?? override?.contextWindow
+      ?? manual?.contextWindow
+      ?? config.contextWindow
+      ?? meta.contextWindow,
+    maxTokens: manual?.maxTokens ?? meta.maxTokens,
+    input: (override?.image ?? manual?.image) === true
+      ? ['text', 'image']
+      : (override?.image ?? manual?.image) === false ? ['text'] : meta.input,
+    reasoning: override?.reasoningEfforts ?? manual?.reasoningEfforts ?? meta.reasoning,
+    reasoningToggle: override?.thinking ?? manual?.thinking ?? meta.reasoningToggle,
+    ...((override?.defaultEffort ?? manual?.defaultReasoning ?? meta.defaultReasoning) === undefined
+      ? {}
+      : { defaultReasoning: override?.defaultEffort ?? manual?.defaultReasoning ?? meta.defaultReasoning }),
+    tools: manual?.tools ?? meta.tools,
+    available: override?.enabled === false || manual?.enabled === false ? false : meta.available,
+  }
+}
+
+/** Effective per-request output default; `0` means "omit the field". */
+export function effectiveMaxTokens(meta: OllamaCloudModelMeta, config: ResolvedConfig): number | undefined {
+  const ceiling = Math.min(meta.maxTokens, DEFAULT_GENERATE_MAX_TOKENS)
+  if (config.maxOutputTokens === undefined) return ceiling
+  if (config.maxOutputTokens === 0) return undefined
+  return Math.min(ceiling, config.maxOutputTokens)
+}
+
+export function modelVisible(id: string, config: ResolvedConfig): boolean {
+  const override = config.modelVisibility[id]
+  if (override !== undefined) return override
+  if (config.showAllModels) return true
+  return config.visibleModels.includes(id)
+}
+
+export function modelAvailable(id: string, config: ResolvedConfig): boolean {
+  const manual = manualModelFor(id, config)
+  if (config.modelOverrides[id]?.enabled === false || manual?.enabled === false) return false
+  if (!config.filterModelsByPlan) return true
+  return effectiveModel(id, config).available !== false
+}
+
+export function sortForPicker(
+  ids: readonly string[],
+  config: ResolvedConfig,
+  unfiltered = false,
+): string[] {
+  const order = new Map([
+    ...config.modelOrder.map((id, index) => [id, index] as const),
+    ...config.visibleModels.map((id, index) => [id, config.modelOrder.length + index] as const),
+  ])
+  return ids
+    .filter((id) => unfiltered || (modelVisible(id, config) && modelAvailable(id, config)))
+    .sort((left, right) => {
+      const leftOrder = order.get(left)
+      const rightOrder = order.get(right)
+      if (leftOrder !== undefined || rightOrder !== undefined) {
+        if (leftOrder === undefined) return 1
+        if (rightOrder === undefined) return -1
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder
+      }
+      const a = effectiveModel(left, config)
+      const b = effectiveModel(right, config)
+      if (a.free !== b.free) return a.free ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+}
+
+export function formatContext(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`
+  return `${Math.round(value / 1024)}K`
+}
+
+export function describeModel(meta: EffectiveModel, config: ResolvedConfig): string {
+  const parts = [meta.transport, `${formatContext(meta.contextWindow)} context`]
+  if (meta.free) parts.push('FREE')
+  else parts.push(formatPrice(priceFor(meta.id, config.priceOverrides)))
+  if (meta.input.includes('image')) parts.push('Image')
+  if (meta.tools) parts.push('Tools')
+  if (meta.reasoning.length > 0) parts.push(`reasoning: ${meta.reasoning.join('/')}`)
+  return parts.join(' · ')
+}

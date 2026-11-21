@@ -1,0 +1,758 @@
+import { createHash, randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
+
+import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import {
+  LlmAdapter,
+  LlmError,
+  ReasoningEffortId,
+  attributionHeaders,
+  resolveRetryPolicy,
+  type GenerateOptions,
+  type LlmModelInfo,
+  type LlmProviderInfo,
+  type LlmResolvedModelInfo,
+  type ResolvedRetryPolicy,
+  type StreamChunk,
+} from '@deepseek-ai/dsh-llm'
+
+import { matchModelAccount, orderKeysForModel } from './account-rules.ts'
+import { bestEffortFailed } from './best-effort.ts'
+import { createAttemptBudget } from './attempt.ts'
+import {
+  describeModel,
+  effectiveMaxTokens,
+  effectiveModel,
+  refreshCatalog,
+  sortForPicker,
+  type EffectiveModel,
+} from './catalog.ts'
+import type { ResolvedConfig } from './config.ts'
+import type { KeyResolver, ResolvedKey } from './credentials.ts'
+import { classifyResponseError } from './errors.ts'
+import { effectiveNumCtx } from './context-override.ts'
+import { hasImages, resolveImages, type ImageMap } from './images.ts'
+import { buildChatBody, buildNativeBody } from './messages.ts'
+import { isRetryableStatus, retryDelay, retryPolicy } from './retry.ts'
+import { redactText } from './sanitize.ts'
+import { PROVIDER } from './provider-ids.ts'
+import { recordRequest as defaultRecordRequest, type RequestOutcome } from './request-log.ts'
+import { endpointFor } from './routing.ts'
+import { limitTools, MAX_TOOLS } from './tools.ts'
+import { parseNativeStream } from './transports/native.ts'
+import { parseChatStream } from './transports/openai-chat.ts'
+
+export type RoutingReason = 'rule' | 'sticky' | 'pinned' | 'default' | 'rotation'
+
+export interface RoutingTraceEntry {
+  readonly at: number
+  readonly provider: string
+  readonly model: string
+  readonly account: string
+  readonly reason: RoutingReason
+  readonly fallback: boolean
+  readonly ok: boolean
+  readonly error?: string
+}
+
+export interface OllamaCloudAdapterDeps {
+  readonly config: () => ResolvedConfig
+  readonly resolveKey: KeyResolver
+  readonly resolveKeys?: (provider: string) => Promise<readonly ResolvedKey[]>
+  readonly resolveAttachments?: () => AttachmentStore | undefined
+  readonly fetchImpl?: typeof fetch
+  /** Test seam; defaults to the local append-only request log. */
+  readonly recordRequest?: (
+    provider: string,
+    model: string,
+    purpose?: string,
+    account?: string,
+    reason?: string,
+    outcome?: RequestOutcome,
+  ) => void
+  /** Test seam; defaults to ~/.dsh/storages/dsh-ollama/cooldowns.json. */
+  readonly cooldownPath?: string
+  /** Test seam; defaults to ~/.dsh/storages/dsh-ollama/sticky.json. */
+  readonly stickyPath?: string
+  /** Receives a one-time warning when the provider tool limit drops tools. */
+  readonly warn?: (message: string) => void
+}
+
+function storagePath(file: string): string {
+  const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+  return join(home, 'storages', 'dsh-ollama', file)
+}
+
+function effortName(id: string): string {
+  if (id === 'off' || id === 'none') return 'Off'
+  return id.charAt(0).toUpperCase() + id.slice(1)
+}
+
+async function atomicWriteFile(filePath: string, data: string): Promise<void> {
+  const dir = dirname(filePath)
+  await mkdir(dir, { recursive: true, mode: 0o700 })
+  const tmp = join(dir, `.${basename(filePath)}.${randomUUID()}.tmp`)
+  try {
+    await writeFile(tmp, data, { encoding: 'utf8', mode: 0o600 })
+    await rename(tmp, filePath)
+  } catch (error) {
+    await rm(tmp, { force: true }).catch((err: unknown) => bestEffortFailed('atomicWriteFile:rm-tmp', err))
+    throw error
+  }
+}
+
+export class OllamaCloudAdapter extends LlmAdapter {
+  private readonly fetchImpl: typeof fetch
+  private readonly cooldownPath: string
+  private readonly stickyPath: string
+  private cooldownWrites: Promise<void> = Promise.resolve()
+  private stickyWrites: Promise<void> = Promise.resolve()
+  /** key fingerprint → cooldown deadline and the rejection that caused it. */
+  private readonly cooldowns = new Map<string, { until: number; reason: string }>()
+  /** key fingerprint + model → short preference mark for model-scoped rejections. */
+  private readonly modelCooldowns = new Map<string, { until: number; reason: string }>()
+  private readonly sticky = new Map<string, {
+    fingerprint: string
+    label: string
+    provider: string
+    model: string
+    at: number
+  }>()
+  private readonly routing: RoutingTraceEntry[] = []
+  private warnedTools = false
+
+  constructor(private readonly deps: OllamaCloudAdapterDeps) {
+    super()
+    this.fetchImpl = deps.fetchImpl ?? fetch
+    this.cooldownPath = deps.cooldownPath ?? storagePath('cooldowns.json')
+    this.stickyPath = deps.stickyPath ?? storagePath('sticky.json')
+    this.loadCooldowns()
+    this.loadSticky()
+  }
+
+  override providerInfo(provider: string): LlmProviderInfo {
+    return { id: provider, name: 'Ollama Cloud' }
+  }
+
+  override providerRetryPolicy(_provider: string): ResolvedRetryPolicy {
+    return resolveRetryPolicy(
+      {
+        mode: 'normal',
+        maxRetries: 5,
+        retryableCodes: ['EMPTY_RESPONSE', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
+        backoff: { initialDelayMs: 500, maxDelayMs: 15_000, jitterRatio: 0.1 },
+      },
+      'llm-ollama-cloud: retryPolicy',
+    )
+  }
+
+  override async listModels(
+    provider: string,
+    opts?: { unfiltered?: boolean },
+  ): Promise<readonly LlmModelInfo[]> {
+    const config = this.deps.config()
+    const discovered = await refreshCatalog(config, this.fetchImpl)
+    const ids = [...new Set([
+      ...discovered,
+      ...config.manualModels.map((model) => model.id),
+      ...Object.keys(config.modelOverrides),
+    ])]
+    return sortForPicker(ids, config, opts?.unfiltered === true).map((id) => {
+      const model = effectiveModel(id, config)
+      return {
+        provider,
+        id,
+        name: model.name === '' ? id : model.name,
+        description: describeModel(model, config),
+        inputModalities: model.input,
+      }
+    })
+  }
+
+  /** Recent routing decisions, newest first; no keys or prompt content. */
+  routingTrace(): readonly RoutingTraceEntry[] {
+    return [...this.routing]
+  }
+
+  override async resolveModel(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo> {
+    signal?.throwIfAborted()
+    const config = this.deps.config()
+    const meta = effectiveModel(model, config)
+    const maxTokens = effectiveMaxTokens(meta, config)
+    const efforts = meta.reasoning
+    const defaultEffort = meta.defaultReasoning
+    return {
+      provider,
+      id: model,
+      name: meta.name === '' ? model : meta.name,
+      description: describeModel(meta, config),
+      inputModalities: meta.input,
+      context: { contextWindow: meta.contextWindow },
+      ...(maxTokens === undefined ? {} : { defaultMaxTokens: maxTokens }),
+      ...(efforts.length === 0
+        ? {}
+        : {
+            reasoning: {
+              efforts: efforts.map((effort) => ({
+                id: ReasoningEffortId(effort),
+                name: offLabel(effort, meta),
+              })),
+              ...(defaultEffort !== undefined && efforts.includes(defaultEffort)
+                ? { defaultEffort: ReasoningEffortId(defaultEffort) }
+                : {}),
+            },
+          }),
+    }
+  }
+
+  stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    return this.run(options)
+  }
+
+  private async *run(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const record = this.deps.recordRequest
+      ?? ((provider: string, model: string, purpose?: string, account?: string, reason?: string, outcome?: RequestOutcome) =>
+        defaultRecordRequest(provider, model, outcome?.at ?? Date.now(), purpose, account, reason, outcome))
+    const config = this.deps.config()
+    const runStartedAt = Date.now()
+    const model = effectiveModel(options.model, config)
+    const rawKeys = orderKeysForModel(
+      this.deps.resolveKeys !== undefined
+        ? await this.deps.resolveKeys(options.provider)
+        : [await this.deps.resolveKey(options.provider)],
+      options.model,
+      config.modelAccountRules,
+    )
+    const rule = matchModelAccount(options.model, config.modelAccountRules)
+    let keys = rawKeys
+    let reason: RoutingReason = rule === undefined ? 'default' : 'rule'
+    if (config.activeAccount !== '') {
+      reason = 'pinned'
+    } else if (config.stickySession && rule === undefined) {
+      const previous = this.sticky.get(options.sessionId === undefined ? '' : String(options.sessionId))
+      if (previous !== undefined) {
+        const preferred = rawKeys.find((entry) => this.keyId(entry.key) === previous.fingerprint)
+        if (preferred !== undefined) {
+          keys = [preferred, ...rawKeys.filter((entry) => entry !== preferred)]
+          reason = 'sticky'
+        }
+      }
+    }
+
+    const availableKeys = keys.filter((entry) => !this.coolingDown(entry.key))
+    const preferredKeys = availableKeys.filter((entry) => !this.modelCoolingDown(entry.key, options.model))
+    keys = preferredKeys.length > 0 ? preferredKeys : availableKeys
+
+    const url = endpointFor(model.transport, config)
+    let images: ImageMap | undefined
+    if (hasImages(options)) {
+      const store = this.deps.resolveAttachments?.()
+      if (store === undefined) {
+        throw new LlmError(
+          'llm-ollama-cloud: image input requires the durable attachment service',
+          'UNSUPPORTED_CONTENT',
+        )
+      }
+      images = await resolveImages(options, store, options.signal)
+    }
+    let bodyOptions: GenerateOptions = options
+    if (options.tools !== undefined) {
+      const limited = limitTools(options.tools) ?? []
+      if (limited.length < options.tools.length && !this.warnedTools) {
+        this.warnedTools = true
+        this.deps.warn?.(
+          `llm-ollama-cloud: provider accepts at most ${MAX_TOOLS} tools; `
+          + `${options.tools.length - limited.length} tool declaration(s) omitted`,
+        )
+      }
+      bodyOptions = { ...options, tools: limited }
+    }
+    const body = model.transport === 'openai-chat'
+      ? buildChatBody(bodyOptions, model, config, images)
+      : buildNativeBody(bodyOptions, model, config, images, effectiveNumCtx(config, options.sessionId))
+
+    let lastError: LlmError | undefined
+    let lastAccount = 'default'
+    let loggedAny = false
+    for (const [index, entry] of keys.entries()) {
+      if (this.coolingDown(entry.key)) continue
+      lastAccount = entry.label ?? 'default'
+      const attemptReason: RoutingReason = index === 0 ? reason : 'rotation'
+      const attemptStartedAt = Date.now()
+      let started = false
+      let responseFailure = false
+      let firstChunkAt: number | undefined
+      let logged = false
+      const logAttempt = (ok: boolean, errorCode?: string): void => {
+        if (logged) return
+        logged = true
+        loggedAny = true
+        record(options.provider, options.model, options.purpose, entry.label ?? 'default', attemptReason, {
+          at: attemptStartedAt,
+          ok,
+          latencyMs: Math.max(0, Date.now() - attemptStartedAt),
+          ...(firstChunkAt === undefined ? {} : { ttftMs: Math.max(0, firstChunkAt - attemptStartedAt) }),
+          ...(errorCode === undefined ? {} : { error: errorCode }),
+        })
+      }
+      const budget = createAttemptBudget(config.attemptTimeoutMs, options.signal)
+      try {
+        const response = await this.send(url, entry.key, model, body, config, budget.signal)
+        if (!response.ok) {
+          const text = await response.text().catch(() => '')
+          const error = classifyResponseError(response.status, text, response.headers)
+          lastError = error
+          logAttempt(false, error.code)
+          const canRotate = index < keys.length - 1
+          if (this.modelScoped(error)) {
+            this.markModelCooldown(
+              entry.key,
+              options.model,
+              error.code === 'UNSUPPORTED_MODEL' ? 'model-unsupported' : 'model-quota',
+            )
+            responseFailure = true
+            if (canRotate) continue
+            throw error
+          }
+          const retryable = this.isTransient(error) || error.code === 'INVALID_CREDENTIAL'
+          const credentialOrQuota = error.code === 'INVALID_CREDENTIAL'
+            || error.code === 'RATE_LIMIT'
+            || error.code === 'QUOTA'
+          if (retryable) {
+            // A single account must stay usable for the harness retry policy:
+            // cooling it down on a generic 5xx makes the retry fail immediately.
+            if (canRotate || credentialOrQuota) {
+              this.markCooldown(entry.key, response.status, response.headers, error.code)
+            }
+            responseFailure = true
+            if (canRotate) continue
+          }
+          throw error
+        }
+
+        this.rememberSticky(options, entry)
+        this.pushTrace({
+          at: Date.now(),
+          provider: options.provider,
+          model: options.model,
+          account: entry.label ?? 'default',
+          reason: attemptReason,
+          fallback: false,
+          ok: true,
+        })
+        const chunks = model.transport === 'openai-chat'
+          ? parseChatStream(response, config.streamIdleTimeoutMs, budget.signal)
+          : parseNativeStream(response, config.streamIdleTimeoutMs, budget.signal)
+        for await (const chunk of chunks) {
+          if (firstChunkAt === undefined) firstChunkAt = Date.now()
+          started = true
+          yield chunk
+        }
+        logAttempt(true)
+        return
+      } catch (error) {
+        const classified = budget.timedOut
+          ? new LlmError(
+              `Ollama Cloud attempt exceeded ${config.attemptTimeoutMs}ms`,
+              'TIMEOUT',
+              { cause: error },
+            )
+          : error instanceof LlmError
+            ? error
+            : new LlmError(
+                error instanceof Error ? redactText(error.message) : 'Ollama Cloud request failed',
+                'TRANSPORT',
+                { cause: error },
+              )
+        logAttempt(false, classified.code)
+        if (started || options.signal?.aborted === true) throw budget.timedOut ? classified : error
+        lastError = classified
+        const transient = this.isTransient(classified)
+        const canRotate = index < keys.length - 1 && (transient || this.modelScoped(classified))
+        const credentialOrQuota = classified.code === 'INVALID_CREDENTIAL'
+          || classified.code === 'RATE_LIMIT'
+          || classified.code === 'QUOTA'
+        if (this.modelScoped(classified)) {
+          this.markModelCooldown(
+            entry.key,
+            options.model,
+            classified.code === 'UNSUPPORTED_MODEL' ? 'model-unsupported' : 'model-quota',
+          )
+          if (!canRotate) throw classified
+          continue
+        }
+        // With one account, a transport/timeout/server failure must reach the
+        // harness retry policy instead of cooling the only usable key.
+        if (!responseFailure && (canRotate || credentialOrQuota)) {
+          this.markCooldown(entry.key, 0)
+        }
+        if (!canRotate) throw classified
+      } finally {
+        budget.dispose()
+      }
+    }
+
+    const cooldownEntries = rawKeys
+      .map((entry) => this.cooldowns.get(this.keyId(entry.key)))
+      .filter((entry): entry is { until: number; reason: string } => entry !== undefined && entry.until > Date.now())
+
+    let finalError = lastError
+    if (finalError === undefined) {
+      if (cooldownEntries.length > 0) {
+        const minUntil = Math.min(...cooldownEntries.map((e) => e.until))
+        const remainingMinutes = Math.max(1, Math.ceil((minUntil - Date.now()) / 60_000))
+        const reasons = new Set(cooldownEntries.map((e) => e.reason))
+        if (reasons.has('invalid-credential') && reasons.size === 1) {
+          finalError = new LlmError(
+            `llm-ollama-cloud: every configured account is cooling down due to invalid credentials (retry in ${remainingMinutes}m)`,
+            'INVALID_CREDENTIAL',
+          )
+        } else if (reasons.has('quota') && !reasons.has('rate-limit')) {
+          finalError = new LlmError(
+            `llm-ollama-cloud: every configured account is cooling down due to quota limits (retry in ${remainingMinutes}m)`,
+            'QUOTA',
+          )
+        } else {
+          finalError = new LlmError(
+            `llm-ollama-cloud: every configured account is cooling down after provider rejections (retry in ${remainingMinutes}m)`,
+            'RATE_LIMIT',
+          )
+        }
+      } else {
+        finalError = new LlmError(
+          'llm-ollama-cloud: every configured account is cooling down after provider rejections',
+          'RATE_LIMIT',
+        )
+      }
+    }
+    if (!loggedAny) {
+      record(options.provider, options.model, options.purpose, lastAccount, reason, {
+        at: runStartedAt,
+        ok: false,
+        latencyMs: 0,
+        error: finalError.code,
+      })
+    }
+    this.pushTrace({
+      at: Date.now(),
+      provider: options.provider,
+      model: options.model,
+      account: lastAccount,
+      reason,
+      fallback: false,
+      ok: false,
+      error: finalError.code,
+    })
+    throw finalError
+  }
+
+  private rememberSticky(options: GenerateOptions, entry: ResolvedKey): void {
+    if (!this.deps.config().stickySession) return
+    if (options.sessionId === undefined) return
+    const sessionId = String(options.sessionId)
+    if (!this.sticky.has(sessionId) && this.sticky.size >= 500) {
+      const oldest = this.sticky.keys().next().value
+      if (oldest !== undefined) this.sticky.delete(oldest)
+    }
+    this.sticky.set(sessionId, {
+      fingerprint: this.keyId(entry.key),
+      label: entry.label ?? 'default',
+      provider: options.provider,
+      model: options.model,
+      at: Date.now(),
+    })
+    this.persistSticky()
+  }
+
+  /** Await pending sticky persistence writes (tests and shutdown). */
+  async flushSticky(): Promise<void> {
+    await this.stickyWrites
+  }
+
+  private loadSticky(): void {
+    try {
+      const parsed = JSON.parse(readFileSync(this.stickyPath, 'utf8')) as { sticky?: unknown }
+      const entries = parsed.sticky
+      if (typeof entries !== 'object' || entries === null || Array.isArray(entries)) return
+      for (const [sessionId, value] of Object.entries(entries as Record<string, unknown>)) {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
+        const record = value as Record<string, unknown>
+        const fingerprint = record.fingerprint
+        const label = record.label
+        const provider = record.provider
+        const model = record.model
+        const at = record.at
+        if (typeof fingerprint !== 'string' || !/^[0-9a-f]{16}$/.test(fingerprint)) continue
+        if (typeof label !== 'string' || label === '') continue
+        if (typeof provider !== 'string' || provider === '') continue
+        if (typeof model !== 'string' || model === '') continue
+        if (typeof at !== 'number' || !Number.isFinite(at)) continue
+        this.sticky.set(sessionId, { fingerprint, label, provider, model, at })
+      }
+      this.pruneSticky()
+    } catch (error) {
+      // Missing or corrupt state is ignored; sticky routing is an optimization.
+      bestEffortFailed('sticky state is unavailable', error)
+    }
+  }
+
+  private pruneSticky(): void {
+    const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000
+    for (const [sessionId, entry] of this.sticky) {
+      if (entry.at < cutoff) this.sticky.delete(sessionId)
+    }
+    const overflow = this.sticky.size - 500
+    if (overflow <= 0) return
+    const oldest = [...this.sticky.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, overflow)
+    for (const [sessionId] of oldest) this.sticky.delete(sessionId)
+  }
+
+  private persistSticky(): void {
+    this.pruneSticky()
+    const payload = JSON.stringify({ sticky: Object.fromEntries(this.sticky) })
+    this.stickyWrites = this.stickyWrites
+      .then(async () => {
+        await atomicWriteFile(this.stickyPath, payload)
+      })
+      .catch((err: unknown) => bestEffortFailed('persistSticky', err))
+  }
+
+  private pushTrace(entry: RoutingTraceEntry): void {
+    this.routing.unshift(entry)
+    if (this.routing.length > 20) this.routing.length = 20
+  }
+
+  private async send(
+    url: string,
+    key: string,
+    model: EffectiveModel,
+    body: Record<string, unknown>,
+    config: ResolvedConfig,
+    signal: AbortSignal | undefined,
+  ): Promise<Response> {
+    const headers: Record<string, string> = {
+      ...attributionHeaders(),
+      ...(key === '' ? {} : { authorization: `Bearer ${key}` }),
+      'content-type': 'application/json',
+      accept: model.transport === 'openai-chat' ? 'text/event-stream' : 'application/x-ndjson',
+      'user-agent': config.userAgent,
+    }
+    const policy = retryPolicy(config)
+    const wait = async (attempt: number): Promise<void> => {
+      await new Promise<void>((resolve) => setTimeout(resolve, retryDelay(attempt, policy)))
+      signal?.throwIfAborted()
+    }
+
+    for (let attempt = 0; ; attempt += 1) {
+      const controller = new AbortController()
+      let timedOut = false
+      const onAbort = (): void => controller.abort(signal?.reason)
+      signal?.addEventListener('abort', onAbort, { once: true })
+      const timer = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, config.requestTimeoutMs)
+      timer.unref?.()
+
+      try {
+        const response = await this.fetchImpl(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          redirect: 'error',
+          signal: controller.signal,
+        })
+        if (attempt < policy.maxRetries && isRetryableStatus(response.status)) {
+          await response.body?.cancel()
+          await wait(attempt)
+          continue
+        }
+        return response
+      } catch (error) {
+        if (signal?.aborted === true) throw signal.reason ?? error
+        if (timedOut) {
+          const timeout = new LlmError(
+            `Ollama Cloud did not return response headers within ${config.requestTimeoutMs}ms`,
+            'TIMEOUT',
+            { cause: error },
+          )
+          if (attempt < policy.maxRetries) {
+            await wait(attempt)
+            continue
+          }
+          throw timeout
+        }
+        if (attempt < policy.maxRetries) {
+          await wait(attempt)
+          continue
+        }
+        throw error
+      } finally {
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
+      }
+    }
+  }
+
+  private keyId(key: string): string {
+    return createHash('sha256').update(key).digest('hex').slice(0, 16)
+  }
+
+  private coolingDown(key: string): boolean {
+    const id = this.keyId(key)
+    const entry = this.cooldowns.get(id)
+    if (entry === undefined) return false
+    if (entry.until <= Date.now()) {
+      this.cooldowns.delete(id)
+      return false
+    }
+    return true
+  }
+
+  private modelKey(key: string, model: string): string {
+    return `${this.keyId(key)}:${model}`
+  }
+
+  private modelCoolingDown(key: string, model: string): boolean {
+    const id = this.modelKey(key, model)
+    const entry = this.modelCooldowns.get(id)
+    if (entry === undefined) return false
+    if (entry.until <= Date.now()) {
+      this.modelCooldowns.delete(id)
+      return false
+    }
+    return true
+  }
+
+  private markModelCooldown(key: string, model: string, reason: string): void {
+    const now = Date.now()
+    for (const [id, entry] of this.modelCooldowns) {
+      if (entry.until <= now) this.modelCooldowns.delete(id)
+    }
+    this.modelCooldowns.set(this.modelKey(key, model), { until: now + 5 * 60_000, reason })
+    const overflow = this.modelCooldowns.size - 200
+    if (overflow <= 0) return
+    const oldest = [...this.modelCooldowns.entries()].sort((a, b) => a[1].until - b[1].until).slice(0, overflow)
+    for (const [id] of oldest) this.modelCooldowns.delete(id)
+  }
+
+  /**
+   * A model-scoped rejection says nothing about the key's other models:
+   * `:free` models and other paid models may still work on the same account.
+   * Only account-wide quota, credential and rate-limit responses cool the key.
+   */
+  private modelScoped(error: LlmError): boolean {
+    if (error.code === 'UNSUPPORTED_MODEL') return true
+    if (error.code !== 'QUOTA') return false
+    const detail = error.message.toLowerCase()
+    return detail.includes('model')
+      && (detail.includes('credit')
+        || detail.includes('quota')
+        || detail.includes('allowance')
+        || detail.includes('limit'))
+  }
+
+  /** Current cooldown for one resolved key, if any. */
+  accountHealth(key: string): { coolingUntil: number; reason: string } | undefined {
+    const id = this.keyId(key)
+    const entry = this.cooldowns.get(id)
+    if (entry === undefined) return undefined
+    if (entry.until <= Date.now()) {
+      this.cooldowns.delete(id)
+      return undefined
+    }
+    return { coolingUntil: entry.until, reason: entry.reason }
+  }
+
+  /** Await pending cooldown persistence writes (tests and shutdown). */
+  async flushCooldowns(): Promise<void> {
+    await this.cooldownWrites
+  }
+
+  /** Manually clear all active account and model cooldowns. */
+  clearCooldowns(): void {
+    this.cooldowns.clear()
+    this.modelCooldowns.clear()
+    this.persistCooldowns()
+  }
+
+  private loadCooldowns(): void {
+    try {
+      const parsed = JSON.parse(readFileSync(this.cooldownPath, 'utf8')) as { cooldowns?: unknown }
+      const entries = parsed.cooldowns
+      if (typeof entries !== 'object' || entries === null || Array.isArray(entries)) return
+      for (const [id, value] of Object.entries(entries as Record<string, unknown>)) {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
+        const until = (value as { until?: unknown }).until
+        const reason = (value as { reason?: unknown }).reason
+        if (typeof until !== 'number' || !Number.isFinite(until) || until <= Date.now()) continue
+        if (typeof reason !== 'string' || reason === '') continue
+        this.cooldowns.set(id, { until, reason })
+      }
+      this.pruneCooldowns()
+    } catch (error) {
+      // Missing or corrupt state is ignored; cooldowns are an optimization.
+      bestEffortFailed('cooldown state is unavailable', error)
+    }
+  }
+
+  private pruneCooldowns(): void {
+    const now = Date.now()
+    for (const [id, entry] of this.cooldowns) {
+      if (entry.until <= now) this.cooldowns.delete(id)
+    }
+    const overflow = this.cooldowns.size - 50
+    if (overflow <= 0) return
+    const oldest = [...this.cooldowns.entries()].sort((a, b) => a[1].until - b[1].until).slice(0, overflow)
+    for (const [id] of oldest) this.cooldowns.delete(id)
+  }
+
+  private persistCooldowns(): void {
+    this.pruneCooldowns()
+    const payload = JSON.stringify({ cooldowns: Object.fromEntries(this.cooldowns) })
+    this.cooldownWrites = this.cooldownWrites
+      .then(async () => {
+        await atomicWriteFile(this.cooldownPath, payload)
+      })
+      .catch((err: unknown) => bestEffortFailed('persistCooldowns', err))
+  }
+
+  private markCooldown(key: string, status: number, headers?: Headers, code?: string): void {
+    let delayMs = 30_000
+    let reason = 'transport'
+    if (code === 'QUOTA' || status === 402) {
+      const seconds = Number(headers?.get('retry-after') ?? Number.NaN)
+      delayMs = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 10 * 60 * 1000
+      reason = 'quota'
+    } else if (status === 401 || status === 403) {
+      // 5 minutes (not 24h) so transient proxy, credential refresh, or local Ollama errors
+      // do not permanently disable the provider for an entire day.
+      delayMs = 5 * 60 * 1000
+      reason = 'invalid-credential'
+    } else if (status === 429) {
+      const seconds = Number(headers?.get('retry-after') ?? Number.NaN)
+      delayMs = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 60_000
+      reason = 'rate-limit'
+    }
+    this.cooldowns.set(this.keyId(key), { until: Date.now() + delayMs, reason })
+    this.persistCooldowns()
+  }
+
+  private isTransient(error: LlmError): boolean {
+    return error.code === 'RATE_LIMIT'
+      || error.code === 'QUOTA'
+      || error.code === 'SERVER'
+      || error.code === 'TIMEOUT'
+      || error.code === 'TRANSPORT'
+      || error.code === 'EMPTY_RESPONSE'
+  }
+}
+
+function offLabel(id: string, meta: EffectiveModel): string {
+  if (id === 'off' || id === 'none') return 'Off'
+  if (id === 'high' && meta.reasoningToggle) return 'On'
+  return effortName(id)
+}

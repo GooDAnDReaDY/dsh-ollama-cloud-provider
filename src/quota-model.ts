@@ -1,0 +1,100 @@
+import type { UsageReport, UsageTotals, UsageWindow } from './usage.ts'
+
+export interface QuotaBar {
+  readonly key: string
+  readonly label: string
+  readonly labelKey?: string
+  readonly usedPercent: number
+  readonly remainingPercent: number
+  readonly resetsAt?: string
+  readonly status?: string
+  readonly detail?: string
+  readonly detailValues?: { remaining: number; allowance: number; purchased: number }
+}
+
+function bar(
+  key: string,
+  label: string,
+  usedPercent: number,
+  extra: {
+    resetsAt?: string
+    status?: string
+    detail?: string
+    detailValues?: { remaining: number; allowance: number; purchased: number }
+  } = {},
+): QuotaBar {
+  const labelKey = key === 'included'
+    ? 'quotaIncludedCredits'
+    : key === 'fiveHour' ? 'quotaFiveHour' : key === 'weekly' ? 'quotaWeekly' : undefined
+  const used = Math.max(0, Math.min(100, usedPercent))
+  return {
+    key,
+    label,
+    ...(labelKey === undefined ? {} : { labelKey }),
+    usedPercent: used,
+    remainingPercent: 100 - used,
+    ...(extra.resetsAt === undefined ? {} : { resetsAt: extra.resetsAt }),
+    ...(extra.status === undefined ? {} : { status: extra.status }),
+    ...(extra.detail === undefined ? {} : { detail: extra.detail }),
+    ...(extra.detailValues === undefined ? {} : { detailValues: extra.detailValues }),
+  }
+}
+
+function legacyBar(key: string, label: string, window: UsageWindow | undefined): QuotaBar | undefined {
+  if (window === undefined) return undefined
+  return bar(key, label, window.percentUsed, {
+    ...(window.resetsAt === undefined ? {} : { resetsAt: window.resetsAt }),
+    ...(window.status === undefined ? {} : { status: window.status }),
+  })
+}
+
+/** Bars for the sidebar card and the settings page, newest plan format first. */
+export function quotaBars(report: UsageReport | undefined): readonly QuotaBar[] {
+  if (report === undefined) return []
+  if (report.kind === 'credits' && report.credits !== undefined) {
+    const credits = report.credits
+    const used = credits.includedAllowance > 0
+      ? ((credits.includedAllowance - credits.includedRemaining) / credits.includedAllowance) * 100
+      : 0
+    return [
+      bar('included', '', used, {
+        detailValues: {
+          remaining: credits.includedRemaining,
+          allowance: credits.includedAllowance,
+          purchased: credits.purchased,
+        },
+        ...(credits.periodUntil === undefined ? {} : { resetsAt: credits.periodUntil }),
+      }),
+    ]
+  }
+  return [
+    legacyBar('fiveHour', '', report.legacy?.fiveHour),
+    legacyBar('weekly', '', report.legacy?.weekly),
+  ].filter((entry): entry is QuotaBar => entry !== undefined)
+}
+
+export function worstUsedPercent(report: UsageReport | undefined): number {
+  return quotaBars(report).reduce((worst, entry) => Math.max(worst, entry.usedPercent), 0)
+}
+
+export interface WindowRow {
+  readonly key: '24h' | '7d' | '30d'
+  readonly label: string
+  readonly labelKey: string
+  readonly totals: UsageTotals
+}
+
+export function windowRows(report: UsageReport | undefined): readonly WindowRow[] {
+  if (report === undefined) return []
+  return [
+    report.windows.d24 === undefined
+      ? undefined
+      : { key: '24h' as const, label: '', labelKey: 'last24h', totals: report.windows.d24 },
+    report.windows.d7 === undefined
+      ? undefined
+      : { key: '7d' as const, label: '', labelKey: 'last7d', totals: report.windows.d7 },
+    report.windows.d30 === undefined
+      ? undefined
+      : { key: '30d' as const, label: '', labelKey: 'last30d', totals: report.windows.d30 },
+  ].filter((entry): entry is WindowRow => entry !== undefined)
+}
