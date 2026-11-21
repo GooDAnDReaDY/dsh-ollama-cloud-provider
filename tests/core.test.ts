@@ -7,6 +7,7 @@ import test from 'node:test'
 import { CONTEXT_WINDOW_EXCEEDED_CODE, type GenerateOptions } from '@deepseek-ai/dsh-llm'
 
 import { clearCatalogCache, effectiveModel, modelAvailable, modelVisible, refreshCatalog, sortForPicker } from '../src/catalog.ts'
+import { GENERATED_MODELS } from '../src/models.generated.ts'
 import { DEFAULT_API_BASE, DEFAULT_OPENAI_BASE, resolveConfig } from '../src/config.ts'
 import { classifyResponseError } from '../src/errors.ts'
 import { buildChatBody, buildNativeBody, buildNativeMessages } from '../src/messages.ts'
@@ -158,7 +159,7 @@ test('explicit empty visibility means none while legacy empty means all', () => 
   assert.equal(modelVisible('x', resolveConfig({ visibleModels: [], showAllModels: true })), true)
 })
 
-test('serves a stale catalog immediately and refreshes it in the background', async () => {
+test('serves a cached catalog without a network call and refreshes on demand (#139)', async () => {
   const staleConfig = resolveConfig({ apiKey: 'test-key', apiBase: 'https://catalog-stale.example' })
   clearCatalogCache()
   let modelCalls = 0
@@ -183,29 +184,57 @@ test('serves a stale catalog immediately and refreshes it in the background', as
   const first = await refreshCatalog(staleConfig, fakeFetch, true)
   assert.deepEqual(first, ['first:1b'])
 
-  const date = Date as unknown as { now: () => number }
-  const realNow = date.now
-  const base = realNow()
-  date.now = () => base + 11 * 60 * 1000
-  try {
-    const stale = await refreshCatalog(staleConfig, fakeFetch)
-    assert.deepEqual(stale, ['first:1b'])
-    for (let i = 0; i < 100 && modelCalls < 2; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 5))
-    }
-    assert.equal(modelCalls, 2)
+  const cached = await refreshCatalog(staleConfig, fakeFetch)
+  assert.deepEqual(cached, ['first:1b'])
+  assert.equal(modelCalls, 1, 'a cached catalog is served without a network call')
 
-    let fresh: readonly string[] = []
-    for (let i = 0; i < 50; i += 1) {
-      fresh = await refreshCatalog(staleConfig, fakeFetch)
-      if (fresh[0] === 'second:1b') break
-      await new Promise((resolve) => setTimeout(resolve, 5))
-    }
-    assert.deepEqual(fresh, ['second:1b'])
-  } finally {
-    date.now = realNow
-    clearCatalogCache()
-  }
+  const forced = await refreshCatalog(staleConfig, fakeFetch, true)
+  assert.deepEqual(forced, ['second:1b'])
+  clearCatalogCache()
+})
+
+test('coalesces concurrent cold loads into one network refresh (#139)', async () => {
+  const config = resolveConfig({ apiKey: 'test-key', apiBase: 'https://catalog-shared.example' })
+  clearCatalogCache()
+  let calls = 0
+  const fakeFetch = (async () => {
+    calls += 1
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    return new Response(JSON.stringify({
+      models: [{ slug: 'shared:1b', display_name: 'shared:1b', context_window: 1024, visibility: 'list', supported_in_api: true }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }) as typeof fetch
+
+  const results = await Promise.all([
+    refreshCatalog(config, fakeFetch),
+    refreshCatalog(config, fakeFetch),
+    refreshCatalog(config, fakeFetch),
+  ])
+  assert.deepEqual(results[0], ['shared:1b'])
+  assert.deepEqual(results[2], ['shared:1b'])
+  assert.equal(calls, 2, 'one models call and one tags call for three concurrent callers')
+  clearCatalogCache()
+})
+
+test('does not cache a failed refresh as a fresh catalog (#139)', async () => {
+  const config = resolveConfig({ apiKey: 'test-key', apiBase: 'https://catalog-failing.example' })
+  clearCatalogCache()
+  const fallback = Object.keys(GENERATED_MODELS)
+  const failing = (async () => { throw new Error('offline') }) as typeof fetch
+  const first = await refreshCatalog(config, failing, true)
+  assert.deepEqual(first, fallback)
+
+  let calls = 0
+  const second = await refreshCatalog(config, (async () => {
+    calls += 1
+    throw new Error('offline')
+  }) as typeof fetch)
+  assert.deepEqual(second, fallback)
+  assert.equal(calls, 0, 'the stale entry is served without another network attempt')
+  clearCatalogCache()
 })
 
 test('HTTP failures map to the harness taxonomy', () => {

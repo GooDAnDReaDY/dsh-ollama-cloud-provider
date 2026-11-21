@@ -8,6 +8,7 @@ import type {} from '@deepseek-ai/dsh-web'
 import { OllamaCloudAdapter } from './adapter.ts'
 import { setBestEffortLogger, bestEffortFailed } from './best-effort.ts'
 import { refreshCatalog } from './catalog.ts'
+import { createCatalogScheduler } from './catalog-scheduler.ts'
 import { applyCommands } from './commands.ts'
 import { Config, NS, resolveConfig, unwrapVolatileConfig } from './config.ts'
 import { createKeyPool } from './credentials.ts'
@@ -77,18 +78,17 @@ export function apply(ctx: Context, config: Config): void {
         }, 1_000)
       : undefined
     warm?.unref?.()
-    const intervalMs = Math.max(1, initial.refreshMinutes) * 60_000
-    const timer = initial.autoRefresh && initial.refreshMinutes > 0
-      ? setInterval(() => {
-          const config = current()
-          if (!config.autoRefresh || config.refreshMinutes <= 0) return
-          void refreshCatalog(config, fetch, true).catch((err: unknown) => bestEffortFailed('refreshCatalog', err))
-        }, intervalMs)
-      : undefined
-    timer?.unref?.()
+    const scheduler = createCatalogScheduler({
+      current: () => {
+        const config = current()
+        return { autoRefresh: config.autoRefresh, refreshMinutes: config.refreshMinutes }
+      },
+      refresh: () => refreshCatalog(current(), fetch, true),
+      onError: (error: unknown) => bestEffortFailed('refreshCatalog', error),
+    })
     return () => {
       if (warm !== undefined) clearTimeout(warm)
-      if (timer !== undefined) clearInterval(timer)
+      scheduler.dispose()
     }
   }, 'dsh-ollama-cloud-provider: catalog refresh scheduler')
 
