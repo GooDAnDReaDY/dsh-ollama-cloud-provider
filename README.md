@@ -239,14 +239,18 @@ Open **Settings → Ollama Cloud**:
 - **Key** — status, paste a key, clear it, run **Test connection** against a chosen model. The probe disables thinking so the reply is visible.
 - **Balance and usage** — credit bar or legacy windows, spend windows, warning at 80 % and exhausted at 95 %.
 - **Accounts** — extra keys, per-account spend, pin, remove, set a key, reset cooldowns.
+- **Service status** — reachability probe with latency and the last check time.
 - **Model → account rules** — glob rules.
 - **Routing** — sticky session per conversation.
 - **Models** — search, refresh the live catalog, hide models, override the wire transport per model, see price, context and capabilities.
+- **Manual catalog entries** — add models the catalog does not list.
+- **Generation defaults** — sampling and output limits.
 - **Connection** — native and OpenAI bases, usage and balance endpoints, transport, timeouts, output cap and context override.
+- **Discover** — probe an unsaved endpoint with a one-shot key before saving it.
 - **Sidebar** — show or hide the quota card, and an optional plan label (for example `PRO`) shown next to the provider name.
 - **Plugin update** — current/latest version and **Update now**.
 
-The Host serves `/dsh-ollama/state`, `/health`, `/status`, `/analytics`, `/usage`, `/balance`, `/config`, `/key`, `/key/clear`, `/refresh`, `/models/refresh`, `/test` and `/update`. `/status` probes the public tag endpoint without a key or quota. Writes require JSON, an `Origin` or `Referer` matching `Host` (the Desktop renderer is identified by its `dsh-auth-*` cookie and desktop user agent when both headers are absent), and are restricted to loopback (`127.0.0.1` / `::1`); a write without any source identity is rejected with 403.
+The Host serves `/dsh-ollama/state`, `/health`, `/status`, `/analytics`, `/usage`, `/balance`, `/config`, `/key`, `/key/clear`, `/refresh`, `/models/refresh`, `/discover`, `/test` and `/update`. `/status` probes the public tag endpoint without a key or quota. Writes require JSON, an `Origin` or `Referer` matching `Host` (the Desktop renderer is identified by its `dsh-auth-*` cookie and desktop user agent when both headers are absent), and are restricted to loopback (`127.0.0.1` / `::1`); a write without any source identity is rejected with 403.
 
 ## Command
 

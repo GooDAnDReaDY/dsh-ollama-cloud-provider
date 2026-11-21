@@ -311,7 +311,7 @@ export function OllamaCloudSettingsPage(props: {
       {error === null ? null : <div className="ocl-error">{error}</div>}
       {notice === null ? null : <div className="ocl-notice">{notice}</div>}
 
-      <details className="ocl-card">
+      <details className="ocl-card" open>
         <summary className="ocl-card-title">
           {t('key')}
           <span className={`ocl-badge ${state.key.configured ? 'ocl-badge-ok' : 'ocl-badge-warn'}`}>
@@ -421,11 +421,15 @@ export function OllamaCloudSettingsPage(props: {
         <p className="ocl-hint">{t('serviceStatusHint')}</p>
       </details>
 
-      <details className="ocl-card">
+      <details className="ocl-card" open={worst >= 80}>
         <summary className="ocl-card-title">
           {t('quota')}
           <span className="ocl-badge">{activeAccount?.label ?? t('noActiveAccount')}</span>
-          <button type="button" className="ocl-button" onClick={() => { void refresh() }}>{t('refresh')}</button>
+          <button
+            type="button"
+            className="ocl-button"
+            onClick={(event) => { event.stopPropagation(); void refresh() }}
+          >{t('refresh')}</button>
         </summary>
         {worst >= 95 ? <div className="ocl-error">{t('quotaExhausted')}</div> : null}
         {worst >= 80 && worst < 95 ? <div className="ocl-notice">{t('quotaWarning')}</div> : null}
@@ -662,20 +666,20 @@ export function OllamaCloudSettingsPage(props: {
         <summary className="ocl-card-title">
           {t('models')}
           <span className="ocl-badge">{state.models.length} {t('modelCount')}</span>
-          <button type="button" className="ocl-button" onClick={() => { void reloadModels() }}>
+          <button type="button" className="ocl-button" onClick={(event) => { event.stopPropagation(); void reloadModels() }}>
             {t('refresh')}
           </button>
           <button
             type="button"
             className="ocl-button"
-            onClick={() => update({ showAll: true, visibleModels: state.models.map((model) => model.id) })}
+            onClick={(event) => { event.stopPropagation(); update({ showAll: true, visibleModels: state.models.map((model) => model.id) }) }}
           >
             {t('showAll')}
           </button>
           <button
             type="button"
             className="ocl-button"
-            onClick={() => update({ showAll: false, visibleModels: [], modelVisibility: {} })}
+            onClick={(event) => { event.stopPropagation(); update({ showAll: false, visibleModels: [], modelVisibility: {} }) }}
           >
             {t('hideAll')}
           </button>
@@ -751,7 +755,7 @@ export function OllamaCloudSettingsPage(props: {
       </details>
 
       {editingModel !== null && state.models.some((model) => model.id === editingModel) && (
-        <details className="ocl-card">
+        <details className="ocl-card" open>
           <summary className="ocl-card-title">{t('editModel')}</summary>
           <ModelOverrideEditor
             model={state.models.find((model) => model.id === editingModel)!}
@@ -766,7 +770,7 @@ export function OllamaCloudSettingsPage(props: {
       <details className="ocl-card">
         <summary className="ocl-card-title">
           {t('manualModels')}
-          <button type="button" className="ocl-button" onClick={addManualModel}>{t('addManualModel')}</button>
+          <button type="button" className="ocl-button" onClick={(event) => { event.stopPropagation(); addManualModel() }}>{t('addManualModel')}</button>
         </summary>
         <p className="ocl-hint">{t('manualModelsHint')}</p>
         {draft.manualModels.map((model, index) => (
@@ -848,7 +852,7 @@ export function OllamaCloudSettingsPage(props: {
         </div>
       </details>
 
-      <details className="ocl-card">
+      <details className="ocl-card" open={discoverError !== null}>
         <summary className="ocl-card-title">{t('discover')}</summary>
         <p className="ocl-hint">{t('discoverHint')}</p>
         <label className="ocl-field">

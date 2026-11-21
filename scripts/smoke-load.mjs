@@ -5,8 +5,15 @@
  *   node scripts/smoke-load.mjs
  */
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
-import { apply, name, inject, OllamaCloudAdapter, Config, effectiveModel, resolveConfig } from '../lib/index.js'
+const entry = new URL('../lib/index.js', import.meta.url)
+if (!existsSync(fileURLToPath(entry))) {
+  console.error('smoke-load: run `npm run build` first')
+  process.exit(1)
+}
+const { apply, name, inject, OllamaCloudAdapter, Config, effectiveModel, resolveConfig } = await import(entry.href)
 
 assert.equal(name, '@goodandready/dsh-ollama-cloud-provider')
 assert.deepEqual(inject, ['llm'])
