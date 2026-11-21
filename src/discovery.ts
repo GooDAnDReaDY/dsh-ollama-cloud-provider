@@ -1,4 +1,5 @@
 const DISCOVERY_TIMEOUT_MS = 15_000
+const MAX_DISCOVERY_BYTES = 1_000_000
 
 import { lookup } from 'node:dns/promises'
 import { request } from 'node:https'
@@ -60,14 +61,20 @@ function isPrivateAddress(address: string): boolean {
   const clean = address.toLowerCase().replace(/^\[|\]$/g, '')
   if (isIP(clean) === 4) return isPrivateV4(clean)
   if (isIP(clean) !== 6) return true
+  if (clean.startsWith('::ffff:')) {
+    const embedded = clean.slice('::ffff:'.length)
+    return isIP(embedded) === 4 ? isPrivateV4(embedded) : true
+  }
   return clean === '::1'
     || clean === '::'
+    || clean.startsWith('::')
     || clean.startsWith('fc')
     || clean.startsWith('fd')
     || /^fe[89ab]/.test(clean)
     || clean.startsWith('ff')
     || clean.startsWith('2001:db8')
-    || clean.startsWith('::ffff:')
+    || clean.startsWith('64:ff9b:')
+    || clean.startsWith('2002:')
 }
 
 async function assertPublicEndpoint(base: string, options: DiscoveryOptions): Promise<readonly string[] | undefined> {
@@ -149,6 +156,12 @@ function pinnedJson(url: string, key: string, signal: AbortSignal, address: stri
     const target = new URL(url)
     const headers: Record<string, string> = { accept: 'application/json', host: target.host }
     if (key !== '') headers.authorization = `Bearer ${key}`
+    let settled = false
+    const fail = (error: unknown): void => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
     const req = request({
       protocol: 'https:',
       host: address,
@@ -160,21 +173,34 @@ function pinnedJson(url: string, key: string, signal: AbortSignal, address: stri
       signal,
     }, (res) => {
       const chunks: Buffer[] = []
-      res.on('data', (chunk: Buffer) => chunks.push(chunk))
+      let size = 0
+      res.on('data', (chunk: Buffer) => {
+        if (settled) return
+        size += chunk.length
+        if (size > MAX_DISCOVERY_BYTES) {
+          res.destroy(new DiscoveryError('endpoint response too large'))
+          return
+        }
+        chunks.push(chunk)
+      })
+      res.on('error', fail)
       res.on('end', () => {
+        if (settled) return
         const status = res.statusCode ?? 0
         if (status < 200 || status >= 300) {
-          reject(new DiscoveryError(`endpoint answered ${status}`, status))
+          fail(new DiscoveryError(`endpoint answered ${status}`, status))
           return
         }
         try {
-          resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+          const payload: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+          settled = true
+          resolve(payload)
         } catch {
-          reject(new DiscoveryError('endpoint returned invalid JSON'))
+          fail(new DiscoveryError('endpoint returned invalid JSON'))
         }
       })
     })
-    req.on('error', (error) => reject(error))
+    req.on('error', fail)
     req.end()
   })
 }

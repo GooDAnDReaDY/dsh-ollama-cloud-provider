@@ -478,7 +478,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
     })
   } catch (error) {
     bestEffortFailed('state:listModels', error)
-    providerError = error instanceof Error ? error.message : String(error)
+    providerError = redactText(error instanceof Error ? error.message : String(error))
     models = []
   }
 
@@ -494,7 +494,7 @@ async function buildState(ctx: Context, deps: RouteDeps): Promise<Record<string,
     usage: usage ?? null,
     routing: deps.adapter.routingTrace(),
     revision: settingsRevision(ctx),
-    configWritable: getSettings(ctx)?.writable !== false,
+    configWritable: typeof getSettings(ctx)?.mutate === 'function' && getSettings(ctx)?.writable !== false,
     ...(providerError === undefined ? {} : { providerError }),
   }
 }
@@ -553,7 +553,7 @@ export function applyRoutes(ctx: Context, web: WebServer, deps: RouteDeps): void
       const config = deps.config()
       let providerError: string | undefined
       const models = await deps.adapter.listModels(PROVIDER, { unfiltered: true }).catch((err: unknown) => {
-        providerError = err instanceof Error ? err.message : String(err)
+        providerError = redactText(err instanceof Error ? err.message : String(err))
         bestEffortFailed('health:listModels', err)
         return []
       })

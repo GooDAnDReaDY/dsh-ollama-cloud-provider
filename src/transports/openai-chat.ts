@@ -170,16 +170,26 @@ export async function* parseChatStream(
         if (entry.upstreamId === '' && typeof toolCall.id === 'string' && toolCall.id.trim() !== '') {
           entry.upstreamId = toolCall.id.trim()
         }
-        if (!entry.started && entry.upstreamId !== '') entry.id = ToolCallId(entry.upstreamId)
         if (toolCall.function?.name !== undefined && toolCall.function.name !== '') {
           entry.name = toolCall.function.name
         }
-        if (!entry.started) {
-          entry.started = true
-          yield { type: 'block-start', index: entry.dshIndex, blockType: 'tool-call' }
-        }
         const argumentsDelta = toolCall.function?.arguments ?? ''
         if (argumentsDelta !== '') entry.args += argumentsDelta
+        if (entry.upstreamId === '' && !entry.started) continue
+        if (!entry.started) {
+          entry.id = ToolCallId(entry.upstreamId)
+          entry.started = true
+          sawContent = true
+          yield { type: 'block-start', index: entry.dshIndex, blockType: 'tool-call' }
+          yield {
+            type: 'tool-call-delta',
+            index: entry.dshIndex,
+            id: entry.id,
+            ...(entry.name === '' ? {} : { name: entry.name }),
+            argumentsDelta: entry.args,
+          }
+          continue
+        }
         sawContent = true
         yield {
           type: 'tool-call-delta',
@@ -194,6 +204,20 @@ export async function* parseChatStream(
         finishReason = choice.finish_reason
         terminated = true
       }
+    }
+  }
+
+  for (const entry of toolCalls.values()) {
+    if (entry.started) continue
+    entry.started = true
+    sawContent = true
+    yield { type: 'block-start', index: entry.dshIndex, blockType: 'tool-call' }
+    yield {
+      type: 'tool-call-delta',
+      index: entry.dshIndex,
+      id: ToolCallId(entry.id),
+      ...(entry.name === '' ? {} : { name: entry.name }),
+      argumentsDelta: entry.args,
     }
   }
 
