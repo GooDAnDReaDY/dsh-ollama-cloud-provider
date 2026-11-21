@@ -14,7 +14,6 @@ import { formatPrice, priceFor } from './pricing.ts'
 import { normalizeThinking } from './reasoning.ts'
 import { modelsUrlFor, tagsUrlFor } from './routing.ts'
 
-const CATALOG_TTL_MS = 10 * 60 * 1000
 const CATALOG_TIMEOUT_MS = 15_000
 
 interface LiveModel {
@@ -211,11 +210,29 @@ export async function refreshCatalog(
     }
   }
   const cached = cache.get(key)
-  if (!force && cached !== undefined) {
-    if (config.autoRefresh && Date.now() - cached.at >= CATALOG_TTL_MS) refreshInBackground(config, fetchImpl, key)
-    return cached.ids
-  }
-  return refreshNow(config, fetchImpl, key, cached !== undefined, generation)
+  if (!force && cached !== undefined) return cached.ids
+  return refreshShared(config, fetchImpl, key, cached !== undefined)
+}
+
+function refreshShared(
+  config: ResolvedConfig,
+  fetchImpl: typeof fetch,
+  key: string,
+  keepOnFailure: boolean,
+): Promise<readonly string[]> {
+  const existing = inflight.get(key)
+  if (existing !== undefined) return existing
+  const epoch = generation
+  const task = refreshNow(config, fetchImpl, key, keepOnFailure, epoch)
+    .catch((error: unknown) => {
+      bestEffortFailed('catalog:fetchModels', error)
+      return cache.get(key)?.ids ?? Object.keys(GENERATED_MODELS)
+    })
+    .finally(() => {
+      if (inflight.get(key) === task) inflight.delete(key)
+    })
+  inflight.set(key, task)
+  return task
 }
 
 async function refreshNow(
@@ -272,22 +289,10 @@ async function refreshNow(
     if (stale !== undefined) return stale.ids
   }
   const fallback = Object.keys(GENERATED_MODELS)
-  if (epoch === generation) cache.set(key, { at: Date.now(), ids: fallback })
+  // A failed refresh must not look fresh: the zero timestamp keeps the entry
+  // stale so the scheduler retries instead of waiting a whole TTL.
+  if (epoch === generation) cache.set(key, { at: 0, ids: fallback })
   return fallback
-}
-
-function refreshInBackground(
-  config: ResolvedConfig,
-  fetchImpl: typeof fetch,
-  key: string,
-): void {
-  if (inflight.has(key)) return
-  const epoch = generation
-  const task = refreshNow(config, fetchImpl, key, true, epoch)
-    .catch((err: unknown) => { bestEffortFailed('catalog:fetchModels', err); return cache.get(key)?.ids ?? Object.keys(GENERATED_MODELS) })
-    .finally(() => { inflight.delete(key) })
-  inflight.set(key, task)
-  void task
 }
 
 export function clearCatalogCache(): void {

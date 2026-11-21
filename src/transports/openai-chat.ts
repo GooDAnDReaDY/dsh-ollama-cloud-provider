@@ -102,6 +102,7 @@ export async function* parseChatStream(
   const toolCalls = new Map<number, {
     dshIndex: number
     id: ToolCallId
+    upstreamId: string
     name: string
     args: string
     started: boolean
@@ -159,13 +160,17 @@ export async function* parseChatStream(
           entry = {
             dshIndex: nextIndex++,
             id: uniqueToolCallId(toolCall.id),
+            upstreamId: typeof toolCall.id === 'string' ? toolCall.id.trim() : '',
             name: '',
             args: '',
             started: false,
           }
           toolCalls.set(key, entry)
         }
-        if (typeof toolCall.id === 'string' && toolCall.id.trim() !== '') entry.id = ToolCallId(toolCall.id.trim())
+        if (entry.upstreamId === '' && typeof toolCall.id === 'string' && toolCall.id.trim() !== '') {
+          entry.upstreamId = toolCall.id.trim()
+        }
+        if (!entry.started && entry.upstreamId !== '') entry.id = ToolCallId(entry.upstreamId)
         if (toolCall.function?.name !== undefined && toolCall.function.name !== '') {
           entry.name = toolCall.function.name
         }
