@@ -341,7 +341,7 @@ export function modelOverrideRecord(value: unknown): Record<string, ModelOverrid
   return out
 }
 
-function manualModelList(value: unknown): ManualModel[] {
+export function manualModelList(value: unknown): ManualModel[] {
   if (!Array.isArray(value)) return []
   const out: ManualModel[] = []
   for (const entry of value) {
@@ -433,7 +433,7 @@ export function transportRecord(value: unknown): Record<string, TransportId> {
   return out
 }
 
-function ruleList(value: unknown): ModelAccountRule[] {
+export function ruleList(value: unknown): ModelAccountRule[] {
   if (!Array.isArray(value)) return []
   const out: ModelAccountRule[] = []
   for (const entry of value) {
