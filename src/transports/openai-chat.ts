@@ -121,7 +121,7 @@ export async function* parseChatStream(
     try {
       chunk = JSON.parse(data) as ChatChunk
     } catch (error) {
-      throw new LlmError('Ollama Cloud sent an invalid SSE event', 'PROVIDER_HTTP_ERROR', { cause: error })
+      throw new LlmError('Ollama Cloud sent an invalid SSE event', 'MALFORMED_RESPONSE', { cause: error })
     }
     const streamError = classifyStreamError(chunk)
     if (streamError !== undefined) throw streamError

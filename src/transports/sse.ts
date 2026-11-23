@@ -20,7 +20,7 @@ export async function* sseData(
       if (result.done) break
       buffer = (buffer + decoder.decode(result.value, { stream: true })).replace(/\r\n/g, '\n')
       if (Buffer.byteLength(buffer, 'utf8') > MAX_FRAME_BYTES) {
-        throw new LlmError('Ollama Cloud sent an oversized stream event', 'PROVIDER_HTTP_ERROR')
+        throw new LlmError('Ollama Cloud sent an oversized stream event', 'MALFORMED_RESPONSE')
       }
       for (;;) {
         const boundary = buffer.indexOf('\n\n')

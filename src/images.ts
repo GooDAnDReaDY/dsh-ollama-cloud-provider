@@ -1,4 +1,4 @@
-import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentStore, ImageAttachmentRef, ImageRequestTarget } from '@deepseek-ai/dsh-attachment'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 
 export interface ResolvedImage {
@@ -54,14 +54,22 @@ export function selectRequestImages(refs: readonly ImageAttachmentRef[]): Select
   return { kept, dropped: unique.slice(0, start) }
 }
 
-function targetOf(ref: ImageAttachmentRef): { width: number; height: number; maxBytes: number } {
+/**
+ * The request-image target carries both spellings of the byte budget: DSH up to
+ * 0.2.2 reads `maxBytes`, while 0.2.3 reads `maxImageBytes` plus the soft
+ * `imageTargetBytes`. Supplying all three keeps one adapter working across the
+ * whole declared compatibility range instead of pinning a single minor.
+ */
+function targetOf(ref: ImageAttachmentRef): ImageRequestTarget {
   const longEdge = Math.max(ref.width, ref.height)
   const scale = longEdge > MAX_LONG_EDGE ? MAX_LONG_EDGE / longEdge : 1
   return {
     width: Math.max(1, Math.round(ref.width * scale)),
     height: Math.max(1, Math.round(ref.height * scale)),
     maxBytes: MAX_BYTES,
-  }
+    maxImageBytes: MAX_BYTES,
+    imageTargetBytes: MAX_BYTES,
+  } as ImageRequestTarget
 }
 
 export function hasImages(options: GenerateOptions): boolean {

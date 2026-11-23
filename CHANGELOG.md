@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.42 — 2026-11-23
+
+- Tool cap: at the 128-tool limit the survivors are chosen in three tiers — core harness tools, other built-in tools, then `mcp__*` declarations. DSH hands the list over sorted by name, and one MCP server can contribute hundreds of entries, so a large MCP set used to evict every built-in tool sorting after `m`. MCP declarations are truncated first because they are the ones that arrive in bulk (GitHub #3).
+- Tool cap: `pwsh` is now protected alongside `bash`, because the standard preset registers `tool-pwsh` on Windows and disables `tool-bash` there; `pwsh7_status`/`pwsh7_install` are protected too, since `dsh-win-pwsh7` cannot restore a declaration that was never sent (GitHub #3).
+- Tool cap: `task`, `todo` and `notebook` left the core set — DSH registers none of them. The real todo tool is `todo_write` (`@deepseek-ai/dsh-tool-todo`).
+- Tool cap: the one-time warning now names the omitted tools (up to ten, then `+N more`) instead of only counting them, so a missing shell is diagnosable from the log alone (GitHub #3).
+- DSH 0.2.3: declared compatibility extends to the `0.2.3` line through its own `>=0.2.3-0 <0.2.4-0` clause — semver excludes prereleases from a wider lower bound, so widening `<0.2.3-0` alone would not accept `0.2.3-alpha.2`. Tested releases gained `0.2.2-rc.5` and `0.2.3-alpha.2`, and `cordis`/`schemastery` gained the matching alpha ranges.
+- DSH 0.2.3: three real breaks fixed, found by typechecking against the published `@deepseek-ai/dsh-llm@0.2.3-alpha.2`. `UNSUPPORTED_MODEL` became `MODEL_UNSUPPORTED` and the non-canonical `PROVIDER_HTTP_ERROR` became the taxonomy's `HTTP_<status>` (or `MALFORMED_RESPONSE` for a broken stream), because 0.2.3 types the code as a strict union where 0.2.2 accepted any string. `ImageRequestTarget` now carries `maxBytes` (read by ≤0.2.2) together with `maxImageBytes`/`imageTargetBytes` (read by 0.2.3), so one adapter serves the whole range.
+
+207 tests.
+
 ## 0.1.41 — 2026-11-21
 
 - Settings: the page is a list of collapsible cards (`<details>/<summary>`, keyboard accessible) with the DSH card metrics (12px radius, 15px/600 title, 14×16 header); Key and the model editor are open by default, the quota card opens on its 80 % warning and Discover opens on an error. Actions inside a header no longer toggle the card (#148).

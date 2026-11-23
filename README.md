@@ -111,7 +111,7 @@ graph LR
 
 ## Requirements
 
-- **DeepSeek Harness**: `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0` (desktop and web profiles).
+- **DeepSeek Harness**: `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0 || >=0.2.3-0 <0.2.4-0` (desktop and web profiles).
 - **Node.js**: `>=22.0.0`.
 - **Ollama Cloud Account**: one or more active API keys from Ollama Cloud or a compatible proxy endpoint.
 
@@ -306,6 +306,7 @@ The Ollama Cloud settings page in DSH Desktop (dark theme): configured credentia
 - **No models in the picker** — open `GET /dsh-ollama/health`; `providerError` names the catalog failure. Check `apiBase`, network access and the key.
 - **401/403** — the key is rejected and cooled for 5 minutes; fix the credential, then reset cooldowns in Settings or call `POST /dsh-ollama/cooldowns/reset`.
 - **All accounts cooling** — the error carries the remaining wait and the reason (`INVALID_CREDENTIAL`, `QUOTA`, `RATE_LIMIT`).
+- **The agent has no shell** — Ollama Cloud rejects a request with more than 128 tool declarations, so the plugin caps the list. Core harness tools come first, then other built-in tools, then `mcp__*` declarations, so a large MCP set is truncated before `pwsh` (Windows) or `bash` (POSIX) can be dropped. When the cap does drop something, one warning names the omitted tools.
 - **Usage is unavailable after several refreshes** — `/api/usage` allows 10 requests per minute; the plugin reports `usage rate limit reached; retry shortly` instead of an outage. Wait a minute.
 - **Update button is disabled** — the DSH CLI entry was not found at runtime; install the exact version with `dsh plugin --profile web add ...@<version>`.
 - **Settings are read-only** — the host's settings service is read-only; Save is disabled and the badge says why.

@@ -41,7 +41,7 @@ import { redactText } from './sanitize.ts'
 import { PROVIDER } from './provider-ids.ts'
 import { recordRequest as defaultRecordRequest, type RequestOutcome } from './request-log.ts'
 import { endpointFor } from './routing.ts'
-import { limitTools, MAX_TOOLS } from './tools.ts'
+import { limitTools, toolCapWarning } from './tools.ts'
 import { parseNativeStream } from './transports/native.ts'
 import { parseChatStream } from './transports/openai-chat.ts'
 
@@ -261,12 +261,12 @@ export class OllamaCloudAdapter extends LlmAdapter {
     let bodyOptions: GenerateOptions = options
     if (options.tools !== undefined) {
       const limited = limitTools(options.tools) ?? []
-      if (limited.length < options.tools.length && !this.warnedTools) {
-        this.warnedTools = true
-        this.deps.warn?.(
-          `llm-ollama-cloud: provider accepts at most ${MAX_TOOLS} tools; `
-          + `${options.tools.length - limited.length} tool declaration(s) omitted`,
-        )
+      if (!this.warnedTools) {
+        const warning = toolCapWarning(options.tools, limited)
+        if (warning !== undefined) {
+          this.warnedTools = true
+          this.deps.warn?.(warning)
+        }
       }
       bodyOptions = { ...options, tools: limited }
     }
@@ -311,7 +311,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
             this.markModelCooldown(
               entry.key,
               options.model,
-              error.code === 'UNSUPPORTED_MODEL' ? 'model-unsupported' : 'model-quota',
+              error.code === 'MODEL_UNSUPPORTED' ? 'model-unsupported' : 'model-quota',
             )
             responseFailure = true
             if (canRotate) continue
@@ -379,7 +379,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
           this.markModelCooldown(
             entry.key,
             options.model,
-            classified.code === 'UNSUPPORTED_MODEL' ? 'model-unsupported' : 'model-quota',
+            classified.code === 'MODEL_UNSUPPORTED' ? 'model-unsupported' : 'model-quota',
           )
           if (!canRotate) throw classified
           continue
@@ -645,7 +645,7 @@ export class OllamaCloudAdapter extends LlmAdapter {
    * Only account-wide quota, credential and rate-limit responses cool the key.
    */
   private modelScoped(error: LlmError): boolean {
-    if (error.code === 'UNSUPPORTED_MODEL') return true
+    if (error.code === 'MODEL_UNSUPPORTED') return true
     if (error.code !== 'QUOTA') return false
     const detail = error.message.toLowerCase()
     return detail.includes('model')

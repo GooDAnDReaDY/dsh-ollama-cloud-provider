@@ -92,7 +92,7 @@ graph LR
 
 ## Requirements / 系统要求
 
-- **DeepSeek Harness**: `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0`（桌面版与 Web 配置文件）。
+- **DeepSeek Harness**: `0.2.0-rc.2 || >=0.2.1-rc.2 <0.2.3-0 || >=0.2.2-0 <0.2.3-0 || >=0.2.3-0 <0.2.4-0`（桌面版与 Web 配置文件）。
 - **Node.js**: `>=22.0.0`。
 - **Ollama Cloud 账户**: 一个或多个有效的 Ollama Cloud API Key 或兼容的代理端点。
 
@@ -257,6 +257,7 @@ DSH Desktop（暗黑主题）中的 Ollama Cloud 设置与用量面板：
 - **模型列表为空** — 打开 `GET /dsh-ollama/health`，`providerError` 会给出原因；检查 `apiBase`、网络和密钥。
 - **401/403** — 密钥被拒绝并冷却 5 分钟；修复凭据后，在设置中重置冷却或调用 `POST /dsh-ollama/cooldowns/reset`。
 - **所有账号都在冷却** — 错误会包含剩余时间和原因（`INVALID_CREDENTIAL`、`QUOTA`、`RATE_LIMIT`）。
+- **代理没有 shell** — Ollama Cloud 会拒绝工具声明超过 128 个的请求，因此插件会限制列表。优先级为：宿主的核心工具、其他内置工具、`mcp__*` 声明，所以大量 MCP 工具会先被截断，`pwsh`（Windows）或 `bash`（POSIX）不会被丢弃。若确实有工具被截断，会输出一条包含具体名称的警告。
 - **多次刷新后用量显示不可用** — `/api/usage` 限制每分钟 10 次；插件会提示 `usage rate limit reached; retry shortly`，请稍等一分钟。
 - **更新按钮不可用** — 运行时未找到 DSH CLI；使用 `dsh plugin --profile web add ...@<版本>` 安装精确版本。
 - **设置为只读** — 宿主的设置服务为只读；保存已禁用，徽章会说明原因。

@@ -54,6 +54,16 @@ function isQuotaText(detail: string): boolean {
 }
 
 /**
+ * Classify an unclassified provider status with the harness `HTTP_<number>`
+ * code. `BuiltinLlmFailureCode` accepts that shape for any status, so a status
+ * the taxonomy has no dedicated name for stays routable instead of borrowing a
+ * code that means something else.
+ */
+export function httpCode(status: number): `HTTP_${number}` {
+  return `HTTP_${Math.trunc(status) as number}`
+}
+
+/**
  * Translate an Ollama Cloud HTTP failure into the harness failure taxonomy.
  * Ollama reports everything as `{"error": "..."}`, so both the status and the
  * message matter.
@@ -81,7 +91,7 @@ export function classifyResponseError(status: number, text: string, headers: Hea
     return new LlmError(
       `Ollama Cloud does not serve this model: ${message}. Refresh the catalog and`
       + ' check that the id matches the cloud list exactly.',
-      'UNSUPPORTED_MODEL',
+      'MODEL_UNSUPPORTED',
       options,
     )
   }
@@ -98,14 +108,14 @@ export function classifyResponseError(status: number, text: string, headers: Hea
   if (/does not support (?:images?|vision|tools?)|unsupported (?:image|tool)|image (?:input|modality) is not supported|tools? (?:are|is) not supported/i.test(detail)) {
     return new LlmError(
       `Ollama Cloud model does not accept this request: ${message}`,
-      'UNSUPPORTED_MODEL',
+      'MODEL_UNSUPPORTED',
       options,
     )
   }
   if (/request (?:body|entity) too large|payload too large|node count cannot exceed|maximum (?:request|body) size/i.test(detail)) {
     return new LlmError(
       `Ollama Cloud rejected the request body as too large: ${message}`,
-      'PROVIDER_HTTP_ERROR',
+      httpCode(status),
       options,
     )
   }
@@ -122,7 +132,7 @@ export function classifyResponseError(status: number, text: string, headers: Hea
   if (status >= 500) {
     return new LlmError(`Ollama Cloud gateway error (HTTP ${status}): ${message}`, 'SERVER', options)
   }
-  return new LlmError(`Ollama Cloud request failed (HTTP ${status}): ${message}`, 'PROVIDER_HTTP_ERROR', options)
+  return new LlmError(`Ollama Cloud request failed (HTTP ${status}): ${message}`, httpCode(status), options)
 }
 
 /** Parse an in-band error object, when a stream reports one. */

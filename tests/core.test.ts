@@ -16,7 +16,7 @@ import {
   cleanTransports,
 } from '../src/routes-values.ts'
 import { DEFAULT_API_BASE, DEFAULT_OPENAI_BASE, resolveConfig } from '../src/config.ts'
-import { classifyResponseError } from '../src/errors.ts'
+import { classifyResponseError, httpCode } from '../src/errors.ts'
 import { buildChatBody, buildNativeBody, buildNativeMessages } from '../src/messages.ts'
 import { estimateCost, priceFor } from '../src/pricing.ts'
 
@@ -266,7 +266,7 @@ test('does not cache a failed refresh as a fresh catalog and retries in the back
 test('HTTP failures map to the harness taxonomy', () => {
   const headers = new Headers()
   assert.equal(classifyResponseError(401, '{"error":"invalid credentials"}', headers).code, 'INVALID_CREDENTIAL')
-  assert.equal(classifyResponseError(404, '{"error":"model not found"}', headers).code, 'UNSUPPORTED_MODEL')
+  assert.equal(classifyResponseError(404, '{"error":"model not found"}', headers).code, 'MODEL_UNSUPPORTED')
   assert.equal(classifyResponseError(402, '{"error":"payment required"}', headers).code, 'QUOTA')
   assert.equal(
     classifyResponseError(403, '{"error":"insufficient credits for this model"}', headers).code,
@@ -282,10 +282,10 @@ test('HTTP failures map to the harness taxonomy', () => {
   )
   assert.equal(
     classifyResponseError(400, '{"error":"this model does not support images"}', headers).code,
-    'UNSUPPORTED_MODEL',
+    'MODEL_UNSUPPORTED',
   )
   const tooLarge = classifyResponseError(413, '{"error":"request body too large"}', headers)
-  assert.equal(tooLarge.code, 'PROVIDER_HTTP_ERROR')
+  assert.equal(tooLarge.code, httpCode(413))
   assert.match(tooLarge.message, /too large/i)
 })
 
